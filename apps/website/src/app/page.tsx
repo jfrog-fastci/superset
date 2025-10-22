@@ -9,23 +9,19 @@ export default function Home() {
 	return (
 		<main className="flex min-h-screen flex-col">
 			{/* Hero Section with Parallax */}
-			<HeroParallax className="relative min-h-screen flex items-center justify-center overflow-hidden">
+			<HeroParallax className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
 				{/* Optional 3D Background */}
 				<div className="absolute inset-0 z-0">
 					<HeroCanvas className="w-full h-full" />
-					<div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background" />
+					<div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/30 to-background" />
 				</div>
 
 				{/* Hero Content */}
 				<div className="relative z-10 px-8 text-center">
 					<FadeUp>
-						<h1 className="text-6xl font-bold mb-6">Welcome to Superset</h1>
-					</FadeUp>
-					<FadeUp delay={0.2}>
-						<p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-							Experience clean, extensible 3D and motion-based UI interactions
-							built with Framer Motion and React Three Fiber.
-						</p>
+						<h1 className="text-6xl font-bold mb-6 text-white">
+							The last app you'll ever need
+						</h1>
 					</FadeUp>
 					<FadeUp delay={0.4}>
 						<div className="flex gap-4 justify-center">
