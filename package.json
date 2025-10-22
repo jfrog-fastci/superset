@@ -37,5 +37,11 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.2.6",
 		"turbo": "^2.5.8"
+	},
+	"dependencies": {
+		"@react-three/drei": "^10.7.6",
+		"@react-three/fiber": "^9.4.0",
+		"framer-motion": "^12.23.24",
+		"three": "^0.180.0"
 	}
 }
