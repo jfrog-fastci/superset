@@ -7,7 +7,56 @@ import type { Mesh, PointLight } from "three";
 import * as THREE from "three";
 import { useHeroVisibility } from "../motion/HeroParallax";
 
-// Custom shader for wave animation (GPU-accelerated)
+// Configuration constants
+const WAVE_CONFIG = {
+	WAVE1_FREQUENCY: 0.5,
+	WAVE1_SPEED: 0.5,
+	WAVE1_AMPLITUDE: 0.1,
+	WAVE2_FREQUENCY: 0.5,
+	WAVE2_SPEED: 0.3,
+	WAVE2_AMPLITUDE: 0.1,
+} as const;
+
+const LIGHT_CONFIG = {
+	INTENSITY: 25,
+	Z_POSITION: 2,
+	DEFAULT_X_RATIO: 0.18,
+	DEFAULT_Y_RATIO: 0.01,
+	HUE_MIN: 180,
+	HUE_MAX: 270,
+	SATURATION_MIN: 60,
+	SATURATION_MAX: 100,
+	LIGHTNESS: 65,
+} as const;
+
+const MATERIAL_CONFIG = {
+	BASE_COLOR: "#1a1a1a",
+	ROUGHNESS: 0.8,
+	METALNESS: 0.2,
+	AMBIENT_INTENSITY: 0.95,
+	DIFFUSE_INTENSITY: 0.15,
+	SPECULAR_INTENSITY: 0.05,
+	ATTENUATION_LINEAR: 0.1,
+	ATTENUATION_QUADRATIC: 0.05,
+} as const;
+
+const TEXT_CONFIG = {
+	POSITION: [0, 0.5, 1] as [number, number, number],
+	FONT_SIZE: 1.8,
+	FONT_SIZE_OUTER: 1.805,
+	LAYER_COUNT: 15,
+	LAYER_SPACING: 0.05,
+	COLOR: "#2c3539",
+	METALNESS: 0.85,
+	ROUGHNESS: 0.25,
+} as const;
+
+const GEOMETRY_CONFIG = {
+	PLANE_SIZE_MULTIPLIER: 1.5,
+	PLANE_SEGMENTS: 40,
+} as const;
+
+// Custom shader for GPU-accelerated wave animation
 const waveVertexShader = `
   uniform float uTime;
   varying vec3 vNormal;
@@ -81,12 +130,14 @@ function LitBackground() {
 		() => ({
 			uniforms: {
 				uTime: { value: 0 },
-				uColor: { value: new THREE.Color("#1a1a1a") },
-				uRoughness: { value: 0.8 },
-				uMetalness: { value: 0.2 },
-				uLightPosition: { value: new THREE.Vector3(0, 0, 2) },
+				uColor: { value: new THREE.Color(MATERIAL_CONFIG.BASE_COLOR) },
+				uRoughness: { value: MATERIAL_CONFIG.ROUGHNESS },
+				uMetalness: { value: MATERIAL_CONFIG.METALNESS },
+				uLightPosition: {
+					value: new THREE.Vector3(0, 0, LIGHT_CONFIG.Z_POSITION),
+				},
 				uLightColor: { value: new THREE.Color("#ffffff") },
-				uLightIntensity: { value: 25 },
+				uLightIntensity: { value: LIGHT_CONFIG.INTENSITY },
 			},
 			vertexShader: waveVertexShader,
 			fragmentShader: waveFragmentShader,
@@ -104,19 +155,24 @@ function LitBackground() {
 		// Convert normalized mouse coords to full viewport range, or use default position
 		const x = hasMouseMoved
 			? state.mouse.x * viewport.width
-			: viewport.width * 0.18; // A bit more to the right
+			: viewport.width * LIGHT_CONFIG.DEFAULT_X_RATIO;
 		const y = hasMouseMoved
 			? state.mouse.y * viewport.height
-			: viewport.height * 0.01; // Down lower (negative y moves down)
+			: viewport.height * LIGHT_CONFIG.DEFAULT_Y_RATIO;
 
 		// Change color based on position - cooler palette (blue to cyan to purple)
-		const hue = 180 + ((state.mouse.x + 1) / 2) * 90; // 180-270 degrees
-		const saturation = 60 + ((state.mouse.y + 1) / 2) * 40; // 60-100%
-		const lightness = 65; // Slightly brighter for cool colors
+		const hue =
+			LIGHT_CONFIG.HUE_MIN +
+			((state.mouse.x + 1) / 2) * (LIGHT_CONFIG.HUE_MAX - LIGHT_CONFIG.HUE_MIN);
+		const saturation =
+			LIGHT_CONFIG.SATURATION_MIN +
+			((state.mouse.y + 1) / 2) *
+				(LIGHT_CONFIG.SATURATION_MAX - LIGHT_CONFIG.SATURATION_MIN);
+		const lightness = LIGHT_CONFIG.LIGHTNESS;
 
 		if (lightRef.current) {
 			// Position light slightly in front of the plane
-			lightRef.current.position.set(x, y, 2);
+			lightRef.current.position.set(x, y, LIGHT_CONFIG.Z_POSITION);
 			lightRef.current.color.setHSL(
 				hue / 360,
 				saturation / 100,
@@ -141,7 +197,11 @@ function LitBackground() {
 				}
 				// Update light position and color in shader
 				if (material.uniforms.uLightPosition) {
-					material.uniforms.uLightPosition.value.set(x, y, 2);
+					material.uniforms.uLightPosition.value.set(
+						x,
+						y,
+						LIGHT_CONFIG.Z_POSITION,
+					);
 				}
 				if (material.uniforms.uLightColor) {
 					material.uniforms.uLightColor.value.setHSL(
@@ -159,7 +219,12 @@ function LitBackground() {
 			{/* Background plane that fills the viewport and faces camera */}
 			<mesh ref={meshRef} position={[0, 0, 0]}>
 				<planeGeometry
-					args={[viewport.width * 1.5, viewport.height * 1.5, 40, 40]}
+					args={[
+						viewport.width * GEOMETRY_CONFIG.PLANE_SIZE_MULTIPLIER,
+						viewport.height * GEOMETRY_CONFIG.PLANE_SIZE_MULTIPLIER,
+						GEOMETRY_CONFIG.PLANE_SEGMENTS,
+						GEOMETRY_CONFIG.PLANE_SEGMENTS,
+					]}
 				/>
 				<shaderMaterial
 					attach="material"
@@ -170,11 +235,11 @@ function LitBackground() {
 			</mesh>
 
 			{/* 3D Text that reacts to light */}
-			<group ref={textGroupRef} position={[0, 0.5, 1]}>
+			<group ref={textGroupRef} position={TEXT_CONFIG.POSITION}>
 				{/* Outer edge layer - highly metallic */}
 				<Text
 					position={[0, 0, 0.02]}
-					fontSize={1.805}
+					fontSize={TEXT_CONFIG.FONT_SIZE_OUTER}
 					color="black"
 					anchorX="center"
 					anchorY="middle"
@@ -186,20 +251,20 @@ function LitBackground() {
 				</Text>
 
 				{/* Create depth by layering multiple text instances - reduced from 30 to 15 for performance */}
-				{[...Array(15)].map((_, i) => (
+				{Array.from({ length: TEXT_CONFIG.LAYER_COUNT }, (_, i) => (
 					<Text
-						key={i.toString()}
-						position={[0, 0, -i * 0.05]}
-						fontSize={1.8}
+						key={i}
+						position={[0, 0, -i * TEXT_CONFIG.LAYER_SPACING]}
+						fontSize={TEXT_CONFIG.FONT_SIZE}
 						color="#0a0a0a"
 						anchorX="center"
 						anchorY="middle"
 					>
 						⊇
 						<meshStandardMaterial
-							color="#2c3539"
-							metalness={0.85}
-							roughness={0.25}
+							color={TEXT_CONFIG.COLOR}
+							metalness={TEXT_CONFIG.METALNESS}
+							roughness={TEXT_CONFIG.ROUGHNESS}
 							emissive="#000000"
 							emissiveIntensity={0}
 							envMapIntensity={1.5}
@@ -226,7 +291,7 @@ function LitBackground() {
 			{/* Point light that follows mouse */}
 			<pointLight
 				ref={lightRef}
-				intensity={25}
+				intensity={LIGHT_CONFIG.INTENSITY}
 				color="#ffffff"
 				distance={50}
 				decay={1.2}
