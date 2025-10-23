@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Card } from "@superset/ui/card";
 import { motion } from "framer-motion";
 import { FadeUp } from "@/components/motion/FadeUp";
@@ -85,7 +86,7 @@ function FeatureCard({ title, description, delay }: FeatureCardProps) {
 // Client logos section component
 function ClientLogosSection() {
 	return (
-		<section className="py-24 px-8 bg-black border-y border-zinc-800">
+		<section className="py-24 px-8 bg-black">
 			<div className="max-w-7xl mx-auto">
 				<motion.div
 					initial={{ opacity: 0, y: 20 }}
@@ -125,6 +126,62 @@ function ClientLogosSection() {
 	);
 }
 
+// Scale feature card component
+interface ScaleFeatureCardProps {
+	feature: (typeof SCALE_FEATURES)[number];
+	delay: number;
+	shadowColor?: "blue" | "green";
+	className?: string;
+	children: ReactNode;
+}
+
+function ScaleFeatureCard({
+	feature,
+	delay,
+	shadowColor = "blue",
+	className = "",
+	children,
+}: ScaleFeatureCardProps) {
+	const shadowClass =
+		shadowColor === "green" ? "hover:shadow-green-500/10" : "hover:shadow-blue-500/10";
+
+	return (
+		<motion.div
+			initial={{ opacity: 0, y: 20 }}
+			whileInView={{ opacity: 1, y: 0 }}
+			viewport={{ once: true, margin: "-100px" }}
+			transition={{ duration: 0.5, delay }}
+			whileHover={{ y: -1, transition: { duration: 0.2 } }}
+			className={className}
+		>
+			<Card
+				className={`p-8 bg-zinc-950 border-zinc-800 rounded-3xl h-full min-h-[400px] flex flex-col justify-between transition-shadow hover:shadow-2xl ${shadowClass} hover:border-zinc-700`}
+			>
+				<div>
+					<h3 className="text-2xl font-semibold mb-3 text-white">
+						{feature.title}
+					</h3>
+					<p className="text-zinc-400 mb-6">{feature.description}</p>
+					<a
+						href="#"
+						className="text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-2 group"
+					>
+						{feature.link}
+						<motion.span
+							className="inline-block"
+							whileHover={{ x: 4 }}
+							transition={{ duration: 0.2 }}
+						>
+							→
+						</motion.span>
+					</a>
+				</div>
+				{children}
+			</Card>
+		</motion.div>
+	);
+}
+
 // Scale features section component
 function ScaleFeaturesSection() {
 	return (
@@ -145,178 +202,84 @@ function ScaleFeaturesSection() {
 
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 					{/* Analytics Card */}
-					<motion.div
-						initial={{ opacity: 0, y: 20 }}
-						whileInView={{ opacity: 1, y: 0 }}
-						viewport={{ once: true, margin: "-100px" }}
-						transition={{ duration: 0.5, delay: 0.1 }}
-						whileHover={{ y: -8, transition: { duration: 0.2 } }}
-					>
-						<Card className="p-8 bg-zinc-950 border-zinc-800 rounded-3xl h-full min-h-[400px] flex flex-col justify-between transition-shadow hover:shadow-2xl hover:shadow-blue-500/10 hover:border-zinc-700">
-							<div>
-								<h3 className="text-2xl font-semibold mb-3 text-white">
-									{SCALE_FEATURES[0].title}
-								</h3>
-								<p className="text-zinc-400 mb-6">
-									{SCALE_FEATURES[0].description}
-								</p>
-								<a
-									href="#"
-									className="text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-2 group"
-								>
-									{SCALE_FEATURES[0].link}
-									<motion.span
-										className="inline-block"
-										whileHover={{ x: 4 }}
-										transition={{ duration: 0.2 }}
-									>
-										→
-									</motion.span>
-								</a>
-							</div>
-							{/* Analytics Chart Placeholder */}
-							<div className="mt-8 p-6 bg-zinc-900 rounded-2xl border border-zinc-800">
-								<div className="mb-4">
-									<h4 className="text-white font-semibold mb-2">Overview</h4>
-									<div className="flex gap-8">
-										<div>
-											<div className="text-zinc-400 text-sm">Live Visitors</div>
-											<div className="text-white text-2xl font-bold">414</div>
-										</div>
-										<div>
-											<div className="text-zinc-400 text-sm">
-												Unique Visitors
-											</div>
-											<div className="text-white text-2xl font-bold">1.7M</div>
-										</div>
-										<div>
-											<div className="text-zinc-400 text-sm">
-												Total Pageviews
-											</div>
-											<div className="text-white text-2xl font-bold">3.2M</div>
-										</div>
+					<ScaleFeatureCard feature={SCALE_FEATURES[0]} delay={0.1}>
+						<div className="mt-8 p-6 bg-zinc-900 rounded-2xl border border-zinc-800">
+							<div className="mb-4">
+								<h4 className="text-white font-semibold mb-2">Overview</h4>
+								<div className="flex gap-8">
+									<div>
+										<div className="text-zinc-400 text-sm">Live Visitors</div>
+										<div className="text-white text-2xl font-bold">414</div>
+									</div>
+									<div>
+										<div className="text-zinc-400 text-sm">Unique Visitors</div>
+										<div className="text-white text-2xl font-bold">1.7M</div>
+									</div>
+									<div>
+										<div className="text-zinc-400 text-sm">Total Pageviews</div>
+										<div className="text-white text-2xl font-bold">3.2M</div>
 									</div>
 								</div>
-								<div className="h-32 bg-gradient-to-t from-blue-500/10 to-transparent rounded-lg" />
 							</div>
-						</Card>
-					</motion.div>
+							<div className="h-32 bg-gradient-to-t from-blue-500/10 to-transparent rounded-lg" />
+						</div>
+					</ScaleFeatureCard>
 
 					{/* A/B Testing Card */}
-					<motion.div
-						initial={{ opacity: 0, y: 20 }}
-						whileInView={{ opacity: 1, y: 0 }}
-						viewport={{ once: true, margin: "-100px" }}
-						transition={{ duration: 0.5, delay: 0.2 }}
-						whileHover={{ y: -8, transition: { duration: 0.2 } }}
-					>
-						<Card className="p-8 bg-zinc-950 border-zinc-800 rounded-3xl h-full min-h-[400px] flex flex-col justify-between relative overflow-hidden transition-shadow hover:shadow-2xl hover:shadow-blue-500/10 hover:border-zinc-700">
-							<div>
-								<h3 className="text-2xl font-semibold mb-3 text-white">
-									{SCALE_FEATURES[1].title}
-								</h3>
-								<p className="text-zinc-400 mb-6">
-									{SCALE_FEATURES[1].description}
-								</p>
-								<a
-									href="#"
-									className="text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-2 group"
-								>
-									{SCALE_FEATURES[1].link}
-									<motion.span
-										className="inline-block"
-										whileHover={{ x: 4 }}
-										transition={{ duration: 0.2 }}
-									>
-										→
-									</motion.span>
-								</a>
-							</div>
-							{/* A/B Testing Interface Mockup */}
-							<div className="mt-8 relative">
-								<div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
-								<div className="relative p-4 bg-zinc-900 rounded-2xl border border-zinc-800">
-									<div className="text-xs text-zinc-400 mb-2">
-										Version Control
+					<ScaleFeatureCard feature={SCALE_FEATURES[1]} delay={0.2}>
+						<div className="mt-8 relative">
+							<div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+							<div className="relative p-4 bg-zinc-900 rounded-2xl border border-zinc-800">
+								<div className="text-xs text-zinc-400 mb-2">Version Control</div>
+								<div className="space-y-2">
+									<div className="p-2 bg-zinc-800 rounded text-white text-sm">
+										Version A
 									</div>
-									<div className="space-y-2">
-										<div className="p-2 bg-zinc-800 rounded text-white text-sm">
-											Version A
-										</div>
-										<div className="p-2 bg-blue-500/20 border border-blue-500/50 rounded text-white text-sm">
-											Version B ✓
-										</div>
+									<div className="p-2 bg-blue-500/20 border border-blue-500/50 rounded text-white text-sm">
+										Version B ✓
 									</div>
 								</div>
 							</div>
-						</Card>
-					</motion.div>
+						</div>
+					</ScaleFeatureCard>
 
-					{/* SEO Card - Takes full width on last row */}
-					<motion.div
-						initial={{ opacity: 0, y: 20 }}
-						whileInView={{ opacity: 1, y: 0 }}
-						viewport={{ once: true, margin: "-100px" }}
-						transition={{ duration: 0.5, delay: 0.3 }}
-						whileHover={{ y: -8, transition: { duration: 0.2 } }}
+					{/* SEO Card */}
+					<ScaleFeatureCard
+						feature={SCALE_FEATURES[2]}
+						delay={0.3}
+						shadowColor="green"
 						className="md:col-span-2"
 					>
-						<Card className="p-8 bg-zinc-950 border-zinc-800 rounded-3xl h-full min-h-[400px] flex flex-col md:flex-row gap-8 justify-between transition-shadow hover:shadow-2xl hover:shadow-green-500/10 hover:border-zinc-700">
-							<div className="flex-1">
-								<h3 className="text-2xl font-semibold mb-3 text-white">
-									{SCALE_FEATURES[2].title}
-								</h3>
-								<p className="text-zinc-400 mb-6">
-									{SCALE_FEATURES[2].description}
-								</p>
-								<a
-									href="#"
-									className="text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-2 group"
-								>
-									{SCALE_FEATURES[2].link}
-									<motion.span
-										className="inline-block"
-										whileHover={{ x: 4 }}
-										transition={{ duration: 0.2 }}
-									>
-										→
-									</motion.span>
-								</a>
-							</div>
-							{/* Google Lighthouse Score Mockup */}
-							<div className="flex-1 flex items-center justify-center">
-								<div className="p-6 bg-zinc-900 rounded-2xl border border-zinc-800 w-full">
-									<div className="text-center mb-4">
-										<div className="text-sm text-zinc-400 mb-2">
-											Google Lighthouse
+						<div className="flex-1 flex items-center justify-center mt-8">
+							<div className="p-6 bg-zinc-900 rounded-2xl border border-zinc-800 w-full">
+								<div className="text-center mb-4">
+									<div className="text-sm text-zinc-400 mb-2">
+										Google Lighthouse
+									</div>
+									<div className="flex justify-center gap-6">
+										<div className="text-center">
+											<div className="w-16 h-16 rounded-full border-4 border-green-500 flex items-center justify-center text-white font-bold mb-1">
+												99
+											</div>
+											<div className="text-xs text-zinc-400">SEO</div>
 										</div>
-										<div className="flex justify-center gap-6">
-											<div className="text-center">
-												<div className="w-16 h-16 rounded-full border-4 border-green-500 flex items-center justify-center text-white font-bold mb-1">
-													99
-												</div>
-												<div className="text-xs text-zinc-400">SEO</div>
+										<div className="text-center">
+											<div className="w-16 h-16 rounded-full border-4 border-green-500 flex items-center justify-center text-white font-bold mb-1">
+												100
 											</div>
-											<div className="text-center">
-												<div className="w-16 h-16 rounded-full border-4 border-green-500 flex items-center justify-center text-white font-bold mb-1">
-													100
-												</div>
-												<div className="text-xs text-zinc-400">Performance</div>
+											<div className="text-xs text-zinc-400">Performance</div>
+										</div>
+										<div className="text-center">
+											<div className="w-16 h-16 rounded-full border-4 border-blue-500 flex items-center justify-center text-white font-bold mb-1">
+												98
 											</div>
-											<div className="text-center">
-												<div className="w-16 h-16 rounded-full border-4 border-blue-500 flex items-center justify-center text-white font-bold mb-1">
-													98
-												</div>
-												<div className="text-xs text-zinc-400">
-													Accessibility
-												</div>
-											</div>
+											<div className="text-xs text-zinc-400">Accessibility</div>
 										</div>
 									</div>
 								</div>
 							</div>
-						</Card>
-					</motion.div>
+						</div>
+					</ScaleFeatureCard>
 				</div>
 			</div>
 		</section>
