@@ -1,7 +1,7 @@
 import { useState } from "react";
 import UpdateElectron from "@/components/update";
-import logoVite from "./assets/logo-vite.svg";
 import logoElectron from "./assets/logo-electron.svg";
+import logoVite from "./assets/logo-vite.svg";
 import "./App.css";
 
 function App() {
@@ -12,6 +12,7 @@ function App() {
 				<a
 					href="https://github.com/electron-vite/electron-vite-react"
 					target="_blank"
+					rel="noopener"
 				>
 					<img
 						src={logoVite}

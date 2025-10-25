@@ -1,12 +1,12 @@
 import path from "node:path";
+import type { BrowserWindow } from "electron";
 import {
 	type ElectronApplication,
-	type Page,
-	type JSHandle,
 	_electron as electron,
+	type JSHandle,
+	type Page,
 } from "playwright";
-import type { BrowserWindow } from "electron";
-import { beforeAll, afterAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 const root = path.join(__dirname, "..");
 let electronApp: ElectronApplication;

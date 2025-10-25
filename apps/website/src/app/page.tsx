@@ -3,12 +3,12 @@
 import { Card } from "@superset/ui/card";
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
+import { Footer } from "@/components/Footer";
+import { Header } from "@/components/Header";
 import { FadeUp } from "@/components/motion/FadeUp";
 import { HeroParallax } from "@/components/motion/HeroParallax";
 import { TiltCard } from "@/components/motion/TiltCard";
 import { HeroCanvas } from "@/components/three/HeroCanvas";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
 
 // Client logos data
 const CLIENT_LOGOS = [

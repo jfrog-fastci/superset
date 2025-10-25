@@ -1,5 +1,5 @@
-import { app, ipcMain } from "electron";
 import { createRequire } from "node:module";
+import { app, ipcMain } from "electron";
 import type {
 	ProgressInfo,
 	UpdateDownloadedEvent,
@@ -15,7 +15,7 @@ export function update(win: Electron.BrowserWindow) {
 	autoUpdater.allowDowngrade = false;
 
 	// start check
-	autoUpdater.on("checking-for-update", function () {});
+	autoUpdater.on("checking-for-update", () => {});
 	// update available
 	autoUpdater.on("update-available", (arg: UpdateInfo) => {
 		win.webContents.send("update-can-available", {

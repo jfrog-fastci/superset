@@ -1,8 +1,9 @@
-import { app, BrowserWindow, shell, ipcMain } from "electron";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
+import terminalManager from "./terminal";
 import { update } from "./update";
 
 const require = createRequire(import.meta.url);
@@ -57,6 +58,9 @@ async function createWindow() {
 			// contextIsolation: false,
 		},
 	});
+
+	// Set the main window for terminal manager
+	terminalManager.setMainWindow(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		// #298
@@ -121,4 +125,52 @@ ipcMain.handle("open-win", (_, arg) => {
 	} else {
 		childWindow.loadFile(indexHtml, { hash: arg });
 	}
+});
+
+// Terminal IPC handlers
+ipcMain.handle(
+	"terminal-create",
+	(_, options?: { cwd?: string; cols?: number; rows?: number }) => {
+		try {
+			const terminalId = terminalManager.create(options);
+			return terminalId;
+		} catch (error) {
+			console.error("Failed to create terminal:", error);
+			throw error;
+		}
+	},
+);
+
+ipcMain.on(
+	"terminal-input",
+	(_, { id, data }: { id: string; data: string }) => {
+		terminalManager.write(id, data);
+	},
+);
+
+ipcMain.on(
+	"terminal-resize",
+	(_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+		terminalManager.resize(id, cols, rows);
+	},
+);
+
+ipcMain.handle(
+	"terminal-execute-command",
+	(_, { id, command }: { id: string; command: string }) => {
+		return terminalManager.executeCommand(id, command);
+	},
+);
+
+ipcMain.on("terminal-kill", (_, id: string) => {
+	terminalManager.kill(id);
+});
+
+ipcMain.handle("terminal-get-history", (_, id: string) => {
+	return terminalManager.getHistory(id);
+});
+
+// Clean up terminals on app quit
+app.on("before-quit", () => {
+	terminalManager.killAll();
 });
