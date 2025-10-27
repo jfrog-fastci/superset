@@ -42,11 +42,13 @@
       "name": "@superset/desktop",
       "version": "0.1.0",
       "dependencies": {
+        "@superset/db": "*",
         "@xterm/addon-fit": "^0.10.0",
         "@xterm/addon-search": "^0.15.0",
         "@xterm/addon-web-links": "^0.11.0",
         "@xterm/addon-webgl": "^0.18.0",
         "@xterm/xterm": "^5.5.0",
+        "dotenv": "^17.2.3",
         "electron-updater": "^6.3.9",
         "node-pty": "1.1.0-beta30",
       },

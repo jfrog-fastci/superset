@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 import type { BrowserWindow } from "electron";
 import * as pty from "node-pty";
+import { db, workspace } from "@superset/db";
+import { eq } from "drizzle-orm";
 
 class TerminalManager {
 	private static instance: TerminalManager;
@@ -25,15 +27,39 @@ class TerminalManager {
 		this.mainWindow = window;
 	}
 
-	create(options?: { cwd?: string; cols?: number; rows?: number }): string {
+	async create(
+		options?: { cwd?: string; cols?: number; rows?: number },
+	): Promise<string> {
 		try {
 			const id = randomUUID();
 			const shell = os.platform() === "win32" ? "powershell.exe" : "/bin/sh";
+
+			// Fetch workspace root_dir from database (ID 0)
+			let workingDir = options?.cwd;
+			if (!workingDir) {
+				try {
+					const workspaceData = await db
+						.select()
+						.from(workspace)
+						.where(eq(workspace.id, 0))
+						.limit(1);
+
+					if (workspaceData.length > 0 && workspaceData[0].rootDir) {
+						workingDir = workspaceData[0].rootDir;
+					}
+				} catch (dbError) {
+					console.error("Failed to fetch workspace from database:", dbError);
+				}
+			}
+
+			// Fallback to HOME or process.cwd() if no workspace found
+			const finalCwd = workingDir || process.env.HOME || process.cwd();
+
 			const ptyProcess = pty.spawn(shell, [], {
 				name: "xterm-color",
 				cols: options?.cols || 80,
 				rows: options?.rows || 30,
-				cwd: options?.cwd || process.env.HOME || process.cwd(),
+				cwd: finalCwd,
 				env: process.env as Record<string, string>,
 			});
 

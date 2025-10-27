@@ -42,7 +42,7 @@ export default defineConfig(({ command }) => {
 							rollupOptions: {
 								external: Object.keys(
 									"dependencies" in pkg ? pkg.dependencies : {},
-								),
+								).filter((name) => !name.startsWith("@superset/")),
 							},
 						},
 					},
@@ -59,7 +59,7 @@ export default defineConfig(({ command }) => {
 							rollupOptions: {
 								external: Object.keys(
 									"dependencies" in pkg ? pkg.dependencies : {},
-								),
+								).filter((name) => !name.startsWith("@superset/")),
 							},
 						},
 					},

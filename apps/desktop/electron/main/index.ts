@@ -1,3 +1,6 @@
+// Load environment variables FIRST before any other imports
+import "./env";
+
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -86,8 +89,6 @@ async function createWindow() {
 	update(win);
 }
 
-app.whenReady().then(createWindow);
-
 app.on("window-all-closed", () => {
 	win = null;
 	if (process.platform !== "darwin") app.quit();
@@ -129,45 +130,50 @@ ipcMain.handle("open-win", (_, arg) => {
 
 // Terminal IPC handlers
 ipcMain.handle(
-	"terminal-create",
-	(_, options?: { cwd?: string; cols?: number; rows?: number }) => {
-		try {
-			const terminalId = terminalManager.create(options);
-			return terminalId;
-		} catch (error) {
-			console.error("Failed to create terminal:", error);
-			throw error;
-		}
-	},
-);
+		"terminal-create",
+		async (_, options?: { cwd?: string; cols?: number; rows?: number }) => {
+			try {
+				const terminalId = await terminalManager.create(options);
+				return terminalId;
+			} catch (error) {
+				console.error("Failed to create terminal:", error);
+				throw error;
+			}
+		},
+	);
 
-ipcMain.on(
-	"terminal-input",
-	(_, { id, data }: { id: string; data: string }) => {
-		terminalManager.write(id, data);
-	},
-);
+	ipcMain.on(
+		"terminal-input",
+		(_, { id, data }: { id: string; data: string }) => {
+			terminalManager.write(id, data);
+		},
+	);
 
-ipcMain.on(
-	"terminal-resize",
-	(_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
-		terminalManager.resize(id, cols, rows);
-	},
-);
+	ipcMain.on(
+		"terminal-resize",
+		(_, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+			terminalManager.resize(id, cols, rows);
+		},
+	);
 
-ipcMain.handle(
-	"terminal-execute-command",
-	(_, { id, command }: { id: string; command: string }) => {
-		return terminalManager.executeCommand(id, command);
-	},
-);
+	ipcMain.handle(
+		"terminal-execute-command",
+		(_, { id, command }: { id: string; command: string }) => {
+			return terminalManager.executeCommand(id, command);
+		},
+	);
 
-ipcMain.on("terminal-kill", (_, id: string) => {
-	terminalManager.kill(id);
-});
+	ipcMain.on("terminal-kill", (_, id: string) => {
+		terminalManager.kill(id);
+	});
 
-ipcMain.handle("terminal-get-history", (_, id: string) => {
-	return terminalManager.getHistory(id);
+	ipcMain.handle("terminal-get-history", (_, id: string) => {
+		return terminalManager.getHistory(id);
+	});
+
+// Clean up terminals on app quit
+app.on("before-quit", () => {
+	terminalManager.killAll();
 });
 
 // Open external URL
@@ -175,7 +181,4 @@ ipcMain.handle("open-external", (_, url: string) => {
 	shell.openExternal(url);
 });
 
-// Clean up terminals on app quit
-app.on("before-quit", () => {
-	terminalManager.killAll();
-});
+app.whenReady().then(createWindow);

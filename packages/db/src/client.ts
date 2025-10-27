@@ -10,9 +10,9 @@ const globalForDb = globalThis as unknown as {
 	conn: postgres.Sql | undefined;
 };
 
-const databaseUrl = process.env.SUPABASE_DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-	throw new Error("SUPABASE_DATABASE_URL environment variable is not set");
+	throw new Error("DATABASE_URL environment variable is not set");
 }
 
 const conn = globalForDb.conn ?? postgres(databaseUrl, { prepare: false });
