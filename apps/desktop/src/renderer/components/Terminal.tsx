@@ -139,16 +139,39 @@ export default function TerminalComponent({
 		const fitAddon = new FitAddon();
 		term.loadAddon(fitAddon);
 
+		// Custom fit function that accounts for container dimensions properly
+		const customFit = () => {
+			if (isDisposed) return;
+
+			try {
+				// Get the actual dimensions of the container
+				const rect = container.getBoundingClientRect();
+				const width = rect.width;
+				const height = rect.height;
+
+				if (width <= 0 || height <= 0) {
+					return; // Skip if container has no dimensions yet
+				}
+
+				// Use FitAddon's fit which calculates based on font metrics
+				fitAddon.fit();
+
+				// Get the computed dimensions after fit
+				const dimensions = fitAddon.proposeDimensions();
+				if (dimensions) {
+					term.resize(dimensions.cols, dimensions.rows);
+				}
+			} catch (e) {
+				console.warn("Custom fit failed:", e);
+			}
+		};
+
 		// Delay initial fit to ensure renderer is ready
 		setTimeout(() => {
 			if (!isDisposed) {
-				try {
-					fitAddon.fit();
-				} catch (e) {
-					console.warn("Initial fit failed:", e);
-				}
+				customFit();
 			}
-		}, 0);
+		}, 100);
 
 		// 4. SearchAddon - Enable text searching (Ctrl+F or Cmd+F)
 		const searchAddon = new SearchAddon();
@@ -164,11 +187,7 @@ export default function TerminalComponent({
 			}
 			resizeTimeout = setTimeout(() => {
 				if (!isDisposed) {
-					try {
-						fitAddon.fit();
-					} catch (e) {
-						console.warn("Resize fit failed:", e);
-					}
+					customFit();
 				}
 				resizeTimeout = null;
 			}, 100);
