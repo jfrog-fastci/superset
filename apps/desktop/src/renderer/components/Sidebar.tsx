@@ -1,19 +1,20 @@
 import {
 	ChevronRight,
+	Cloud,
+	Coffee,
 	GitBranch,
+	Heart,
+	Moon,
 	PanelLeftClose,
 	Plus,
+	Puzzle,
+	RefreshCw,
+	Rocket,
+	Sparkles,
 	SquareTerminal,
 	Star,
-	Moon,
 	Sun,
 	Zap,
-	Puzzle,
-	Heart,
-	Sparkles,
-	Cloud,
-	Rocket,
-	Coffee,
 } from "lucide-react";
 import { useState } from "react";
 import type { Workspace } from "shared/types";
@@ -24,13 +25,13 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "./ui/context-menu";
+import { ScrollArea } from "./ui/scroll-area";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "./ui/tooltip";
-import { ScrollArea } from "./ui/scroll-area";
 
 interface SidebarProps {
 	workspaces: Workspace[];
@@ -43,11 +44,24 @@ interface SidebarProps {
 }
 
 // Playful icon set for workspaces
-const WORKSPACE_ICONS = [Star, Moon, Sun, Zap, Puzzle, Heart, Sparkles, Cloud, Rocket, Coffee];
+const WORKSPACE_ICONS = [
+	Star,
+	Moon,
+	Sun,
+	Zap,
+	Puzzle,
+	Heart,
+	Sparkles,
+	Cloud,
+	Rocket,
+	Coffee,
+];
 
 // Get consistent icon for workspace based on ID
 const getWorkspaceIcon = (workspaceId: string) => {
-	const hash = workspaceId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+	const hash = workspaceId
+		.split("")
+		.reduce((acc, char) => acc + char.charCodeAt(0), 0);
 	return WORKSPACE_ICONS[hash % WORKSPACE_ICONS.length];
 };
 
@@ -64,6 +78,7 @@ export function Sidebar({
 		new Set(),
 	);
 	const [isCreatingWorktree, setIsCreatingWorktree] = useState(false);
+	const [isScanningWorktrees, setIsScanningWorktrees] = useState(false);
 	const [showWorktreeModal, setShowWorktreeModal] = useState(false);
 	const [branchName, setBranchName] = useState("");
 
@@ -126,66 +141,135 @@ export function Sidebar({
 
 	const handleAddWorkspace = () => {
 		// Trigger the File -> Open Repository menu action
-		window.ipcRenderer.send('open-repository');
+		window.ipcRenderer.send("open-repository");
 	};
 
-	const handleRemoveWorkspace = async (workspaceId: string, workspaceName: string) => {
+	const handleRemoveWorkspace = async (
+		workspaceId: string,
+		workspaceName: string,
+	) => {
 		// Confirm deletion
 		const confirmed = window.confirm(
-			`Remove workspace "${workspaceName}"?\n\nAll terminal sessions for this workspace will be closed.`
+			`Remove workspace "${workspaceName}"?\n\nAll terminal sessions for this workspace will be closed.`,
 		);
 
 		if (!confirmed) return;
 
 		try {
-			const result = await window.ipcRenderer.invoke('workspace-delete', workspaceId, false);
+			const result = await window.ipcRenderer.invoke(
+				"workspace-delete",
+				workspaceId,
+				false,
+			);
 			if (result.success) {
 				// If we deleted the current workspace, clear selection
 				if (currentWorkspace?.id === workspaceId) {
-					onWorkspaceSelect('');
+					onWorkspaceSelect("");
 				}
 				// Refresh will happen via workspace-opened event
 				window.location.reload();
 			} else {
-				alert(`Failed to remove workspace: ${result.error || 'Unknown error'}`);
+				alert(`Failed to remove workspace: ${result.error || "Unknown error"}`);
 			}
 		} catch (error) {
-			console.error('Error removing workspace:', error);
+			console.error("Error removing workspace:", error);
 			alert(`Error: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	};
 
-	return (
-		<div className="flex flex-col h-full w-64 select-none bg-neutral-900 text-neutral-300 border-r border-neutral-800">
-			{/* Top Section - Matches window controls height */}
-			<div
-				className="flex items-center border-b border-neutral-800"
-				style={
-					{
-						height: "48px",
-						paddingLeft: "88px",
-						WebkitAppRegion: "drag",
-					} as React.CSSProperties
+	const handleScanWorktrees = async () => {
+		if (!currentWorkspace) return;
+
+		console.log(
+			"[Sidebar] Scanning worktrees for workspace:",
+			currentWorkspace.id,
+		);
+		setIsScanningWorktrees(true);
+
+		try {
+			const result = (await window.ipcRenderer.invoke(
+				"workspace-scan-worktrees",
+				currentWorkspace.id,
+			)) as { success: boolean; imported?: number; error?: string };
+
+			if (result.success) {
+				console.log("[Sidebar] Scan completed, imported:", result.imported);
+				if (result.imported && result.imported > 0) {
+					alert(
+						`Successfully imported ${result.imported} worktree${result.imported > 1 ? "s" : ""}`,
+					);
+					onWorktreeCreated?.();
+				} else {
+					alert("No new worktrees found to import");
 				}
-			>
-				<div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-					<Button variant="ghost" size="icon-sm" onClick={onCollapse}>
-						<PanelLeftClose size={16} />
-					</Button>
+			} else {
+				console.error("[Sidebar] Failed to scan worktrees:", result.error);
+				alert(`Failed to scan worktrees: ${result.error || "Unknown error"}`);
+			}
+		} catch (error) {
+			console.error("[Sidebar] Error scanning worktrees:", error);
+			alert(`Error: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			setIsScanningWorktrees(false);
+		}
+	};
+
+	return (
+		<TooltipProvider delayDuration={300}>
+			<div className="flex flex-col h-full w-64 select-none bg-neutral-900 text-neutral-300 border-r border-neutral-800">
+				{/* Top Section - Matches window controls height */}
+				<div
+					className="flex items-center justify-between border-b border-neutral-800"
+					style={
+						{
+							height: "48px",
+							paddingLeft: "88px",
+							WebkitAppRegion: "drag",
+						} as React.CSSProperties
+					}
+				>
+					<div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+						<Button variant="ghost" size="icon-sm" onClick={onCollapse}>
+							<PanelLeftClose size={16} />
+						</Button>
+					</div>
+					<div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties} className="pr-3">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									onClick={handleScanWorktrees}
+									disabled={isScanningWorktrees || !currentWorkspace}
+								>
+									<RefreshCw
+										size={16}
+										className={isScanningWorktrees ? "animate-spin" : ""}
+									/>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								<p>Scan worktrees</p>
+							</TooltipContent>
+						</Tooltip>
+					</div>
 				</div>
-			</div>
 
 			{/* Worktrees Section */}
 			<div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
 				{!currentWorkspace && (
-					<div className="text-sm text-gray-500 px-3 py-2">No currentWorkspace open</div>
-				)}
-
-				{currentWorkspace && (!currentWorkspace.worktrees || currentWorkspace.worktrees.length === 0) && (
 					<div className="text-sm text-gray-500 px-3 py-2">
-						No worktrees yet. Create one to get started.
+						No currentWorkspace open
 					</div>
 				)}
+
+				{currentWorkspace &&
+					(!currentWorkspace.worktrees ||
+						currentWorkspace.worktrees.length === 0) && (
+						<div className="text-sm text-gray-500 px-3 py-2">
+							No worktrees yet. Create one to get started.
+						</div>
+					)}
 
 				{currentWorkspace?.worktrees?.map((worktree) => {
 					const isExpanded = expandedWorktrees.has(worktree.id);
@@ -204,7 +288,9 @@ export function Sidebar({
 									className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
 								/>
 								<GitBranch size={14} className="opacity-70" />
-								<span className="truncate flex-1 text-left">{worktree.branch}</span>
+								<span className="truncate flex-1 text-left">
+									{worktree.branch}
+								</span>
 							</Button>
 
 							{/* Screens List */}
@@ -251,8 +337,7 @@ export function Sidebar({
 
 			{/* Bottom Workspace Switcher */}
 			<div className="border-t border-neutral-800">
-				<TooltipProvider delayDuration={300}>
-					<div className="flex w-full">
+				<div className="flex w-full">
 						<ScrollArea className="w-full" orientation="horizontal">
 							<div className="flex items-center gap-2 px-2 py-2 w-max">
 								{workspaces.map((ws) => {
@@ -266,7 +351,11 @@ export function Sidebar({
 															variant="ghost"
 															size="icon-sm"
 															onClick={() => onWorkspaceSelect(ws.id)}
-															className={currentWorkspace?.id === ws.id ? "bg-neutral-800" : ""}
+															className={
+																currentWorkspace?.id === ws.id
+																	? "bg-neutral-800"
+																	: ""
+															}
 														>
 															<Icon size={18} />
 														</Button>
@@ -278,7 +367,9 @@ export function Sidebar({
 												<ContextMenuContent side="top">
 													<ContextMenuItem
 														className="text-red-400 focus:text-red-400"
-														onClick={() => handleRemoveWorkspace(ws.id, ws.name)}
+														onClick={() =>
+															handleRemoveWorkspace(ws.id, ws.name)
+														}
 													>
 														Remove Workspace
 													</ContextMenuItem>
@@ -306,7 +397,6 @@ export function Sidebar({
 							</Tooltip>
 						</div>
 					</div>
-				</TooltipProvider>
 			</div>
 
 			{/* Create Worktree Modal */}
@@ -359,6 +449,7 @@ export function Sidebar({
 					</div>
 				</div>
 			)}
-		</div>
+			</div>
+		</TooltipProvider>
 	);
 }

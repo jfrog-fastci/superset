@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { CreateWorkspaceInput, UpdateWorkspaceInput, Workspace } from 'shared/types'
+import { useCallback, useEffect, useState } from "react";
+import type {
+	CreateWorkspaceInput,
+	UpdateWorkspaceInput,
+	Workspace,
+} from "shared/types";
 
 declare global {
 	interface Window {
@@ -26,9 +30,8 @@ export function useWorkspace() {
 		try {
 			setLoading(true);
 			setError(null);
-			const result = await window.ipcRenderer.invoke<Workspace[]>(
-				"workspace-list",
-			);
+			const result =
+				await window.ipcRenderer.invoke<Workspace[]>("workspace-list");
 			setWorkspaces(result);
 
 			// Set current workspace to first one if none selected

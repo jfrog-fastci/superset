@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { CreateWorkspaceInput } from 'shared/types'
+import { useState } from "react";
+import type { CreateWorkspaceInput } from "shared/types";
 
 interface WorkspaceSettingsProps {
 	onClose: () => void;

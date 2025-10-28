@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import type { LayoutNode, TerminalPane, TerminalSplit } from 'shared/types'
-import Terminal from './Terminal'
+import { useEffect, useState } from "react";
+import type { LayoutNode, TerminalPane, TerminalSplit } from "shared/types";
+import Terminal from "./Terminal";
 
 interface TerminalLayoutProps {
 	layout: LayoutNode;
@@ -65,7 +65,9 @@ function SplitLayout({ split, workingDirectory }: SplitLayoutProps) {
 	const isVertical = split.direction === "vertical";
 
 	return (
-		<div className={`flex ${isVertical ? "flex-row" : "flex-col"} w-full h-full`}>
+		<div
+			className={`flex ${isVertical ? "flex-row" : "flex-col"} w-full h-full`}
+		>
 			{split.children.map((child, index) => {
 				const flexBasis = `${(split.ratio[index] / totalRatio) * 100}%`;
 
@@ -96,9 +98,7 @@ function LayoutNodeRenderer({
 	workingDirectory,
 }: LayoutNodeRendererProps) {
 	if (node.type === "pane") {
-		return (
-			<TerminalInstance pane={node} workingDirectory={workingDirectory} />
-		);
+		return <TerminalInstance pane={node} workingDirectory={workingDirectory} />;
 	}
 
 	return <SplitLayout split={node} workingDirectory={workingDirectory} />;

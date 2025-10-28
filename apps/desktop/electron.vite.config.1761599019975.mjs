@@ -1,14 +1,15 @@
 // electron.vite.config.ts
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
-import { codeInspectorPlugin } from "code-inspector-plugin";
-import { resolve, normalize, dirname } from "node:path";
-import tailwindcss from "@tailwindcss/vite";
-import injectProcessEnvPlugin from "rollup-plugin-inject-process-env";
-import tsconfigPathsPlugin from "vite-tsconfig-paths";
-import reactPlugin from "@vitejs/plugin-react";
 
+import { dirname, normalize, resolve } from "node:path";
+import tailwindcss from "@tailwindcss/vite";
+import reactPlugin from "@vitejs/plugin-react";
+import { codeInspectorPlugin } from "code-inspector-plugin";
 // src/lib/electron-router-dom.ts
 import { createElectronRouter } from "electron-router-dom";
+import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import injectProcessEnvPlugin from "rollup-plugin-inject-process-env";
+import tsconfigPathsPlugin from "vite-tsconfig-paths";
+
 var { Router, registerRoute, settings } = createElectronRouter({
 	port: 4927,
 	types: {
@@ -57,12 +58,12 @@ var electron_vite_config_default = defineConfig({
 		plugins: [
 			tsconfigPaths,
 			tailwindcss(),
-			reactPlugin(),
 			codeInspectorPlugin({
 				bundler: "vite",
 				hotKeys: ["altKey"],
 				hideConsole: true,
 			}),
+			reactPlugin(),
 		],
 		publicDir: resolve(resources, "public"),
 		build: {

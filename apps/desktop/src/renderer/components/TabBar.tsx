@@ -1,4 +1,4 @@
-import type { Workspace } from 'shared/types'
+import type { Workspace } from "shared/types";
 
 interface TabBarProps {
 	workspaces: Workspace[];

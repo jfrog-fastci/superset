@@ -2,13 +2,13 @@
 import type { Configuration } from "electron-builder";
 
 import {
-	main,
-	name,
-	version,
-	resources,
+	author as _author,
 	description,
 	displayName,
-	author as _author,
+	main,
+	name,
+	resources,
+	version,
 } from "./package.json";
 
 import { getDevFolder } from "./src/lib/electron-app/release/utils/path";

@@ -1,9 +1,7 @@
-import { BrowserWindow } from "electron";
 import { join } from "node:path";
-
-import type { WindowProps } from "shared/types";
-
+import { BrowserWindow } from "electron";
 import { registerRoute } from "lib/electron-router-dom";
+import type { WindowProps } from "shared/types";
 
 export function createWindow({ id, ...settings }: WindowProps) {
 	const window = new BrowserWindow(settings);

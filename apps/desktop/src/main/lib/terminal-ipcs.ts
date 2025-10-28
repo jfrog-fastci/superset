@@ -1,4 +1,4 @@
-import { ipcMain, shell, type BrowserWindow } from "electron";
+import { type BrowserWindow, ipcMain, shell } from "electron";
 import terminalManager from "./terminal";
 
 export function registerTerminalIPCs(mainWindow: BrowserWindow) {

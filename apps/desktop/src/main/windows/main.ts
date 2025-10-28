@@ -1,12 +1,12 @@
-import { BrowserWindow, screen } from "electron";
 import { join } from "node:path";
+import { BrowserWindow, screen } from "electron";
 
 import { createWindow } from "lib/electron-app/factories/windows/create";
 import { ENVIRONMENT } from "shared/constants";
 import { displayName } from "~/package.json";
+import { createApplicationMenu } from "../lib/menu";
 import { registerTerminalIPCs } from "../lib/terminal-ipcs";
 import { registerWorkspaceIPCs } from "../lib/workspace-ipcs";
-import { createApplicationMenu } from "../lib/menu";
 
 export async function MainWindow() {
 	const { width, height } = screen.getPrimaryDisplay().workAreaSize;

@@ -190,10 +190,7 @@ class WorkspaceManager {
 					workspace.repoPath,
 					workspace.branch,
 				);
-				await worktreeManager.removeWorktree(
-					workspace.repoPath,
-					worktreePath,
-				);
+				await worktreeManager.removeWorktree(workspace.repoPath, worktreePath);
 			}
 
 			// Remove from config
@@ -221,7 +218,10 @@ class WorkspaceManager {
 	 * Get the worktree path for a workspace
 	 */
 	getWorktreePath(workspace: Workspace): string {
-		return worktreeManager.getWorktreePath(workspace.repoPath, workspace.branch);
+		return worktreeManager.getWorktreePath(
+			workspace.repoPath,
+			workspace.branch,
+		);
 	}
 }
 

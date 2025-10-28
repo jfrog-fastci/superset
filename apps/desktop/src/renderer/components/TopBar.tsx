@@ -1,4 +1,10 @@
-import { Folder, GitBranch, PanelLeftOpen, MoreVertical, Plus } from "lucide-react";
+import {
+	Folder,
+	GitBranch,
+	MoreVertical,
+	PanelLeftOpen,
+	Plus,
+} from "lucide-react";
 import { Button } from "./ui/button";
 
 interface TopBarProps {
@@ -30,12 +36,7 @@ export function TopBar({
 				}
 			>
 				{!isSidebarOpen && (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onClick={onOpenSidebar}
-						className="hover:bg-neutral-800"
-					>
+					<Button variant="ghost" size="icon-sm" onClick={onOpenSidebar}>
 						<PanelLeftOpen size={16} />
 					</Button>
 				)}
