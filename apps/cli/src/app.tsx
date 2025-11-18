@@ -1,5 +1,6 @@
 import { Box, Text, useApp, useInput } from "ink";
 import React, { useEffect, useState } from "react";
+import Welcome from "./components/Welcome.js";
 
 type Props = {
 	name: string | undefined;
@@ -39,6 +40,7 @@ export default function App({ name = "Stranger" }: Props) {
 			borderStyle="round"
 			borderColor="red"
 		>
+			<Welcome />
 			<Text>
 				👋 Welcome,{" "}
 				<Text color="red" bold>

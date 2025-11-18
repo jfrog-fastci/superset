@@ -1,6 +1,6 @@
 # Superset
 
-A modern monorepo for Superset - featuring a website, desktop app, docs, and blog.
+A modern monorepo for Superset - featuring a website, desktop app, CLI tool, docs, and blog.
 
 ## Quick Start
 
@@ -29,6 +29,7 @@ bun test
 apps/
 ├── website/          # Main website application
 ├── desktop/          # Electron desktop app
+├── cli/              # Terminal-based CLI tool
 ├── docs/             # Documentation site
 └── blog/             # Blog site
 
@@ -107,6 +108,18 @@ The desktop app (`apps/desktop`) is built with Electron and features:
 - Git worktree-based workspace management
 
 See `apps/desktop/docs/TYPE_SAFE_IPC.md` for IPC documentation.
+
+## CLI Tool
+
+The CLI tool (`apps/cli`) is a terminal-based application built with React (Ink) for managing development workflows. It provides:
+
+- **Environment Management** - Organize development environments
+- **Workspace Management** - Manage local and cloud workspaces
+- **Process Orchestration** - Track agents and terminal processes
+- **Change Tracking** - Record code changes with file diffs
+- **Persistent Storage** - JSON-based storage using Lowdb (stored at `~/.superset/cli/db.json`)
+
+See `apps/cli/readme.md` for development setup.
 
 ## Contributing
 
