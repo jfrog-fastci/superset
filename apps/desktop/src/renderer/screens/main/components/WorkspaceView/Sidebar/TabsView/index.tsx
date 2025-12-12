@@ -1,45 +1,82 @@
 import { Button } from "@superset/ui/button";
+import { ButtonGroup } from "@superset/ui/button-group";
 import { LayoutGroup, motion } from "framer-motion";
+import type { TerminalPreset } from "main/lib/db/schemas";
 import { useMemo, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
-import { HiMiniPlus } from "react-icons/hi2";
+import {
+	HiMiniCommandLine,
+	HiMiniEllipsisHorizontal,
+	HiMiniPlus,
+} from "react-icons/hi2";
 import { trpc } from "renderer/lib/trpc";
-import { useWindowsStore } from "renderer/stores/tabs/store";
-import { WindowItem } from "./WindowItem";
+import { usePresets } from "renderer/react-query/presets";
+import { useOpenSettings, useSidebarStore } from "renderer/stores";
+import { useTabsStore } from "renderer/stores/tabs/store";
+import { TabItem } from "./TabItem";
+import { TabsCommandDialog } from "./TabsCommandDialog";
 
-const DRAG_TYPE = "WINDOW";
+const DRAG_TYPE = "TAB";
 
 interface DragItem {
 	type: typeof DRAG_TYPE;
-	windowId: string;
+	tabId: string;
 	index: number;
 }
 
 export function TabsView() {
+	const isResizing = useSidebarStore((s) => s.isResizing);
 	const { data: activeWorkspace } = trpc.workspaces.getActive.useQuery();
 	const activeWorkspaceId = activeWorkspace?.id;
-	const allWindows = useWindowsStore((s) => s.windows);
-	const addWindow = useWindowsStore((s) => s.addWindow);
-	const reorderWindowById = useWindowsStore((s) => s.reorderWindowById);
-	const activeWindowIds = useWindowsStore((s) => s.activeWindowIds);
+	const allTabs = useTabsStore((s) => s.tabs);
+	const addTab = useTabsStore((s) => s.addTab);
+	const renameTab = useTabsStore((s) => s.renameTab);
+	const reorderTabById = useTabsStore((s) => s.reorderTabById);
+	const activeTabIds = useTabsStore((s) => s.activeTabIds);
 	const [dropIndex, setDropIndex] = useState<number | null>(null);
+	const [commandOpen, setCommandOpen] = useState(false);
+	const openSettings = useOpenSettings();
 	const containerRef = useRef<HTMLElement>(null);
 
-	const windows = useMemo(
+	const { presets } = usePresets();
+
+	const tabs = useMemo(
 		() =>
 			activeWorkspaceId
-				? allWindows.filter((win) => win.workspaceId === activeWorkspaceId)
+				? allTabs.filter((tab) => tab.workspaceId === activeWorkspaceId)
 				: [],
-		[activeWorkspaceId, allWindows],
+		[activeWorkspaceId, allTabs],
 	);
 
-	const handleAddWindow = () => {
+	const handleAddTab = () => {
 		if (activeWorkspaceId) {
-			addWindow(activeWorkspaceId);
+			addTab(activeWorkspaceId);
+			setCommandOpen(false);
 		}
 	};
 
-	// Drop zone for reordering windows
+	const handleOpenPresetsSettings = () => {
+		openSettings("presets");
+		setCommandOpen(false);
+	};
+
+	const handleSelectPreset = (preset: TerminalPreset) => {
+		if (!activeWorkspaceId) return;
+
+		// Pass preset options to addTab - Terminal component will read them from pane state
+		const { tabId } = addTab(activeWorkspaceId, {
+			initialCommands: preset.commands,
+			initialCwd: preset.cwd || undefined,
+		});
+
+		// Rename the tab to the preset name
+		if (preset.name) {
+			renameTab(tabId, preset.name);
+		}
+
+		setCommandOpen(false);
+	};
+
 	const [{ isOver }, drop] = useDrop<DragItem, void, { isOver: boolean }>({
 		accept: DRAG_TYPE,
 		hover: (item, monitor) => {
@@ -48,12 +85,10 @@ export function TabsView() {
 			const clientOffset = monitor.getClientOffset();
 			if (!clientOffset) return;
 
-			// Find all window items in the container
-			const windowItems =
-				containerRef.current.querySelectorAll("[data-window-item]");
-			let newDropIndex = windows.length;
+			const tabItems = containerRef.current.querySelectorAll("[data-tab-item]");
+			let newDropIndex = tabs.length;
 
-			windowItems.forEach((element, index) => {
+			tabItems.forEach((element, index) => {
 				const rect = element.getBoundingClientRect();
 				const midY = rect.top + rect.height / 2;
 
@@ -62,7 +97,6 @@ export function TabsView() {
 				}
 			});
 
-			// Don't show indicator at the dragged item's current position
 			if (newDropIndex === item.index || newDropIndex === item.index + 1) {
 				setDropIndex(null);
 			} else {
@@ -72,7 +106,7 @@ export function TabsView() {
 		drop: (item) => {
 			if (dropIndex !== null && dropIndex !== item.index) {
 				const targetIndex = dropIndex > item.index ? dropIndex - 1 : dropIndex;
-				reorderWindowById(item.windowId, targetIndex);
+				reorderTabById(item.tabId, targetIndex);
 			}
 			setDropIndex(null);
 		},
@@ -81,7 +115,6 @@ export function TabsView() {
 		}),
 	});
 
-	// Clear drop index when not hovering
 	if (!isOver && dropIndex !== null) {
 		setDropIndex(null);
 	}
@@ -96,51 +129,82 @@ export function TabsView() {
 			className="flex flex-col h-full p-2"
 		>
 			<LayoutGroup>
+				<motion.div
+					layout={!isResizing}
+					transition={{ layout: { duration: 0.2, ease: "easeInOut" } }}
+				>
+					<ButtonGroup className="w-full mb-1">
+						<Button
+							variant="ghost"
+							onClick={handleAddTab}
+							className="flex-1 text-start group px-3 py-2 rounded-md cursor-pointer flex items-center justify-between"
+							disabled={!activeWorkspaceId}
+						>
+							<HiMiniPlus className="size-4" />
+							<span className="truncate flex-1">New Terminal</span>
+						</Button>
+						<Button
+							variant="ghost"
+							onClick={() => setCommandOpen(true)}
+							className="px-3 py-2 rounded-md cursor-pointer"
+							disabled={!activeWorkspaceId}
+						>
+							<HiMiniEllipsisHorizontal className="size-4" />
+						</Button>
+					</ButtonGroup>
+					{presets.length > 0 && (
+						<div className="ml-4 pl-1 space-y-0.5 mb-2 border-l-2">
+							{presets.map((preset) => (
+								<Button
+									key={preset.id}
+									variant="ghost"
+									onClick={() => handleSelectPreset(preset)}
+									disabled={!activeWorkspaceId}
+									className="w-full justify-start px-3 py-1.5 h-auto text-sm"
+									title={preset.cwd || undefined}
+								>
+									<HiMiniCommandLine className="size-4" />
+									<span className="truncate">{preset.name || "Unnamed"}</span>
+								</Button>
+							))}
+						</div>
+					)}
+					<TabsCommandDialog
+						open={commandOpen}
+						onOpenChange={setCommandOpen}
+						onAddTab={handleAddTab}
+						onOpenPresetsSettings={handleOpenPresetsSettings}
+						presets={presets}
+						onSelectPreset={handleSelectPreset}
+					/>
+				</motion.div>
 				<div className="text-sm text-sidebar-foreground space-y-1 relative">
-					{windows.map((window, index) => (
+					{tabs.map((tab, index) => (
 						<motion.div
-							key={window.id}
-							layout
+							key={tab.id}
+							layout={!isResizing}
 							initial={false}
 							transition={{
 								layout: { duration: 0.2, ease: "easeInOut" },
 							}}
 							className="relative"
 						>
-							{/* Drop line indicator before this window */}
 							{isOver && dropIndex === index && (
 								<div className="absolute -top-1 left-0 right-0 h-0.5 bg-primary rounded-full z-20 pointer-events-none" />
 							)}
-							<div data-window-item>
-								<WindowItem
-									window={window}
+							<div data-tab-item>
+								<TabItem
+									tab={tab}
 									index={index}
-									isActive={
-										activeWindowIds[activeWorkspaceId || ""] === window.id
-									}
+									isActive={activeTabIds[activeWorkspaceId || ""] === tab.id}
 								/>
 							</div>
 						</motion.div>
 					))}
-					{/* Drop line indicator at the end */}
-					{isOver && dropIndex === windows.length && (
+					{isOver && dropIndex === tabs.length && (
 						<div className="h-0.5 bg-primary rounded-full z-20 pointer-events-none mt-1" />
 					)}
 				</div>
-				<motion.div
-					layout
-					transition={{ layout: { duration: 0.2, ease: "easeInOut" } }}
-				>
-					<Button
-						variant="ghost"
-						onClick={handleAddWindow}
-						className="w-full text-start group px-3 py-2 rounded-md cursor-pointer flex items-center justify-between mt-1"
-						disabled={!activeWorkspaceId}
-					>
-						<HiMiniPlus className="size-4" />
-						<span className="truncate flex-1">New Window</span>
-					</Button>
-				</motion.div>
 			</LayoutGroup>
 		</nav>
 	);

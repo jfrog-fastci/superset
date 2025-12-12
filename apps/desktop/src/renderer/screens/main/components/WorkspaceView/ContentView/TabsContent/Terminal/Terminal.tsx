@@ -2,17 +2,21 @@ import "@xterm/xterm/css/xterm.css";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal as XTerm } from "@xterm/xterm";
-import { useCallback, useEffect, useRef, useState } from "react";
+import debounce from "lodash/debounce";
+import { useEffect, useRef, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { trpc } from "renderer/lib/trpc";
-import { useWindowsStore } from "renderer/stores/tabs/store";
+import { useTabsStore } from "renderer/stores/tabs/store";
+import { useTerminalCallbacksStore } from "renderer/stores/tabs/terminal-callbacks";
 import { useTerminalTheme } from "renderer/stores/theme";
 import { HOTKEYS } from "shared/hotkeys";
+import { sanitizeForTitle } from "./commandBuffer";
 import {
 	createTerminalInstance,
 	getDefaultTerminalBg,
 	setupFocusListener,
 	setupKeyboardHandler,
+	setupPasteHandler,
 	setupResizeHandlers,
 } from "./helpers";
 import { TerminalSearch } from "./TerminalSearch";
@@ -20,29 +24,43 @@ import type { TerminalProps, TerminalStreamEvent } from "./types";
 import { shellEscapePaths } from "./utils";
 
 export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
-	// tabId is actually paneId in the new model
 	const paneId = tabId;
-	const panes = useWindowsStore((s) => s.panes);
+	const panes = useTabsStore((s) => s.panes);
 	const pane = panes[paneId];
-	const paneName = pane?.name || "Terminal";
+	const paneInitialCommands = pane?.initialCommands;
+	const paneInitialCwd = pane?.initialCwd;
+	const clearPaneInitialData = useTabsStore((s) => s.clearPaneInitialData);
+	const parentTabId = pane?.tabId;
 	const terminalRef = useRef<HTMLDivElement>(null);
 	const xtermRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const searchAddonRef = useRef<SearchAddon | null>(null);
 	const isExitedRef = useRef(false);
 	const pendingEventsRef = useRef<TerminalStreamEvent[]>([]);
+	const commandBufferRef = useRef("");
 	const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
-	const setFocusedPane = useWindowsStore((s) => s.setFocusedPane);
-	const focusedPaneIds = useWindowsStore((s) => s.focusedPaneIds);
+	const setFocusedPane = useTabsStore((s) => s.setFocusedPane);
+	const setTabAutoTitle = useTabsStore((s) => s.setTabAutoTitle);
+	const focusedPaneIds = useTabsStore((s) => s.focusedPaneIds);
 	const terminalTheme = useTerminalTheme();
 
-	// Check if this terminal is the focused pane in its window
-	const isFocused = pane?.windowId
-		? focusedPaneIds[pane.windowId] === paneId
-		: false;
+	// Ref for initial theme to avoid recreating terminal on theme change
+	const initialThemeRef = useRef(terminalTheme);
 
-	// Required for resolving relative file paths in terminal commands
+	const isFocused = pane?.tabId ? focusedPaneIds[pane.tabId] === paneId : false;
+
+	// Refs avoid effect re-runs when these values change
+	const isFocusedRef = useRef(isFocused);
+	isFocusedRef.current = isFocused;
+
+	const paneInitialCommandsRef = useRef(paneInitialCommands);
+	const paneInitialCwdRef = useRef(paneInitialCwd);
+	const clearPaneInitialDataRef = useRef(clearPaneInitialData);
+	paneInitialCommandsRef.current = paneInitialCommands;
+	paneInitialCwdRef.current = paneInitialCwd;
+	clearPaneInitialDataRef.current = clearPaneInitialData;
+
 	const { data: workspaceCwd } =
 		trpc.terminal.getWorkspaceCwd.useQuery(workspaceId);
 
@@ -50,27 +68,41 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 	const writeMutation = trpc.terminal.write.useMutation();
 	const resizeMutation = trpc.terminal.resize.useMutation();
 	const detachMutation = trpc.terminal.detach.useMutation();
+	const clearScrollbackMutation = trpc.terminal.clearScrollback.useMutation();
 
-	// Avoid effect re-runs when mutations change
 	const createOrAttachRef = useRef(createOrAttachMutation.mutate);
 	const writeRef = useRef(writeMutation.mutate);
 	const resizeRef = useRef(resizeMutation.mutate);
 	const detachRef = useRef(detachMutation.mutate);
-
+	const clearScrollbackRef = useRef(clearScrollbackMutation.mutate);
 	createOrAttachRef.current = createOrAttachMutation.mutate;
 	writeRef.current = writeMutation.mutate;
 	resizeRef.current = resizeMutation.mutate;
 	detachRef.current = detachMutation.mutate;
+	clearScrollbackRef.current = clearScrollbackMutation.mutate;
+
+	const registerClearCallbackRef = useRef(
+		useTerminalCallbacksStore.getState().registerClearCallback,
+	);
+	const unregisterClearCallbackRef = useRef(
+		useTerminalCallbacksStore.getState().unregisterClearCallback,
+	);
+
+	const parentTabIdRef = useRef(parentTabId);
+	parentTabIdRef.current = parentTabId;
+
+	const setTabAutoTitleRef = useRef(setTabAutoTitle);
+	setTabAutoTitleRef.current = setTabAutoTitle;
+
+	const debouncedSetTabAutoTitleRef = useRef(
+		debounce((tabId: string, title: string) => {
+			setTabAutoTitleRef.current(tabId, title);
+		}, 100),
+	);
 
 	const handleStreamData = (event: TerminalStreamEvent) => {
-		if (!xtermRef.current) {
-			// Prevent data loss during terminal initialization
-			pendingEventsRef.current.push(event);
-			return;
-		}
-
-		// Prevent race condition where events arrive before scrollback recovery completes
-		if (!subscriptionEnabled) {
+		// Queue events until terminal is ready to prevent data loss
+		if (!xtermRef.current || !subscriptionEnabled) {
 			pendingEventsRef.current.push(event);
 			return;
 		}
@@ -87,28 +119,31 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 		}
 	};
 
-	// Use paneId (tabId) for stream subscription
 	trpc.terminal.stream.useSubscription(paneId, {
 		onData: handleStreamData,
-		// Always listen to prevent missing events during initialization
 		enabled: true,
 	});
 
-	// Handler to set focused pane when terminal gains focus
-	const handleTerminalFocus = useCallback(() => {
-		if (pane?.windowId) {
-			setFocusedPane(pane.windowId, paneId);
+	// Use ref to avoid triggering full terminal recreation when focus handler changes
+	const handleTerminalFocusRef = useRef(() => {});
+	handleTerminalFocusRef.current = () => {
+		if (pane?.tabId) {
+			setFocusedPane(pane.tabId, paneId);
 		}
-	}, [pane?.windowId, paneId, setFocusedPane]);
+	};
 
-	// Auto-close search when terminal loses focus
 	useEffect(() => {
 		if (!isFocused) {
 			setIsSearchOpen(false);
 		}
 	}, [isFocused]);
 
-	// Toggle search with Cmd+F (only for the focused terminal)
+	useEffect(() => {
+		if (isFocused && xtermRef.current) {
+			xtermRef.current.focus();
+		}
+	}, [isFocused]);
+
 	useHotkeys(
 		HOTKEYS.FIND_IN_TERMINAL.keys,
 		() => {
@@ -128,20 +163,25 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 			xterm,
 			fitAddon,
 			cleanup: cleanupQuerySuppression,
-		} = createTerminalInstance(container, workspaceCwd, terminalTheme);
+		} = createTerminalInstance(
+			container,
+			workspaceCwd,
+			initialThemeRef.current,
+		);
 		xtermRef.current = xterm;
 		fitAddonRef.current = fitAddon;
 		isExitedRef.current = false;
 
-		// Load search addon for Cmd+F functionality
+		if (isFocusedRef.current) {
+			xterm.focus();
+		}
+
 		import("@xterm/addon-search").then(({ SearchAddon }) => {
 			if (isUnmounted) return;
 			const searchAddon = new SearchAddon();
 			xterm.loadAddon(searchAddon);
 			searchAddonRef.current = searchAddon;
 		});
-
-		// Delay enabling subscription to ensure scrollback is applied first, preventing duplicate output
 
 		const flushPendingEvents = () => {
 			if (pendingEventsRef.current.length === 0) return;
@@ -175,9 +215,9 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 			xterm.clear();
 			createOrAttachRef.current(
 				{
-					tabId: paneId,
+					paneId,
+					tabId: parentTabIdRef.current || paneId,
 					workspaceId,
-					tabTitle: paneName,
 					cols: xterm.cols,
 					rows: xterm.rows,
 				},
@@ -197,22 +237,54 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 		const handleTerminalInput = (data: string) => {
 			if (isExitedRef.current) {
 				restartTerminal();
-			} else {
-				writeRef.current({ tabId: paneId, data });
+				return;
+			}
+			writeRef.current({ paneId, data });
+		};
+
+		const handleKeyPress = (event: {
+			key: string;
+			domEvent: KeyboardEvent;
+		}) => {
+			const { domEvent } = event;
+			if (domEvent.key === "Enter") {
+				const title = sanitizeForTitle(commandBufferRef.current);
+				if (title && parentTabIdRef.current) {
+					debouncedSetTabAutoTitleRef.current(parentTabIdRef.current, title);
+				}
+				commandBufferRef.current = "";
+			} else if (domEvent.key === "Backspace") {
+				commandBufferRef.current = commandBufferRef.current.slice(0, -1);
+			} else if (domEvent.key === "c" && domEvent.ctrlKey) {
+				commandBufferRef.current = "";
+			} else if (
+				domEvent.key.length === 1 &&
+				!domEvent.ctrlKey &&
+				!domEvent.metaKey
+			) {
+				commandBufferRef.current += domEvent.key;
 			}
 		};
 
+		const initialCommands = paneInitialCommandsRef.current;
+		const initialCwd = paneInitialCwdRef.current;
+
 		createOrAttachRef.current(
 			{
-				tabId: paneId,
+				paneId,
+				tabId: parentTabIdRef.current || paneId,
 				workspaceId,
-				tabTitle: paneName,
 				cols: xterm.cols,
 				rows: xterm.rows,
+				initialCommands,
+				cwd: initialCwd,
 			},
 			{
 				onSuccess: (result) => {
-					// Avoid duplication when pending events already contain scrollback data
+					// Clear after successful creation to prevent re-running on future reattach
+					if (initialCommands || initialCwd) {
+						clearPaneInitialDataRef.current(paneId);
+					}
 					const hasPendingEvents = pendingEventsRef.current.length > 0;
 					if (result.isNew || !hasPendingEvents) {
 						applyInitialScrollback(result);
@@ -227,62 +299,68 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 		);
 
 		const inputDisposable = xterm.onData(handleTerminalInput);
+		const keyDisposable = xterm.onKey(handleKeyPress);
 
-		// Intercept keyboard events to handle app hotkeys and provide iTerm-like line continuation UX
-		setupKeyboardHandler(xterm, {
+		const handleClear = () => {
+			xterm.clear();
+			clearScrollbackRef.current({ paneId });
+		};
+
+		const cleanupKeyboard = setupKeyboardHandler(xterm, {
 			onShiftEnter: () => {
 				if (!isExitedRef.current) {
-					// Use shell's native continuation syntax to avoid shell-specific parsing
-					writeRef.current({ tabId: paneId, data: "\\\n" });
+					writeRef.current({ paneId, data: "\\\n" });
 				}
 			},
-			onClear: () => {
-				xterm.clear();
-			},
+			onClear: handleClear,
 		});
 
-		// Setup focus listener to track focused pane
-		const cleanupFocus = setupFocusListener(xterm, handleTerminalFocus);
+		// Register clear callback for context menu access
+		registerClearCallbackRef.current(paneId, handleClear);
+
+		const cleanupFocus = setupFocusListener(xterm, () =>
+			handleTerminalFocusRef.current(),
+		);
 		const cleanupResize = setupResizeHandlers(
 			container,
 			xterm,
 			fitAddon,
 			(cols, rows) => {
-				resizeRef.current({ tabId: paneId, cols, rows });
+				resizeRef.current({ paneId, cols, rows });
 			},
 		);
+		const cleanupPaste = setupPasteHandler(xterm, {
+			onPaste: (text) => {
+				commandBufferRef.current += text;
+			},
+		});
 
 		return () => {
 			isUnmounted = true;
 			inputDisposable.dispose();
+			keyDisposable.dispose();
+			cleanupKeyboard();
 			cleanupFocus?.();
 			cleanupResize();
+			cleanupPaste();
 			cleanupQuerySuppression();
-			// Keep PTY running for reattachment
-			detachRef.current({ tabId: paneId });
+			unregisterClearCallbackRef.current(paneId);
+			debouncedSetTabAutoTitleRef.current?.cancel?.();
+			// Detach instead of kill to keep PTY running for reattachment
+			detachRef.current({ paneId });
 			setSubscriptionEnabled(false);
 			xterm.dispose();
 			xtermRef.current = null;
 			searchAddonRef.current = null;
 		};
-	}, [
-		paneId,
-		workspaceId,
-		workspaceCwd,
-		paneName,
-		terminalTheme,
-		handleTerminalFocus,
-	]);
+	}, [paneId, workspaceId, workspaceCwd]);
 
-	// Sync theme changes to xterm instance for live theme switching
 	useEffect(() => {
 		const xterm = xtermRef.current;
 		if (!xterm || !terminalTheme) return;
-
 		xterm.options.theme = terminalTheme;
 	}, [terminalTheme]);
 
-	// Match container background to terminal theme for seamless visual integration
 	const terminalBg = terminalTheme?.background ?? getDefaultTerminalBg();
 
 	const handleDragOver = (event: React.DragEvent) => {
@@ -301,7 +379,7 @@ export const Terminal = ({ tabId, workspaceId }: TerminalProps) => {
 		const text = shellEscapePaths(paths);
 
 		if (!isExitedRef.current) {
-			writeRef.current({ tabId: paneId, data: text });
+			writeRef.current({ paneId, data: text });
 		}
 	};
 

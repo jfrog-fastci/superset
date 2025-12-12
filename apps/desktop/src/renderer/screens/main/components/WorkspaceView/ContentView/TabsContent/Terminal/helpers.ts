@@ -1,7 +1,10 @@
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
+import { ImageAddon } from "@xterm/addon-image";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { ITheme } from "@xterm/xterm";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { debounce } from "lodash";
@@ -49,6 +52,42 @@ export function getDefaultTerminalBg(): string {
 	return getDefaultTerminalTheme().background ?? "#1a1a1a";
 }
 
+/**
+ * Load GPU-accelerated renderer with automatic fallback.
+ * Tries WebGL first, falls back to Canvas if WebGL fails.
+ */
+function loadRenderer(xterm: XTerm): { dispose: () => void } {
+	let renderer: WebglAddon | CanvasAddon | null = null;
+
+	try {
+		const webglAddon = new WebglAddon();
+
+		webglAddon.onContextLoss(() => {
+			webglAddon.dispose();
+			try {
+				renderer = new CanvasAddon();
+				xterm.loadAddon(renderer);
+			} catch {
+				// Canvas fallback failed, use default renderer
+			}
+		});
+
+		xterm.loadAddon(webglAddon);
+		renderer = webglAddon;
+	} catch {
+		try {
+			renderer = new CanvasAddon();
+			xterm.loadAddon(renderer);
+		} catch {
+			// Both renderers failed, use default
+		}
+	}
+
+	return {
+		dispose: () => renderer?.dispose(),
+	};
+}
+
 export function createTerminalInstance(
 	container: HTMLDivElement,
 	cwd?: string,
@@ -76,23 +115,31 @@ export function createTerminalInstance(
 	});
 
 	const clipboardAddon = new ClipboardAddon();
-
-	// Unicode 11 provides better emoji and unicode rendering than default
 	const unicode11Addon = new Unicode11Addon();
+	const imageAddon = new ImageAddon();
 
 	xterm.open(container);
 
-	// Addons must be loaded after terminal is opened, otherwise they won't attach properly
 	xterm.loadAddon(fitAddon);
+	const renderer = loadRenderer(xterm);
+
 	xterm.loadAddon(webLinksAddon);
 	xterm.loadAddon(clipboardAddon);
 	xterm.loadAddon(unicode11Addon);
+	xterm.loadAddon(imageAddon);
 
-	// Suppress terminal query responses (DA1, DA2, CPR, OSC color responses, etc.)
-	// These are protocol-level responses that should be handled internally, not displayed
+	import("@xterm/addon-ligatures")
+		.then(({ LigaturesAddon }) => {
+			try {
+				xterm.loadAddon(new LigaturesAddon());
+			} catch {
+				// Ligatures not supported by current font
+			}
+		})
+		.catch(() => {});
+
 	const cleanupQuerySuppression = suppressQueryResponses(xterm);
 
-	// Register file path link provider (Cmd+Click to open in Cursor/VSCode)
 	const filePathLinkProvider = new FilePathLinkProvider(
 		xterm,
 		(_event, path, line, column) => {
@@ -114,16 +161,16 @@ export function createTerminalInstance(
 	);
 	xterm.registerLinkProvider(filePathLinkProvider);
 
-	// Activate Unicode 11
 	xterm.unicode.activeVersion = "11";
-
-	// Fit after addons are loaded
 	fitAddon.fit();
 
 	return {
 		xterm,
 		fitAddon,
-		cleanup: cleanupQuerySuppression,
+		cleanup: () => {
+			cleanupQuerySuppression();
+			renderer.dispose();
+		},
 	};
 }
 
@@ -134,17 +181,63 @@ export interface KeyboardHandlerOptions {
 	onClear?: () => void;
 }
 
+export interface PasteHandlerOptions {
+	/** Callback when text is pasted, receives the pasted text */
+	onPaste?: (text: string) => void;
+}
+
+/**
+ * Setup paste handler for xterm to ensure bracketed paste mode works correctly.
+ *
+ * xterm.js's built-in paste handling via the textarea should work, but in some
+ * Electron environments the clipboard events may not propagate correctly.
+ * This handler explicitly intercepts paste events and uses xterm's paste() method,
+ * which properly handles bracketed paste mode (wrapping pasted content with
+ * \x1b[200~ and \x1b[201~ escape sequences when the shell has enabled it).
+ *
+ * This is required for TUI applications like opencode, vim, etc. that expect
+ * bracketed paste mode to distinguish between typed and pasted content.
+ *
+ * Returns a cleanup function to remove the handler.
+ */
+export function setupPasteHandler(
+	xterm: XTerm,
+	options: PasteHandlerOptions = {},
+): () => void {
+	const textarea = xterm.textarea;
+	if (!textarea) return () => {};
+
+	const handlePaste = (event: ClipboardEvent) => {
+		const text = event.clipboardData?.getData("text/plain");
+		if (!text) return;
+
+		event.preventDefault();
+		event.stopImmediatePropagation();
+
+		options.onPaste?.(text);
+		xterm.paste(text);
+	};
+
+	textarea.addEventListener("paste", handlePaste, { capture: true });
+
+	return () => {
+		textarea.removeEventListener("paste", handlePaste, { capture: true });
+	};
+}
+
 /**
  * Setup keyboard handling for xterm including:
  * - Shortcut forwarding: App hotkeys are re-dispatched to document for react-hotkeys-hook
  * - Shift+Enter: Creates a line continuation (like iTerm) instead of executing
  * - Cmd+K: Clears the terminal
+ *
+ * Returns a cleanup function to remove the handler.
  */
 export function setupKeyboardHandler(
 	xterm: XTerm,
 	options: KeyboardHandlerOptions = {},
-): void {
-	xterm.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+): () => void {
+	const handler = (event: KeyboardEvent): boolean => {
 		const isShiftEnter =
 			event.key === "Enter" &&
 			event.shiftKey &&
@@ -153,14 +246,12 @@ export function setupKeyboardHandler(
 			!event.altKey;
 
 		if (isShiftEnter) {
-			// Block both keydown and keyup to prevent Enter from leaking through
 			if (event.type === "keydown" && options.onShiftEnter) {
 				options.onShiftEnter();
 			}
 			return false;
 		}
 
-		// Handle Cmd+K to clear terminal (handle directly since it needs xterm access)
 		const isClearShortcut =
 			event.key.toLowerCase() === "k" &&
 			event.metaKey &&
@@ -179,8 +270,6 @@ export function setupKeyboardHandler(
 		if (!event.metaKey && !event.ctrlKey) return true;
 
 		if (isAppHotkey(event)) {
-			// Re-dispatch to document for react-hotkeys-hook to catch
-			// Must explicitly copy modifier properties since they're prototype getters, not own properties
 			document.dispatchEvent(
 				new KeyboardEvent(event.type, {
 					key: event.key,
@@ -200,7 +289,13 @@ export function setupKeyboardHandler(
 		}
 
 		return true;
-	});
+	};
+
+	xterm.attachCustomKeyEventHandler(handler);
+
+	return () => {
+		xterm.attachCustomKeyEventHandler(() => true);
+	};
 }
 
 export function setupFocusListener(
@@ -223,22 +318,18 @@ export function setupResizeHandlers(
 	fitAddon: FitAddon,
 	onResize: (cols: number, rows: number) => void,
 ): () => void {
-	const debouncedResize = debounce((cols: number, rows: number) => {
-		onResize(cols, rows);
+	const debouncedHandleResize = debounce(() => {
+		fitAddon.fit();
+		onResize(xterm.cols, xterm.rows);
 	}, RESIZE_DEBOUNCE_MS);
 
-	const handleResize = () => {
-		fitAddon.fit();
-		debouncedResize(xterm.cols, xterm.rows);
-	};
-
-	const resizeObserver = new ResizeObserver(handleResize);
+	const resizeObserver = new ResizeObserver(debouncedHandleResize);
 	resizeObserver.observe(container);
-	window.addEventListener("resize", handleResize);
+	window.addEventListener("resize", debouncedHandleResize);
 
 	return () => {
-		window.removeEventListener("resize", handleResize);
+		window.removeEventListener("resize", debouncedHandleResize);
 		resizeObserver.disconnect();
-		debouncedResize.cancel();
+		debouncedHandleResize.cancel();
 	};
 }

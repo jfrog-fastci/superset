@@ -16,6 +16,12 @@ export interface GitStatus {
 	lastRefreshed: number;
 }
 
+export interface CheckItem {
+	name: string;
+	status: "success" | "failure" | "pending" | "skipped" | "cancelled";
+	url?: string;
+}
+
 export interface GitHubStatus {
 	pr: {
 		number: number;
@@ -23,8 +29,14 @@ export interface GitHubStatus {
 		url: string;
 		state: "open" | "draft" | "merged" | "closed";
 		mergedAt?: number;
+		additions: number;
+		deletions: number;
+		reviewDecision: "approved" | "changes_requested" | "pending";
+		checksStatus: "success" | "failure" | "pending" | "none";
+		checks: CheckItem[];
 	} | null;
 	repoUrl: string;
+	branchExistsOnRemote: boolean;
 	lastRefreshed: number;
 }
 
@@ -62,10 +74,24 @@ export const EXTERNAL_APPS = [
 	"finder",
 	"vscode",
 	"cursor",
+	"sublime",
 	"xcode",
 	"iterm",
 	"warp",
 	"terminal",
+	// JetBrains IDEs
+	"intellij",
+	"webstorm",
+	"pycharm",
+	"phpstorm",
+	"rubymine",
+	"goland",
+	"clion",
+	"rider",
+	"datagrip",
+	"appcode",
+	"fleet",
+	"rustrover",
 ] as const;
 
 export type ExternalApp = (typeof EXTERNAL_APPS)[number];
@@ -83,9 +109,18 @@ export interface SSHConnection {
 	createdAt: number;
 }
 
+export interface TerminalPreset {
+	id: string;
+	name: string;
+	cwd: string;
+	commands: string[];
+}
+
 export interface Settings {
 	lastActiveWorkspaceId?: string;
 	lastUsedApp?: ExternalApp;
+	terminalPresets?: TerminalPreset[];
+	selectedRingtoneId?: string;
 }
 
 export interface Database {

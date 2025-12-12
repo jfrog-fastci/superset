@@ -1,5 +1,5 @@
 import { Button } from "@superset/ui/button";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { DndProvider } from "react-dnd";
 import { useHotkeys } from "react-hotkeys-hook";
 import { HiArrowPath } from "react-icons/hi2";
@@ -12,8 +12,11 @@ import {
 	useOpenSettings,
 } from "renderer/stores/app-state";
 import { useSidebarStore } from "renderer/stores/sidebar-state";
-import { useWindowsStore } from "renderer/stores/tabs/store";
+import { getPaneDimensions } from "renderer/stores/tabs/pane-refs";
+import { useTabsStore } from "renderer/stores/tabs/store";
+import type { Tab } from "renderer/stores/tabs/types";
 import { useAgentHookListener } from "renderer/stores/tabs/useAgentHookListener";
+import { findPanePath, getFirstPaneId } from "renderer/stores/tabs/utils";
 import { HOTKEYS } from "shared/hotkeys";
 import { dragDropManager } from "../../lib/dnd";
 import { AppFrame } from "./components/AppFrame";
@@ -44,22 +47,32 @@ export function MainScreen() {
 		refetch,
 	} = trpc.workspaces.getActive.useQuery();
 	const [isRetrying, setIsRetrying] = useState(false);
-	const splitPaneVertical = useWindowsStore((s) => s.splitPaneVertical);
-	const splitPaneHorizontal = useWindowsStore((s) => s.splitPaneHorizontal);
-	const activeWindowIds = useWindowsStore((s) => s.activeWindowIds);
-	const focusedPaneIds = useWindowsStore((s) => s.focusedPaneIds);
+	const splitPaneAuto = useTabsStore((s) => s.splitPaneAuto);
+	const splitPaneVertical = useTabsStore((s) => s.splitPaneVertical);
+	const splitPaneHorizontal = useTabsStore((s) => s.splitPaneHorizontal);
+	const setFocusedPane = useTabsStore((s) => s.setFocusedPane);
+	const activeTabIds = useTabsStore((s) => s.activeTabIds);
+	const focusedPaneIds = useTabsStore((s) => s.focusedPaneIds);
+	const tabs = useTabsStore((s) => s.tabs);
 
-	// Listen for agent completion hooks from main process
 	useAgentHookListener();
 
+	trpc.menu.subscribe.useSubscription(undefined, {
+		onData: (event) => {
+			if (event.type === "open-settings") {
+				openSettings(event.data.section);
+			}
+		},
+	});
+
 	const activeWorkspaceId = activeWorkspace?.id;
-	const activeWindowId = activeWorkspaceId
-		? activeWindowIds[activeWorkspaceId]
+	const activeTabId = activeWorkspaceId
+		? activeTabIds[activeWorkspaceId]
 		: null;
-	const focusedPaneId = activeWindowId ? focusedPaneIds[activeWindowId] : null;
+	const focusedPaneId = activeTabId ? focusedPaneIds[activeTabId] : null;
+	const activeTab = tabs.find((t) => t.id === activeTabId);
 	const isWorkspaceView = currentView === "workspace";
 
-	// Register global shortcuts
 	useHotkeys(HOTKEYS.SHOW_HOTKEYS.keys, () => openSettings("keyboard"), [
 		openSettings,
 	]);
@@ -68,17 +81,72 @@ export function MainScreen() {
 		if (isWorkspaceView) toggleSidebar();
 	}, [toggleSidebar, isWorkspaceView]);
 
-	useHotkeys(HOTKEYS.SPLIT_HORIZONTAL.keys, () => {
-		if (isWorkspaceView && activeWindowId && focusedPaneId) {
-			splitPaneVertical(activeWindowId, focusedPaneId);
-		}
-	}, [activeWindowId, focusedPaneId, splitPaneVertical, isWorkspaceView]);
+	/**
+	 * Resolves the target pane for split operations.
+	 * If the focused pane is desynced from layout (e.g., was removed),
+	 * falls back to first pane and corrects focus state.
+	 */
+	const resolveSplitTarget = useCallback(
+		(paneId: string, tabId: string, targetTab: Tab) => {
+			const path = findPanePath(targetTab.layout, paneId);
+			if (path !== null) return { path, paneId };
 
-	useHotkeys(HOTKEYS.SPLIT_VERTICAL.keys, () => {
-		if (isWorkspaceView && activeWindowId && focusedPaneId) {
-			splitPaneHorizontal(activeWindowId, focusedPaneId);
+			// Focused pane not in layout - correct focus and use first pane
+			const firstPaneId = getFirstPaneId(targetTab.layout);
+			const firstPanePath = findPanePath(targetTab.layout, firstPaneId);
+			setFocusedPane(tabId, firstPaneId);
+			return { path: firstPanePath ?? [], paneId: firstPaneId };
+		},
+		[setFocusedPane],
+	);
+
+	useHotkeys(HOTKEYS.SPLIT_AUTO.keys, () => {
+		if (isWorkspaceView && activeTabId && focusedPaneId && activeTab) {
+			const target = resolveSplitTarget(focusedPaneId, activeTabId, activeTab);
+			if (!target) return;
+			const dimensions = getPaneDimensions(target.paneId);
+			if (dimensions) {
+				splitPaneAuto(activeTabId, target.paneId, dimensions, target.path);
+			}
 		}
-	}, [activeWindowId, focusedPaneId, splitPaneHorizontal, isWorkspaceView]);
+	}, [
+		activeTabId,
+		focusedPaneId,
+		activeTab,
+		splitPaneAuto,
+		resolveSplitTarget,
+		isWorkspaceView,
+	]);
+
+	useHotkeys(HOTKEYS.SPLIT_RIGHT.keys, () => {
+		if (isWorkspaceView && activeTabId && focusedPaneId && activeTab) {
+			const target = resolveSplitTarget(focusedPaneId, activeTabId, activeTab);
+			if (!target) return;
+			splitPaneVertical(activeTabId, target.paneId, target.path);
+		}
+	}, [
+		activeTabId,
+		focusedPaneId,
+		activeTab,
+		splitPaneVertical,
+		resolveSplitTarget,
+		isWorkspaceView,
+	]);
+
+	useHotkeys(HOTKEYS.SPLIT_DOWN.keys, () => {
+		if (isWorkspaceView && activeTabId && focusedPaneId && activeTab) {
+			const target = resolveSplitTarget(focusedPaneId, activeTabId, activeTab);
+			if (!target) return;
+			splitPaneHorizontal(activeTabId, target.paneId, target.path);
+		}
+	}, [
+		activeTabId,
+		focusedPaneId,
+		activeTab,
+		splitPaneHorizontal,
+		resolveSplitTarget,
+		isWorkspaceView,
+	]);
 
 	const showStartView =
 		!isLoading &&
@@ -86,7 +154,6 @@ export function MainScreen() {
 		currentView !== "settings" &&
 		currentView !== "ssh";
 
-	// Determine which content view to show
 	const renderContent = () => {
 		if (currentView === "settings") {
 			return <SettingsView />;
@@ -99,7 +166,6 @@ export function MainScreen() {
 		return <WorkspaceView />;
 	};
 
-	// Show loading spinner while query is in flight
 	if (isLoading) {
 		return (
 			<DndProvider manager={dragDropManager}>
@@ -113,8 +179,6 @@ export function MainScreen() {
 		);
 	}
 
-	// Show error state with retry option
-	// Note: failureCount resets automatically on successful query
 	if (isError) {
 		const hasRepeatedFailures = failureCount >= 5;
 

@@ -1,0 +1,39 @@
+name: Cleanup Preview
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    name: Cleanup Preview Resources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Delete Neon branch
+        id: neon-cleanup
+        uses: neondatabase/delete-branch-action@v3
+        continue-on-error: true
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ github.event.pull_request.head.ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Generate cleanup comment
+        run: |
+          NEON_STATUS="${{ steps.neon-cleanup.outcome == 'success' && '✅' || '⚠️' }}"
+          export NEON_STATUS
+          envsubst < .github/templates/cleanup-comment.md > final-comment.md
+
+      - name: Update comment
+        if: always()
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          file-path: final-comment.md
+          comment-tag: "🚀-preview-deployment"

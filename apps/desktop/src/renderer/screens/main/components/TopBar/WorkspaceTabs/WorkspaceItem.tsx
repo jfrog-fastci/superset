@@ -1,15 +1,19 @@
 import { Button } from "@superset/ui/button";
 import { Input } from "@superset/ui/input";
+import { toast } from "@superset/ui/sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { HiMiniXMark } from "react-icons/hi2";
+import { trpc } from "renderer/lib/trpc";
 import {
+	useDeleteWorkspace,
 	useReorderWorkspaces,
 	useSetActiveWorkspace,
 } from "renderer/react-query/workspaces";
 import { useCloseSettings } from "renderer/stores/app-state";
-import { useWindowsStore } from "renderer/stores/tabs/store";
+import { useTabsStore } from "renderer/stores/tabs/store";
 import { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
 import { useWorkspaceRename } from "./useWorkspaceRename";
 import { WorkspaceItemContextMenu } from "./WorkspaceItemContextMenu";
@@ -41,16 +45,58 @@ export function WorkspaceItem({
 }: WorkspaceItemProps) {
 	const setActive = useSetActiveWorkspace();
 	const reorderWorkspaces = useReorderWorkspaces();
+	const deleteWorkspace = useDeleteWorkspace();
 	const closeSettings = useCloseSettings();
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-	const windows = useWindowsStore((s) => s.windows);
-	const panes = useWindowsStore((s) => s.panes);
+	const tabs = useTabsStore((s) => s.tabs);
+	const panes = useTabsStore((s) => s.panes);
 	const rename = useWorkspaceRename(id, title);
 
-	// Check if any pane in windows belonging to this workspace needs attention
-	const workspaceWindows = windows.filter((w) => w.workspaceId === id);
+	// Query to check if workspace is empty - only enabled when needed
+	const canDeleteQuery = trpc.workspaces.canDelete.useQuery(
+		{ id },
+		{ enabled: false },
+	);
+
+	const handleDeleteClick = async () => {
+		// Prevent double-clicks and race conditions
+		if (deleteWorkspace.isPending || canDeleteQuery.isFetching) return;
+
+		try {
+			// Always fetch fresh data before deciding
+			const { data: canDeleteData } = await canDeleteQuery.refetch();
+
+			const isEmpty =
+				canDeleteData?.canDelete &&
+				canDeleteData.activeTerminalCount === 0 &&
+				!canDeleteData.warning &&
+				!canDeleteData.hasChanges &&
+				!canDeleteData.hasUnpushedCommits;
+
+			if (isEmpty) {
+				// Delete directly without confirmation
+				toast.promise(deleteWorkspace.mutateAsync({ id }), {
+					loading: `Deleting "${title}"...`,
+					success: `Workspace "${title}" deleted`,
+					error: (error) =>
+						error instanceof Error
+							? `Failed to delete workspace: ${error.message}`
+							: "Failed to delete workspace",
+				});
+			} else {
+				// Show confirmation dialog
+				setShowDeleteDialog(true);
+			}
+		} catch {
+			// On error checking status, show dialog for user to decide
+			setShowDeleteDialog(true);
+		}
+	};
+
+	// Check if any pane in tabs belonging to this workspace needs attention
+	const workspaceTabs = tabs.filter((t) => t.workspaceId === id);
 	const workspacePaneIds = new Set(
-		workspaceWindows.flatMap((w) => {
+		workspaceTabs.flatMap((t) => {
 			// Extract pane IDs from the layout (which is a MosaicNode<string>)
 			const collectPaneIds = (node: unknown): string[] => {
 				if (typeof node === "string") return [node];
@@ -68,7 +114,7 @@ export function WorkspaceItem({
 				}
 				return [];
 			};
-			return collectPaneIds(w.layout);
+			return collectPaneIds(t.layout);
 		}),
 	);
 	const needsAttention = Object.values(panes)
@@ -104,7 +150,9 @@ export function WorkspaceItem({
 	return (
 		<>
 			<WorkspaceItemContextMenu
+				workspaceId={id}
 				worktreePath={worktreePath}
+				workspaceAlias={title}
 				onRename={rename.startRename}
 			>
 				<div
@@ -172,22 +220,29 @@ export function WorkspaceItem({
 						)}
 					</button>
 
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						onClick={(e) => {
-							e.stopPropagation();
-							setShowDeleteDialog(true);
-						}}
-						className={cn(
-							"mt-1 absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer size-5 group-hover:opacity-100",
-							isActive ? "opacity-90" : "opacity-0",
-						)}
-						aria-label="Close workspace"
-					>
-						<HiMiniXMark />
-					</Button>
+					<Tooltip delayDuration={500}>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								onClick={(e) => {
+									e.stopPropagation();
+									handleDeleteClick();
+								}}
+								className={cn(
+									"mt-1 absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer size-5 group-hover:opacity-100",
+									isActive ? "opacity-90" : "opacity-0",
+								)}
+								aria-label="Delete workspace"
+							>
+								<HiMiniXMark />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom" showArrow={false}>
+							Delete workspace
+						</TooltipContent>
+					</Tooltip>
 				</div>
 			</WorkspaceItemContextMenu>
 

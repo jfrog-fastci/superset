@@ -6,10 +6,12 @@ Guidelines for agents and developers working in this repository.
 
 Bun + Turbo monorepo with:
 - **Apps**:
-  - `apps/website` - Main website application
+  - `apps/web` - Main web application (app.superset.sh)
+  - `apps/marketing` - Marketing site (superset.sh)
+  - `apps/admin` - Admin dashboard
+  - `apps/api` - API backend
   - `apps/desktop` - Electron desktop application (see [Desktop App Guide](#desktop-app-electron) below)
   - `apps/docs` - Documentation site
-  - `apps/blog` - Blog site
 - **Packages**:
   - `packages/ui` - Shared UI components (shadcn/ui + TailwindCSS v4).
     - Add components: `npx shadcn@latest add <component>` (run in `packages/ui/`)
@@ -35,8 +37,8 @@ bun test                   # Run tests
 bun build                  # Build all packages
 
 # Code Quality
-bun run lint               # Format + lint + fix auto-fixable issues
-bun run lint:check         # Check only (no changes, for CI)
+bun run lint               # Check for lint issues (no changes)
+bun run lint:fix           # Fix auto-fixable lint issues
 bun run format             # Format code only
 bun run format:check       # Check formatting only (CI)
 bun run typecheck          # Type check all packages
@@ -58,7 +60,7 @@ bun run clean:workspaces   # Clean all workspace node_modules
 - `biome check --write` = format + lint + organize imports + fix safe issues
 - `biome check` = check only (no changes)
 - `biome format` = format only
-- Use `bun run lint` to fix all issues automatically
+- Use `bun run lint:fix` to fix all issues automatically
 
 ## Agent Rules
 
@@ -77,13 +79,30 @@ app/
 ├── page.tsx
 ├── dashboard/
 │   ├── page.tsx
-│   └── components/
-│       └── MetricsChart/
-│           ├── MetricsChart.tsx
-│           ├── MetricsChart.test.tsx      # Tests co-located
-│           ├── index.ts
-│           ├── useMetricsData.ts          # Hook used only here
-│           └── constants.ts
+│   ├── components/
+│   │   └── MetricsChart/
+│   │       ├── MetricsChart.tsx
+│   │       ├── MetricsChart.test.tsx      # Tests co-located
+│   │       ├── index.ts
+│   │       └── constants.ts
+│   ├── hooks/                             # Hooks used only in dashboard
+│   │   └── useMetrics/
+│   │       ├── useMetrics.ts
+│   │       ├── useMetrics.test.ts
+│   │       └── index.ts
+│   ├── utils/                             # Utils used only in dashboard
+│   │   └── formatData/
+│   │       ├── formatData.ts
+│   │       ├── formatData.test.ts
+│   │       └── index.ts
+│   ├── stores/                            # Stores used only in dashboard
+│   │   └── dashboardStore/
+│   │       ├── dashboardStore.ts
+│   │       └── index.ts
+│   └── providers/                         # Providers for dashboard context
+│       └── DashboardProvider/
+│           ├── DashboardProvider.tsx
+│           └── index.ts
 └── components/
     ├── Sidebar/
     │   ├── Sidebar.tsx
@@ -121,6 +140,10 @@ components/                                # Used in 2+ pages (last resort)
 3. **One component per file**: No multi-component files
 4. **Co-locate dependencies**: Utils, hooks, constants, config, tests, stories live next to the file using them
 
+### Exception: shadcn/ui Components
+
+The `src/components/ui/`, `src/components/ai-elements`, and `src/components/react-flow/` directories contain shadcn/ui components. These use **kebab-case single files** (e.g., `button.tsx`, `base-node.tsx`) instead of the folder structure above. This is intentional—shadcn CLI expects this format for updates via `bunx shadcn@latest add`.
+
 ## Database Rules
 
 - Schema in `packages/db/src/`
@@ -130,7 +153,8 @@ components/                                # Used in 2+ pages (last resort)
 - Always spin up a new neon branch to create migrations. Update our root .env files to point at the neon branch locally.
 - Use drizzle to manage the migration. You can see the schema at packages/db/src/schema. Never run a migration yourself.
 - Create migrations by changing drizzle schema then running `pnpm drizzle-kit generate --name="<sample_name_snake_case>"`
-- Neon org id is org-round-base-25422821, Neon project id is tiny-cherry-82420694. list_projects tool requires org_id passed in.
+- `NEON_ORG_ID` and `NEON_PROJECT_ID` env vars are set in .env
+- list_projects tool requires org_id passed in
 
 ## Desktop App (Electron)
 

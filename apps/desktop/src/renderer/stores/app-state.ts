@@ -2,7 +2,13 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 export type AppView = "workspace" | "settings" | "ssh";
-export type SettingsSection = "appearance" | "keyboard";
+export type SettingsSection =
+	| "project"
+	| "workspace"
+	| "appearance"
+	| "keyboard"
+	| "presets"
+	| "ringtones";
 
 interface AppState {
 	currentView: AppView;
@@ -23,7 +29,7 @@ export const useAppStore = create<AppState>()(
 		(set) => ({
 			currentView: "workspace",
 			isSettingsTabOpen: false,
-			settingsSection: "appearance",
+			settingsSection: "project",
 			activeSSHConnectionId: null,
 
 			setView: (view) => {

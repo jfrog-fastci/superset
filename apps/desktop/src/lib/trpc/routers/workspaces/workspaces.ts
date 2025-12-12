@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { db } from "main/lib/db";
+import { terminalManager } from "main/lib/terminal";
 import { nanoid } from "nanoid";
 import { SUPERSET_DIR_NAME, WORKTREES_DIR_NAME } from "shared/constants";
 import { z } from "zod";
@@ -11,9 +12,13 @@ import {
 	fetchDefaultBranch,
 	generateBranchName,
 	getDefaultBranch,
+	hasOriginRemote,
+	hasUncommittedChanges,
+	hasUnpushedCommits,
 	removeWorktree,
 	worktreeExists,
 } from "./utils/git";
+import { fetchGitHubPRStatus } from "./utils/github";
 import { loadSetupConfig } from "./utils/setup";
 import { runTeardown } from "./utils/teardown";
 import { getWorktreePath } from "./utils/worktree";
@@ -54,18 +59,29 @@ export const createWorkspacesRouter = () => {
 					});
 				}
 
-				// Fetch default branch to ensure we're branching from latest (best-effort)
-				try {
-					await fetchDefaultBranch(project.mainRepoPath, defaultBranch);
-				} catch {
-					// Silently continue - branch still exists locally, just might be stale
+				// Check if this repo has a remote origin
+				const hasRemote = await hasOriginRemote(project.mainRepoPath);
+
+				// Determine the start point for the worktree
+				let startPoint: string;
+				if (hasRemote) {
+					// Fetch default branch to ensure we're branching from latest (best-effort)
+					try {
+						await fetchDefaultBranch(project.mainRepoPath, defaultBranch);
+					} catch {
+						// Silently continue - branch still exists locally, just might be stale
+					}
+					startPoint = `origin/${defaultBranch}`;
+				} else {
+					// For local-only repos, use the local default branch
+					startPoint = defaultBranch;
 				}
 
 				await createWorktree(
 					project.mainRepoPath,
 					branch,
 					worktreePath,
-					`origin/${defaultBranch}`,
+					startPoint,
 				);
 
 				const worktree = {
@@ -123,7 +139,7 @@ export const createWorkspacesRouter = () => {
 					}
 				});
 
-				// Load setup configuration
+				// Load setup configuration from the main repo (where .superset/config.json lives)
 				const setupConfig = loadSetupConfig(project.mainRepoPath);
 
 				return {
@@ -223,9 +239,26 @@ export const createWorkspacesRouter = () => {
 				);
 			}
 
+			const project = db.data.projects.find(
+				(p) => p.id === workspace.projectId,
+			);
+			const worktree = db.data.worktrees.find(
+				(wt) => wt.id === workspace.worktreeId,
+			);
+
 			return {
 				...workspace,
 				worktreePath: getWorktreePath(workspace.worktreeId) ?? "",
+				project: project
+					? {
+							id: project.id,
+							name: project.name,
+							mainRepoPath: project.mainRepoPath,
+						}
+					: null,
+				worktree: worktree
+					? { branch: worktree.branch, gitStatus: worktree.gitStatus }
+					: null,
 			};
 		}),
 
@@ -257,7 +290,13 @@ export const createWorkspacesRouter = () => {
 			}),
 
 		canDelete: publicProcedure
-			.input(z.object({ id: z.string() }))
+			.input(
+				z.object({
+					id: z.string(),
+					// Skip expensive git checks (status, unpushed) during polling - only check terminal count
+					skipGitChecks: z.boolean().optional(),
+				}),
+			)
 			.query(async ({ input }) => {
 				const workspace = db.data.workspaces.find((w) => w.id === input.id);
 
@@ -266,6 +305,26 @@ export const createWorkspacesRouter = () => {
 						canDelete: false,
 						reason: "Workspace not found",
 						workspace: null,
+						activeTerminalCount: 0,
+						hasChanges: false,
+						hasUnpushedCommits: false,
+					};
+				}
+
+				const activeTerminalCount =
+					terminalManager.getSessionCountByWorkspaceId(input.id);
+
+				// If skipping git checks, return early with just terminal count
+				// This is used during polling to avoid expensive git operations
+				if (input.skipGitChecks) {
+					return {
+						canDelete: true,
+						reason: null,
+						workspace,
+						warning: null,
+						activeTerminalCount,
+						hasChanges: false,
+						hasUnpushedCommits: false,
 					};
 				}
 
@@ -290,20 +349,35 @@ export const createWorkspacesRouter = () => {
 								workspace,
 								warning:
 									"Worktree not found in git (may have been manually removed)",
+								activeTerminalCount,
+								hasChanges: false,
+								hasUnpushedCommits: false,
 							};
 						}
+
+						// Check for uncommitted changes and unpushed commits in parallel
+						const [hasChanges, unpushedCommits] = await Promise.all([
+							hasUncommittedChanges(worktree.path),
+							hasUnpushedCommits(worktree.path),
+						]);
 
 						return {
 							canDelete: true,
 							reason: null,
 							workspace,
 							warning: null,
+							activeTerminalCount,
+							hasChanges,
+							hasUnpushedCommits: unpushedCommits,
 						};
 					} catch (error) {
 						return {
 							canDelete: false,
 							reason: `Failed to check worktree status: ${error instanceof Error ? error.message : String(error)}`,
 							workspace,
+							activeTerminalCount,
+							hasChanges: false,
+							hasUnpushedCommits: false,
 						};
 					}
 				}
@@ -313,6 +387,9 @@ export const createWorkspacesRouter = () => {
 					reason: null,
 					workspace,
 					warning: "No associated worktree found",
+					activeTerminalCount,
+					hasChanges: false,
+					hasUnpushedCommits: false,
 				};
 			}),
 
@@ -324,6 +401,11 @@ export const createWorkspacesRouter = () => {
 				if (!workspace) {
 					return { success: false, error: "Workspace not found" };
 				}
+
+				// Kill all terminal processes in this workspace first
+				const terminalResult = await terminalManager.killByWorkspaceId(
+					input.id,
+				);
 
 				const worktree = db.data.worktrees.find(
 					(wt) => wt.id === workspace.worktreeId,
@@ -401,7 +483,12 @@ export const createWorkspacesRouter = () => {
 					}
 				});
 
-				return { success: true, teardownError };
+				const terminalWarning =
+					terminalResult.failed > 0
+						? `${terminalResult.failed} terminal process(es) may still be running`
+						: undefined;
+
+				return { success: true, teardownError, terminalWarning };
 			}),
 
 		setActive: publicProcedure
@@ -521,6 +608,67 @@ export const createWorkspacesRouter = () => {
 				});
 
 				return { gitStatus };
+			}),
+
+		getGitHubStatus: publicProcedure
+			.input(z.object({ workspaceId: z.string() }))
+			.query(async ({ input }) => {
+				const workspace = db.data.workspaces.find(
+					(w) => w.id === input.workspaceId,
+				);
+				if (!workspace) {
+					return null;
+				}
+
+				const worktree = db.data.worktrees.find(
+					(wt) => wt.id === workspace.worktreeId,
+				);
+				if (!worktree) {
+					return null;
+				}
+
+				// Always fetch fresh data on hover
+				const freshStatus = await fetchGitHubPRStatus(worktree.path);
+
+				// Update cache if we got data
+				if (freshStatus) {
+					await db.update((data) => {
+						const wt = data.worktrees.find((w) => w.id === worktree.id);
+						if (wt) {
+							wt.githubStatus = freshStatus;
+						}
+					});
+				}
+
+				return freshStatus;
+			}),
+
+		getWorktreeInfo: publicProcedure
+			.input(z.object({ workspaceId: z.string() }))
+			.query(({ input }) => {
+				const workspace = db.data.workspaces.find(
+					(w) => w.id === input.workspaceId,
+				);
+				if (!workspace) {
+					return null;
+				}
+
+				const worktree = db.data.worktrees.find(
+					(wt) => wt.id === workspace.worktreeId,
+				);
+				if (!worktree) {
+					return null;
+				}
+
+				// Extract worktree name from path (last segment)
+				const worktreeName = worktree.path.split("/").pop() ?? worktree.branch;
+
+				return {
+					worktreeName,
+					createdAt: worktree.createdAt,
+					gitStatus: worktree.gitStatus ?? null,
+					githubStatus: worktree.githubStatus ?? null,
+				};
 			}),
 	});
 };

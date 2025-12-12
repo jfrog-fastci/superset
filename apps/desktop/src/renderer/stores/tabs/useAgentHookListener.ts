@@ -1,6 +1,7 @@
 import { trpc } from "renderer/lib/trpc";
 import { useSetActiveWorkspace } from "renderer/react-query/workspaces/useSetActiveWorkspace";
-import { useWindowsStore } from "./store";
+import { useAppStore } from "../app-state";
+import { useTabsStore } from "./store";
 
 /**
  * Hook that listens for notification events via tRPC subscription.
@@ -13,18 +14,18 @@ export function useAgentHookListener() {
 	trpc.notifications.subscribe.useSubscription(undefined, {
 		onData: (event) => {
 			if (event.type === "agent-complete") {
-				// paneId is passed as tabId for backwards compatibility
-				const { tabId: paneId, workspaceId } = event.data;
-				const state = useWindowsStore.getState();
+				const { paneId, workspaceId } = event.data;
+				if (!paneId || !workspaceId) return;
 
-				// Find the window containing this pane
+				const state = useTabsStore.getState();
+
+				// Find the tab containing this pane
 				const pane = state.panes[paneId];
 				if (!pane) return;
 
 				// Only show red dot if not already viewing this pane
-				const activeWindowId = state.activeWindowIds[workspaceId];
-				const focusedPaneId =
-					activeWindowId && state.focusedPaneIds[activeWindowId];
+				const activeTabId = state.activeTabIds[workspaceId];
+				const focusedPaneId = activeTabId && state.focusedPaneIds[activeTabId];
 				const isAlreadyActive =
 					activeWorkspace?.id === workspaceId && focusedPaneId === paneId;
 
@@ -32,24 +33,36 @@ export function useAgentHookListener() {
 					state.setNeedsAttention(paneId, true);
 				}
 			} else if (event.type === "focus-tab") {
-				// paneId is passed as tabId for backwards compatibility
-				const { tabId: paneId, workspaceId } = event.data;
-				const state = useWindowsStore.getState();
+				const { paneId, workspaceId } = event.data;
+				if (!paneId || !workspaceId) return;
 
-				// Find the window containing this pane
-				const pane = state.panes[paneId];
-				if (!pane) return;
+				// Switch to workspace view if not already there
+				const appState = useAppStore.getState();
+				if (appState.currentView !== "workspace") {
+					appState.setView("workspace");
+				}
 
-				const windowId = pane.windowId;
-
-				// Switch to the workspace first (with proper invalidation), then set active window and focused pane
+				// Switch to the workspace first, then look up pane/tab from fresh state
 				setActiveWorkspace.mutate(
 					{ id: workspaceId },
 					{
 						onSuccess: () => {
-							const currentState = useWindowsStore.getState();
-							currentState.setActiveWindow(workspaceId, windowId);
-							currentState.setFocusedPane(windowId, paneId);
+							// Get fresh state after workspace switch
+							const currentState = useTabsStore.getState();
+
+							// Look up pane from current state
+							const pane = currentState.panes[paneId];
+							if (!pane) return;
+
+							const tabId = pane.tabId;
+
+							// Validate tab belongs to the target workspace
+							const tab = currentState.tabs.find((t) => t.id === tabId);
+							if (!tab || tab.workspaceId !== workspaceId) return;
+
+							// Set active tab and focused pane
+							currentState.setActiveTab(workspaceId, tabId);
+							currentState.setFocusedPane(tabId, paneId);
 						},
 					},
 				);
