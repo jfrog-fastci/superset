@@ -16,7 +16,7 @@ interface UseGhostSuggestionOptions {
 export function useGhostSuggestion({
 	workspaceId,
 	enabled = true,
-	debounceMs = 150,
+	debounceMs = 100,
 }: UseGhostSuggestionOptions) {
 	const commandBuffer = useAutocompleteStore((s) => s.commandBuffer);
 	const setSuggestion = useAutocompleteStore((s) => s.setSuggestion);
@@ -49,7 +49,6 @@ export function useGhostSuggestion({
 				}
 			} catch {
 				// Silently fail - don't break typing experience
-				setSuggestion(null);
 			}
 		},
 		[setSuggestion, utils.autocomplete.getRecentMatch, workspaceId],
@@ -73,6 +72,7 @@ export function useGhostSuggestion({
 		} else {
 			setSuggestion(null);
 			debouncedFetch.cancel();
+			lastQueryRef.current = "";
 		}
 
 		return () => {

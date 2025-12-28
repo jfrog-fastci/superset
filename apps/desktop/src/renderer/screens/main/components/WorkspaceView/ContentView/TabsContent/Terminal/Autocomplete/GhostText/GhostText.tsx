@@ -153,7 +153,7 @@ export function GhostText({ xterm, isVisible }: GhostTextProps) {
 			}}
 		>
 			<span
-				className="whitespace-pre"
+				className="whitespace-pre transition-opacity duration-75"
 				style={{
 					fontFamily,
 					fontSize: `${fontSize}px`,

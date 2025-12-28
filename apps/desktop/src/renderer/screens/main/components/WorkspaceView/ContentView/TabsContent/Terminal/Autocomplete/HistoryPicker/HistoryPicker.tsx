@@ -16,7 +16,7 @@ interface HistoryItem {
 }
 
 /**
- * HistoryPicker displays a Warp-style inline dropdown for fuzzy searching command history.
+ * HistoryPicker - A polished command palette for searching command history.
  * Triggered by Ctrl+R.
  */
 export function HistoryPicker({
@@ -35,7 +35,7 @@ export function HistoryPicker({
 		trpc.autocomplete.searchHistory.useQuery(
 			{
 				query,
-				limit: 20,
+				limit: 15,
 				workspaceId,
 			},
 			{
@@ -46,7 +46,7 @@ export function HistoryPicker({
 	// Also fetch recent commands when query is empty
 	const { data: recentResults } = trpc.autocomplete.getRecent.useQuery(
 		{
-			limit: 20,
+			limit: 15,
 			workspaceId,
 		},
 		{
@@ -128,85 +128,37 @@ export function HistoryPicker({
 
 	// Highlight matching portions of the command
 	const highlightMatch = (command: string, searchQuery: string) => {
-		if (!searchQuery) return command;
+		if (!searchQuery) return <span>{command}</span>;
 
 		const lowerCommand = command.toLowerCase();
 		const lowerQuery = searchQuery.toLowerCase();
 		const index = lowerCommand.indexOf(lowerQuery);
 
-		if (index === -1) return command;
+		if (index === -1) return <span>{command}</span>;
 
 		return (
 			<>
-				{command.slice(0, index)}
-				<span className="text-orange-400 font-semibold">
+				<span className="text-muted-foreground">{command.slice(0, index)}</span>
+				<span className="text-foreground font-medium">
 					{command.slice(index, index + searchQuery.length)}
 				</span>
-				{command.slice(index + searchQuery.length)}
+				<span className="text-muted-foreground">
+					{command.slice(index + searchQuery.length)}
+				</span>
 			</>
 		);
 	};
 
 	if (!isOpen) return null;
 
-	const selectedCommand = results[selectedIndex]?.command ?? query;
-
 	return (
-		<div className="absolute inset-x-0 bottom-0 z-20 flex flex-col">
-			{/* Results dropdown */}
-			{(results.length > 0 || isLoading) && (
-				<div className="mx-2 mb-1 rounded-lg border border-border/50 bg-popover/95 shadow-lg backdrop-blur-sm">
-					<div ref={listRef} className="max-h-64 overflow-y-auto py-1">
-						{isLoading && query ? (
-							<div className="px-3 py-2 text-sm text-muted-foreground">
-								Searching...
-							</div>
-						) : (
-							results.map((item, index) => (
-								<button
-									key={`${item.command}-${item.timestamp}`}
-									type="button"
-									onClick={() => handleItemClick(item.command)}
-									className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
-										index === selectedIndex
-											? "bg-orange-500/90 text-white"
-											: "text-foreground/90 hover:bg-muted/50"
-									}`}
-								>
-									<span className="text-muted-foreground/70">{">"}</span>
-									<span className="flex-1 truncate font-mono">
-										{highlightMatch(item.command, query)}
-									</span>
-								</button>
-							))
-						)}
-					</div>
-				</div>
-			)}
-
-			{/* Input bar at bottom */}
-			<div className="mx-2 mb-2 flex items-center gap-2 rounded-lg border border-orange-500 bg-orange-500/90 px-3 py-2 shadow-lg">
-				<span className="font-mono text-sm text-white/90">
-					{selectedCommand}
-				</span>
-				<input
-					ref={inputRef}
-					type="text"
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					onKeyDown={handleKeyDown}
-					className="sr-only"
-					aria-label="Search command history"
-				/>
-				<button
-					type="button"
-					onClick={onClose}
-					className="ml-auto text-white/70 hover:text-white"
-					aria-label="Close"
-				>
+		<div className="absolute inset-x-4 bottom-4 z-50">
+			<div className="overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
+				{/* Search Input */}
+				<div className="flex items-center border-b border-border px-4 py-3">
 					<svg
 						aria-hidden="true"
-						className="size-4"
+						className="mr-3 size-4 shrink-0 text-muted-foreground"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -214,19 +166,93 @@ export function HistoryPicker({
 						<path
 							strokeLinecap="round"
 							strokeLinejoin="round"
-							strokeWidth={2}
-							d="M6 18L18 6M6 6l12 12"
+							strokeWidth={1.5}
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
 						/>
 					</svg>
-				</button>
-			</div>
-
-			{/* Empty state */}
-			{!isLoading && results.length === 0 && (
-				<div className="mx-2 mb-1 rounded-lg border border-border/50 bg-popover/95 px-3 py-4 text-center text-sm text-muted-foreground shadow-lg backdrop-blur-sm">
-					{query ? "No matching commands" : "No command history yet"}
+					<input
+						ref={inputRef}
+						type="text"
+						value={query}
+						onChange={(e) => setQuery(e.target.value)}
+						onKeyDown={handleKeyDown}
+						placeholder="Search command history..."
+						className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+					/>
+					<div className="ml-3 flex items-center gap-1.5 text-xs text-muted-foreground/60">
+						<kbd className="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px]">
+							↑↓
+						</kbd>
+						<span>navigate</span>
+					</div>
 				</div>
-			)}
+
+				{/* Results List */}
+				<div ref={listRef} className="max-h-72 overflow-y-auto">
+					{isLoading && query ? (
+						<div className="px-4 py-8 text-center text-sm text-muted-foreground/60">
+							Searching...
+						</div>
+					) : results.length === 0 ? (
+						<div className="px-4 py-8 text-center text-sm text-muted-foreground/60">
+							{query ? "No matching commands" : "No command history"}
+						</div>
+					) : (
+						<div className="py-1">
+							{results.map((item, index) => (
+								<button
+									key={`${item.command}-${item.timestamp}`}
+									type="button"
+									onClick={() => handleItemClick(item.command)}
+									className={`flex w-full items-center px-4 py-2 text-left transition-colors ${
+										index === selectedIndex
+											? "bg-accent text-accent-foreground"
+											: "text-foreground hover:bg-accent/50"
+									}`}
+								>
+									<span className="mr-3 text-muted-foreground/40">
+										<svg
+											aria-hidden="true"
+											className="size-3.5"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={1.5}
+												d="M8 9l4-4 4 4m0 6l-4 4-4-4"
+											/>
+										</svg>
+									</span>
+									<span className="flex-1 truncate font-mono text-sm">
+										{highlightMatch(item.command, query)}
+									</span>
+									{index === selectedIndex && (
+										<kbd className="ml-3 rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+											↵
+										</kbd>
+									)}
+								</button>
+							))}
+						</div>
+					)}
+				</div>
+
+				{/* Footer */}
+				<div className="flex items-center justify-between border-t border-border px-4 py-2 text-[11px] text-muted-foreground/50">
+					<span>Command History</span>
+					<div className="flex items-center gap-3">
+						<span>
+							<kbd className="rounded bg-muted/30 px-1 py-0.5 font-mono">
+								esc
+							</kbd>{" "}
+							to close
+						</span>
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }
