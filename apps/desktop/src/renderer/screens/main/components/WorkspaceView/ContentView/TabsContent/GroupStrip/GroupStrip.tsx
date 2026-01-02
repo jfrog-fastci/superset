@@ -35,7 +35,7 @@ function GroupItem({
 						className={cn(
 							"flex items-center gap-1.5 rounded-t-md transition-all w-full shrink-0 pl-3 pr-6 h-[80%]",
 							isActive
-								? "text-foreground border-b-2 border-border"
+								? "text-foreground border-t border-l border-r border-border"
 								: "text-muted-foreground hover:text-foreground hover:bg-tertiary/30",
 						)}
 					>
