@@ -29,6 +29,7 @@ interface WorkspaceItemProps {
 	branch?: string;
 	title: string;
 	isActive: boolean;
+	isUnread?: boolean;
 	index: number;
 	width: number;
 	onMouseEnter?: () => void;
@@ -43,6 +44,7 @@ export function WorkspaceItem({
 	branch,
 	title,
 	isActive,
+	isUnread = false,
 	index,
 	width,
 	onMouseEnter,
@@ -61,16 +63,19 @@ export function WorkspaceItem({
 
 	// Shared delete logic
 	const { showDeleteDialog, setShowDeleteDialog, handleDeleteClick } =
-		useWorkspaceDeleteHandler({ id, name: title, type: workspaceType });
+		useWorkspaceDeleteHandler();
 
-	// Check if any pane in tabs belonging to this workspace needs attention
+	// Check if any pane in tabs belonging to this workspace needs attention (agent notifications)
 	const workspaceTabs = tabs.filter((t) => t.workspaceId === id);
 	const workspacePaneIds = new Set(
 		workspaceTabs.flatMap((t) => extractPaneIdsFromLayout(t.layout)),
 	);
-	const needsAttention = Object.values(panes)
+	const hasPaneAttention = Object.values(panes)
 		.filter((p) => workspacePaneIds.has(p.id))
 		.some((p) => p.needsAttention);
+
+	// Show indicator if workspace is manually marked as unread OR has pane-level attention
+	const needsAttention = isUnread || hasPaneAttention;
 
 	const [{ isDragging }, drag] = useDrag(
 		() => ({
@@ -104,6 +109,7 @@ export function WorkspaceItem({
 				workspaceId={id}
 				worktreePath={worktreePath}
 				workspaceAlias={title}
+				isUnread={isUnread}
 				onRename={rename.startRename}
 				canRename={!isBranchWorkspace}
 				showHoverCard={!isBranchWorkspace}
@@ -228,13 +234,13 @@ export function WorkspaceItem({
 										"mt-1 absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer size-5 group-hover:opacity-100",
 										isActive ? "opacity-90" : "opacity-0",
 									)}
-									aria-label="Delete workspace"
+									aria-label="Close or delete workspace"
 								>
 									<HiMiniXMark />
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom" showArrow={false}>
-								Delete workspace
+								Close or delete
 							</TooltipContent>
 						</Tooltip>
 					)}

@@ -70,7 +70,6 @@ export interface TabsStore extends TabsState {
 	setFocusedPane: (tabId: string, paneId: string) => void;
 	markPaneAsUsed: (paneId: string) => void;
 	setNeedsAttention: (paneId: string, needsAttention: boolean) => void;
-	markWorkspaceAsUnread: (workspaceId: string) => void;
 	clearWorkspaceAttention: (workspaceId: string) => void;
 	updatePaneCwd: (
 		paneId: string,

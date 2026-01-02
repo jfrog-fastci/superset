@@ -22,6 +22,7 @@ interface Workspace {
 	branch: string;
 	name: string;
 	tabOrder: number;
+	isUnread: boolean;
 }
 
 interface ProjectSectionProps {
@@ -95,6 +96,7 @@ export function ProjectSection({
 									branch={workspace.branch}
 									type={workspace.type}
 									isActive={workspace.id === activeWorkspaceId}
+									isUnread={workspace.isUnread}
 									index={index}
 									shortcutIndex={shortcutBaseIndex + index}
 								/>

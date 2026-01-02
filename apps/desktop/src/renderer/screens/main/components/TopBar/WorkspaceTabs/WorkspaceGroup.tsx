@@ -11,6 +11,7 @@ interface Workspace {
 	branch: string;
 	name: string;
 	tabOrder: number;
+	isUnread: boolean;
 }
 
 interface WorkspaceGroupProps {
@@ -79,6 +80,7 @@ export function WorkspaceGroup({
 								branch={workspace.branch}
 								title={workspace.name}
 								isActive={workspace.id === activeWorkspaceId}
+								isUnread={workspace.isUnread}
 								index={index}
 								width={workspaceWidth}
 								onMouseEnter={() => onWorkspaceHover(workspace.id)}

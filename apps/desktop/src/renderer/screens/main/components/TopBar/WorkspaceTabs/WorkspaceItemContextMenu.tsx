@@ -11,9 +11,8 @@ import {
 	HoverCardTrigger,
 } from "@superset/ui/hover-card";
 import type { ReactNode } from "react";
-import { LuEyeOff } from "react-icons/lu";
+import { LuEye, LuEyeOff } from "react-icons/lu";
 import { trpc } from "renderer/lib/trpc";
-import { useTabsStore } from "renderer/stores/tabs/store";
 import { WorkspaceHoverCardContent } from "./WorkspaceHoverCard";
 
 interface WorkspaceItemContextMenuProps {
@@ -21,6 +20,7 @@ interface WorkspaceItemContextMenuProps {
 	workspaceId: string;
 	worktreePath: string;
 	workspaceAlias?: string;
+	isUnread?: boolean;
 	onRename: () => void;
 	canRename?: boolean;
 	showHoverCard?: boolean;
@@ -31,12 +31,18 @@ export function WorkspaceItemContextMenu({
 	workspaceId,
 	worktreePath,
 	workspaceAlias,
+	isUnread = false,
 	onRename,
 	canRename = true,
 	showHoverCard = true,
 }: WorkspaceItemContextMenuProps) {
+	const utils = trpc.useUtils();
 	const openInFinder = trpc.external.openInFinder.useMutation();
-	const markWorkspaceAsUnread = useTabsStore((s) => s.markWorkspaceAsUnread);
+	const setUnread = trpc.workspaces.setUnread.useMutation({
+		onSuccess: () => {
+			utils.workspaces.getAllGrouped.invalidate();
+		},
+	});
 
 	const handleOpenInFinder = () => {
 		if (worktreePath) {
@@ -44,9 +50,25 @@ export function WorkspaceItemContextMenu({
 		}
 	};
 
-	const handleMarkAsUnread = () => {
-		markWorkspaceAsUnread(workspaceId);
+	const handleToggleUnread = () => {
+		setUnread.mutate({ id: workspaceId, isUnread: !isUnread });
 	};
+
+	const unreadMenuItem = (
+		<ContextMenuItem onSelect={handleToggleUnread}>
+			{isUnread ? (
+				<>
+					<LuEye className="size-4 mr-2" />
+					Mark as Read
+				</>
+			) : (
+				<>
+					<LuEyeOff className="size-4 mr-2" />
+					Mark as Unread
+				</>
+			)}
+		</ContextMenuItem>
+	);
 
 	// For branch workspaces, just show context menu without hover card
 	if (!showHoverCard) {
@@ -64,10 +86,7 @@ export function WorkspaceItemContextMenu({
 						Open in Finder
 					</ContextMenuItem>
 					<ContextMenuSeparator />
-					<ContextMenuItem onSelect={handleMarkAsUnread}>
-						<LuEyeOff className="size-4 mr-2" />
-						Mark as Unread
-					</ContextMenuItem>
+					{unreadMenuItem}
 				</ContextMenuContent>
 			</ContextMenu>
 		);
@@ -90,10 +109,7 @@ export function WorkspaceItemContextMenu({
 						Open in Finder
 					</ContextMenuItem>
 					<ContextMenuSeparator />
-					<ContextMenuItem onSelect={handleMarkAsUnread}>
-						<LuEyeOff className="size-4 mr-2" />
-						Mark as Unread
-					</ContextMenuItem>
+					{unreadMenuItem}
 				</ContextMenuContent>
 			</ContextMenu>
 			<HoverCardContent side="bottom" align="start" className="w-72">

@@ -17,7 +17,7 @@ import { cn } from "@superset/ui/utils";
 import { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { HiMiniXMark } from "react-icons/hi2";
-import { LuEyeOff, LuGitBranch } from "react-icons/lu";
+import { LuEye, LuEyeOff, LuGitBranch } from "react-icons/lu";
 import { trpc } from "renderer/lib/trpc";
 import {
 	useReorderWorkspaces,
@@ -49,6 +49,7 @@ interface WorkspaceListItemProps {
 	branch: string;
 	type: "worktree" | "branch";
 	isActive: boolean;
+	isUnread?: boolean;
 	index: number;
 	shortcutIndex?: number;
 }
@@ -61,6 +62,7 @@ export function WorkspaceListItem({
 	branch,
 	type,
 	isActive,
+	isUnread = false,
 	index,
 	shortcutIndex,
 }: WorkspaceListItemProps) {
@@ -71,15 +73,20 @@ export function WorkspaceListItem({
 	const rename = useWorkspaceRename(id, name);
 	const tabs = useTabsStore((s) => s.tabs);
 	const panes = useTabsStore((s) => s.panes);
-	const markWorkspaceAsUnread = useTabsStore((s) => s.markWorkspaceAsUnread);
 	const clearWorkspaceAttention = useTabsStore(
 		(s) => s.clearWorkspaceAttention,
 	);
+	const utils = trpc.useUtils();
 	const openInFinder = trpc.external.openInFinder.useMutation();
+	const setUnread = trpc.workspaces.setUnread.useMutation({
+		onSuccess: () => {
+			utils.workspaces.getAllGrouped.invalidate();
+		},
+	});
 
 	// Shared delete logic
 	const { showDeleteDialog, setShowDeleteDialog, handleDeleteClick } =
-		useWorkspaceDeleteHandler({ id, name, type });
+		useWorkspaceDeleteHandler();
 
 	// Lazy-load GitHub status on hover to avoid N+1 queries
 	const { data: githubStatus } = trpc.workspaces.getGitHubStatus.useQuery(
@@ -90,14 +97,17 @@ export function WorkspaceListItem({
 		},
 	);
 
-	// Check if any pane in tabs belonging to this workspace needs attention
+	// Check if any pane in tabs belonging to this workspace needs attention (agent notifications)
 	const workspaceTabs = tabs.filter((t) => t.workspaceId === id);
 	const workspacePaneIds = new Set(
 		workspaceTabs.flatMap((t) => extractPaneIdsFromLayout(t.layout)),
 	);
-	const needsAttention = Object.values(panes)
+	const hasPaneAttention = Object.values(panes)
 		.filter((p) => workspacePaneIds.has(p.id))
 		.some((p) => p.needsAttention);
+
+	// Show indicator if workspace is manually marked as unread OR has pane-level attention
+	const needsAttention = isUnread || hasPaneAttention;
 
 	const handleClick = () => {
 		if (!rename.isRenaming) {
@@ -118,8 +128,8 @@ export function WorkspaceListItem({
 		}
 	};
 
-	const handleMarkAsUnread = () => {
-		markWorkspaceAsUnread(id);
+	const handleToggleUnread = () => {
+		setUnread.mutate({ id, isUnread: !isUnread });
 	};
 
 	// Drag and drop
@@ -251,17 +261,33 @@ export function WorkspaceListItem({
 								"size-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity",
 								isActive && "opacity-70",
 							)}
-							aria-label="Delete workspace"
+							aria-label="Close or delete workspace"
 						>
 							<HiMiniXMark className="size-3.5" />
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="right" sideOffset={4}>
-						Delete workspace
+						Close or delete
 					</TooltipContent>
 				</Tooltip>
 			)}
 		</button>
+	);
+
+	const unreadMenuItem = (
+		<ContextMenuItem onSelect={handleToggleUnread}>
+			{isUnread ? (
+				<>
+					<LuEye className="size-4 mr-2" />
+					Mark as Read
+				</>
+			) : (
+				<>
+					<LuEyeOff className="size-4 mr-2" />
+					Mark as Unread
+				</>
+			)}
+		</ContextMenuItem>
 	);
 
 	// Wrap with context menu and hover card
@@ -275,10 +301,7 @@ export function WorkspaceListItem({
 							Open in Finder
 						</ContextMenuItem>
 						<ContextMenuSeparator />
-						<ContextMenuItem onSelect={handleMarkAsUnread}>
-							<LuEyeOff className="size-4 mr-2" />
-							Mark as Unread
-						</ContextMenuItem>
+						{unreadMenuItem}
 					</ContextMenuContent>
 				</ContextMenu>
 				<DeleteWorkspaceDialog
@@ -311,10 +334,7 @@ export function WorkspaceListItem({
 							Open in Finder
 						</ContextMenuItem>
 						<ContextMenuSeparator />
-						<ContextMenuItem onSelect={handleMarkAsUnread}>
-							<LuEyeOff className="size-4 mr-2" />
-							Mark as Unread
-						</ContextMenuItem>
+						{unreadMenuItem}
 					</ContextMenuContent>
 				</ContextMenu>
 				<HoverCardContent side="right" align="start" className="w-72">

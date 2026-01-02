@@ -101,6 +101,7 @@ export const workspaces = sqliteTable(
 		lastOpenedAt: integer("last_opened_at")
 			.notNull()
 			.$defaultFn(() => Date.now()),
+		isUnread: integer("is_unread", { mode: "boolean" }).default(false),
 	},
 	(table) => [
 		index("workspaces_project_id_idx").on(table.projectId),

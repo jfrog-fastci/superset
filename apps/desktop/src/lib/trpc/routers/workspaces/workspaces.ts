@@ -583,6 +583,7 @@ export const createWorkspacesRouter = () => {
 						createdAt: number;
 						updatedAt: number;
 						lastOpenedAt: number;
+						isUnread: boolean;
 					}>;
 				}
 			>();
@@ -612,6 +613,7 @@ export const createWorkspacesRouter = () => {
 						...workspace,
 						type: workspace.type as "worktree" | "branch",
 						worktreePath: getWorkspacePath(workspace) ?? "",
+						isUnread: workspace.isUnread ?? false,
 					});
 				}
 			}
@@ -1014,10 +1016,18 @@ export const createWorkspacesRouter = () => {
 					throw new Error(`Workspace ${input.id} not found`);
 				}
 
+				// Track if workspace was unread before clearing
+				const wasUnread = workspace.isUnread ?? false;
+
 				const now = Date.now();
 				localDb
 					.update(workspaces)
-					.set({ lastOpenedAt: now, updatedAt: now })
+					.set({
+						lastOpenedAt: now,
+						updatedAt: now,
+						// Auto-clear unread state when switching to workspace
+						isUnread: false,
+					})
 					.where(eq(workspaces.id, input.id))
 					.run();
 
@@ -1030,7 +1040,7 @@ export const createWorkspacesRouter = () => {
 					})
 					.run();
 
-				return { success: true };
+				return { success: true, wasUnread };
 			}),
 
 		reorder: publicProcedure
@@ -1366,6 +1376,27 @@ export const createWorkspacesRouter = () => {
 					worktreePath: worktree.path,
 					projectId: project.id,
 				};
+			}),
+
+		setUnread: publicProcedure
+			.input(z.object({ id: z.string(), isUnread: z.boolean() }))
+			.mutation(({ input }) => {
+				const workspace = localDb
+					.select()
+					.from(workspaces)
+					.where(eq(workspaces.id, input.id))
+					.get();
+				if (!workspace) {
+					throw new Error(`Workspace ${input.id} not found`);
+				}
+
+				localDb
+					.update(workspaces)
+					.set({ isUnread: input.isUnread })
+					.where(eq(workspaces.id, input.id))
+					.run();
+
+				return { success: true, isUnread: input.isUnread };
 			}),
 
 		close: publicProcedure
