@@ -86,9 +86,7 @@ export function TabsContent() {
 		// Partition tabs: terminal tabs stay mounted, non-terminal tabs unmount when inactive
 		const terminalTabs = allTabs.filter((tab) => hasTerminalPane(tab, panes));
 		const activeNonTerminalTab =
-			tabToRender && !hasTerminalPane(tabToRender, panes)
-				? tabToRender
-				: null;
+			tabToRender && !hasTerminalPane(tabToRender, panes) ? tabToRender : null;
 
 		return (
 			<div className="flex-1 min-h-0 flex overflow-hidden">

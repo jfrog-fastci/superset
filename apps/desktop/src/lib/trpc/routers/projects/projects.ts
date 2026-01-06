@@ -659,9 +659,8 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 
 				let totalFailed = 0;
 				for (const workspace of projectWorkspaces) {
-					const terminalResult = await getActiveTerminalManager().killByWorkspaceId(
-						workspace.id,
-					);
+					const terminalResult =
+						await getActiveTerminalManager().killByWorkspaceId(workspace.id);
 					totalFailed += terminalResult.failed;
 				}
 
