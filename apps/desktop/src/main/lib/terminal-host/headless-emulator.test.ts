@@ -13,8 +13,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { HeadlessEmulator, modesEqual } from "../headless-emulator";
-import { DEFAULT_MODES } from "../types";
+import { HeadlessEmulator, modesEqual } from "./headless-emulator";
+import { DEFAULT_MODES } from "./types";
 
 // Escape sequences for testing
 const ESC = "\x1b";
