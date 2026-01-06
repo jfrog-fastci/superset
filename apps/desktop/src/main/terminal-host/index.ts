@@ -376,11 +376,11 @@ const handlers: Record<string, RequestHandler> = {
 	},
 };
 
-function handleRequest(
+async function handleRequest(
 	socket: Socket,
 	request: IpcRequest,
 	clientState: ClientState,
-) {
+): Promise<void> {
 	const handler = handlers[request.type];
 
 	if (!handler) {
@@ -394,7 +394,7 @@ function handleRequest(
 	}
 
 	try {
-		handler(socket, request.id, request.payload, clientState);
+		await handler(socket, request.id, request.payload, clientState);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		sendError(socket, request.id, "INTERNAL_ERROR", message);
@@ -420,7 +420,11 @@ function handleConnection(socket: Socket) {
 	socket.on("data", (data: string) => {
 		const messages = parser.parse(data);
 		for (const message of messages) {
-			handleRequest(socket, message, clientState);
+			handleRequest(socket, message, clientState).catch((error) => {
+				log("error", "Unhandled request error", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
 		}
 	});
 

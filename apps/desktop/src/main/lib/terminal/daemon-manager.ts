@@ -83,6 +83,9 @@ export class DaemonTerminalManager extends EventEmitter {
 		}
 	>();
 
+	/** Track pending cleanup timeouts for cancellation on dispose */
+	private cleanupTimeouts = new Map<string, NodeJS.Timeout>();
+
 	constructor() {
 		super();
 		this.client = getTerminalHostClient();
@@ -160,10 +163,12 @@ export class DaemonTerminalManager extends EventEmitter {
 				// Emit exit event
 				this.emit(`exit:${paneId}`, exitCode, signal);
 
-				// Clean up session after delay
-				setTimeout(() => {
+				// Clean up session after delay (track timeout for cancellation on dispose)
+				const timeoutId = setTimeout(() => {
 					this.sessions.delete(paneId);
+					this.cleanupTimeouts.delete(paneId);
 				}, SESSION_CLEANUP_DELAY_MS);
+				this.cleanupTimeouts.set(paneId, timeoutId);
 			},
 		);
 
@@ -860,6 +865,12 @@ export class DaemonTerminalManager extends EventEmitter {
 	 * This allows cold restore detection on next app launch.
 	 */
 	async cleanup(): Promise<void> {
+		// Clear pending cleanup timeouts to prevent callbacks after dispose
+		for (const timeout of this.cleanupTimeouts.values()) {
+			clearTimeout(timeout);
+		}
+		this.cleanupTimeouts.clear();
+
 		// Close all history writers gracefully (writes endedAt to meta.json)
 		// This is important for cold restore detection - if the app crashes
 		// or laptop reboots, endedAt won't be written, indicating unclean shutdown.

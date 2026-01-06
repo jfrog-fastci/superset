@@ -104,11 +104,16 @@ describe("Terminal Host Daemon", () => {
 			});
 
 			let output = "";
+			let settled = false;
+			let timeoutId: ReturnType<typeof setTimeout>;
 
 			daemonProcess.stdout?.on("data", (data) => {
 				output += data.toString();
 				// Check if daemon is ready
 				if (output.includes("Daemon started")) {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timeoutId);
 					resolve();
 				}
 			});
@@ -118,11 +123,16 @@ describe("Terminal Host Daemon", () => {
 			});
 
 			daemonProcess.on("error", (error) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeoutId);
 				reject(new Error(`Failed to start daemon: ${error.message}`));
 			});
 
 			daemonProcess.on("exit", (code, signal) => {
-				if (code !== 0 && code !== null) {
+				if (!settled && code !== 0 && code !== null) {
+					settled = true;
+					clearTimeout(timeoutId);
 					reject(
 						new Error(`Daemon exited with code ${code}, signal ${signal}`),
 					);
@@ -130,7 +140,9 @@ describe("Terminal Host Daemon", () => {
 			});
 
 			// Timeout if daemon doesn't start
-			setTimeout(() => {
+			timeoutId = setTimeout(() => {
+				if (settled) return;
+				settled = true;
 				reject(
 					new Error(
 						`Daemon failed to start within ${DAEMON_TIMEOUT}ms. Output: ${output}`,

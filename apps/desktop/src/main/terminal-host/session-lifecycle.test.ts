@@ -104,10 +104,15 @@ describe("Terminal Host Session Lifecycle", () => {
 			});
 
 			let output = "";
+			let settled = false;
+			let timeoutId: ReturnType<typeof setTimeout>;
 
 			daemonProcess.stdout?.on("data", (data) => {
 				output += data.toString();
 				if (output.includes("Daemon started")) {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timeoutId);
 					resolve();
 				}
 			});
@@ -117,18 +122,25 @@ describe("Terminal Host Session Lifecycle", () => {
 			});
 
 			daemonProcess.on("error", (error) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeoutId);
 				reject(new Error(`Failed to start daemon: ${error.message}`));
 			});
 
 			daemonProcess.on("exit", (code, signal) => {
-				if (code !== 0 && code !== null) {
+				if (!settled && code !== 0 && code !== null) {
+					settled = true;
+					clearTimeout(timeoutId);
 					reject(
 						new Error(`Daemon exited with code ${code}, signal ${signal}`),
 					);
 				}
 			});
 
-			setTimeout(() => {
+			timeoutId = setTimeout(() => {
+				if (settled) return;
+				settled = true;
 				reject(
 					new Error(
 						`Daemon failed to start within ${DAEMON_TIMEOUT}ms. Output: ${output}`,
@@ -192,6 +204,7 @@ describe("Terminal Host Session Lifecycle", () => {
 	): Promise<IpcResponse> {
 		return new Promise((resolve, reject) => {
 			let buffer = "";
+			let timeoutId: ReturnType<typeof setTimeout>;
 
 			const onData = (data: Buffer) => {
 				buffer += data.toString();
@@ -200,6 +213,7 @@ describe("Terminal Host Session Lifecycle", () => {
 					const line = buffer.slice(0, newlineIndex);
 					buffer = buffer.slice(newlineIndex + 1);
 					socket.off("data", onData);
+					clearTimeout(timeoutId);
 					try {
 						resolve(JSON.parse(line));
 					} catch (_error) {
@@ -211,7 +225,7 @@ describe("Terminal Host Session Lifecycle", () => {
 			socket.on("data", onData);
 			socket.write(`${JSON.stringify(request)}\n`);
 
-			setTimeout(() => {
+			timeoutId = setTimeout(() => {
 				socket.off("data", onData);
 				reject(new Error("Request timed out"));
 			}, 5000);
