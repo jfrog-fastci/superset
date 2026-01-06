@@ -1,6 +1,7 @@
 import { Label } from "@superset/ui/label";
 import { Switch } from "@superset/ui/switch";
 import { trpc } from "renderer/lib/trpc";
+import { DEFAULT_TERMINAL_PERSISTENCE } from "shared/constants";
 
 export function TerminalSettings() {
 	const utils = trpc.useUtils();
@@ -69,7 +70,7 @@ export function TerminalSettings() {
 					</div>
 					<Switch
 						id="terminal-persistence"
-						checked={terminalPersistence ?? false}
+						checked={terminalPersistence ?? DEFAULT_TERMINAL_PERSISTENCE}
 						onCheckedChange={handleToggle}
 						disabled={isLoading || setTerminalPersistence.isPending}
 					/>

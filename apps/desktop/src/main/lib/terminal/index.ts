@@ -4,6 +4,7 @@ import {
 	disposeTerminalHostClient,
 	getTerminalHostClient,
 } from "main/lib/terminal-host/client";
+import { DEFAULT_TERMINAL_PERSISTENCE } from "shared/constants";
 import {
 	DaemonTerminalManager,
 	getDaemonTerminalManager,
@@ -51,7 +52,7 @@ export function isDaemonModeEnabled(): boolean {
 	// Read from user settings
 	try {
 		const row = localDb.select().from(settings).get();
-		const enabled = row?.terminalPersistence ?? false;
+		const enabled = row?.terminalPersistence ?? DEFAULT_TERMINAL_PERSISTENCE;
 		console.log(
 			`[TerminalManager] Daemon mode: ${enabled ? "ENABLED" : "DISABLED"} (via settings.terminalPersistence)`,
 		);
@@ -62,8 +63,8 @@ export function isDaemonModeEnabled(): boolean {
 			"[TerminalManager] Failed to read settings, defaulting to disabled:",
 			error,
 		);
-		cachedDaemonMode = false;
-		return false;
+		cachedDaemonMode = DEFAULT_TERMINAL_PERSISTENCE;
+		return DEFAULT_TERMINAL_PERSISTENCE;
 	}
 }
 

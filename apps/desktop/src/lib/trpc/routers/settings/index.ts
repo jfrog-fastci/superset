@@ -7,6 +7,7 @@ import { localDb } from "main/lib/local-db";
 import {
 	DEFAULT_CONFIRM_ON_QUIT,
 	DEFAULT_TERMINAL_LINK_BEHAVIOR,
+	DEFAULT_TERMINAL_PERSISTENCE,
 } from "shared/constants";
 import { DEFAULT_RINGTONE_ID, RINGTONES } from "shared/ringtones";
 import { z } from "zod";
@@ -240,8 +241,7 @@ export const createSettingsRouter = () => {
 
 		getTerminalPersistence: publicProcedure.query(() => {
 			const row = getSettings();
-			// Default to false (terminal persistence disabled by default)
-			return row.terminalPersistence ?? false;
+			return row.terminalPersistence ?? DEFAULT_TERMINAL_PERSISTENCE;
 		}),
 
 		setTerminalPersistence: publicProcedure
