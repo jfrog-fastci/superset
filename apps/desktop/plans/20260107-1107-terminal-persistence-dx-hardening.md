@@ -173,7 +173,7 @@ Extend the daemon IPC to support “activity-only” subscriptions that do not s
 
 Ensure that exit and error are delivered to activity subscribers as high-signal events.
 
-Expose a single renderer-level subscription for activity signals. This should be one subscription for the whole app, not one per pane. Implement it in the terminal tRPC router (`apps/desktop/src/lib/trpc/routers/terminal/terminal.ts`) as a subscription that streams `{ paneId, workspaceId, type, ts }` events. Then add a small renderer hook/component mounted once (for example alongside `useAgentHookListener`) that listens for these events and sets `pane.needsAttention = true` when the pane is not currently focused. The existing UI already renders attention indicators in the tab strip and workspace list via `needsAttention`.
+Expose a single renderer-level subscription for activity signals. This should be one subscription for the whole app, not one per pane. Implement it in the terminal tRPC router (`apps/desktop/src/lib/trpc/routers/terminal/terminal.ts`) as a subscription that streams `{ paneId, workspaceId, type, ts }` events. Then add a small renderer hook/component mounted once (for example alongside `useAgentHookListener`) that listens for these events and calls `setPaneStatus(paneId, "review")` when the pane is not currently focused. The existing UI already renders status indicators in the tab strip and workspace list via `pane.status`.
 
 Acceptance:
 
