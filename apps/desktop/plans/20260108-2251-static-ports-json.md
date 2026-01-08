@@ -121,7 +121,7 @@ Workspaces store their worktree path. The workspaces tRPC router (`apps/desktop/
 
 ### Toast Notifications
 
-The app uses `sonner` for toast notifications. Import `toast` from `sonner` and call `toast.error("message")` to show an error toast.
+The app uses `sonner` for toast notifications. Import `toast` from `@superset/ui/sonner` and call `toast.error("message")` to show an error toast.
 
 ## Plan of Work
 
@@ -197,24 +197,9 @@ Add two new procedures:
 
 This requires importing from the workspaces schema and the static-ports loader.
 
-### Milestone 4: Renderer Store Updates
+### ~~Milestone 4: Renderer Store Updates~~ (SKIPPED)
 
-Update the ports store to track static ports and errors.
-
-**File: `apps/desktop/src/renderer/stores/ports/store.ts`**
-
-Add to the store state:
-- `staticPorts: StaticPort[]`
-- `staticPortsError: string | null`
-- `useStaticPorts: boolean` (whether static config exists for current workspace)
-
-Add actions:
-- `setStaticPorts(ports: StaticPort[])`
-- `setStaticPortsError(error: string | null)`
-- `setUseStaticPorts(use: boolean)`
-- `clearStaticPorts()`
-
-These fields should NOT be persisted (only `isListCollapsed` is persisted).
+> **Note:** This milestone was intentionally skipped. See Decision Log entry "Skip Zustand store modifications for static ports". The implementation uses tRPC queries directly in the component instead, which is cleaner and follows the existing React Query pattern.
 
 ### Milestone 5: PortsList UI Updates
 
@@ -401,4 +386,4 @@ No new npm dependencies required. Uses existing:
 - `node:fs` for file operations (main process only)
 - `node:path` for path construction
 - `zod` for input validation in tRPC
-- `sonner` for toast notifications (already used in app)
+- `@superset/ui/sonner` for toast notifications (already used in app)
