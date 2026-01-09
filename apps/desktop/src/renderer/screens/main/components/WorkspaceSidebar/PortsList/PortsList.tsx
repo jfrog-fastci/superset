@@ -1,150 +1,18 @@
 import { COMPANY } from "@superset/shared/constants";
-import { toast } from "@superset/ui/sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
-import { useEffect, useMemo, useRef } from "react";
 import { LuChevronRight, LuCircleHelp, LuRadioTower } from "react-icons/lu";
-import { trpc } from "renderer/lib/trpc";
 import { usePortsStore } from "renderer/stores";
-import type { MergedPort } from "shared/types";
 import { STROKE_WIDTH } from "../constants";
-import { MergedPortBadge } from "./components/MergedPortBadge";
-import { mergePorts } from "./utils";
+import { WorkspacePortGroup } from "./components/WorkspacePortGroup";
+import { usePortsData } from "./hooks/usePortsData";
 
 const PORTS_DOCS_URL = `https://${COMPANY.DOMAIN}/ports`;
 
-interface MergedWorkspaceGroup {
-	workspaceId: string;
-	workspaceName: string;
-	isCurrentWorkspace: boolean;
-	ports: MergedPort[];
-}
-
 export function PortsList() {
-	const { data: activeWorkspace } = trpc.workspaces.getActive.useQuery();
-	const { data: allWorkspaces } = trpc.workspaces.getAll.useQuery();
-	const ports = usePortsStore((s) => s.ports);
-	const setPorts = usePortsStore((s) => s.setPorts);
-	const addPort = usePortsStore((s) => s.addPort);
-	const removePort = usePortsStore((s) => s.removePort);
 	const isCollapsed = usePortsStore((s) => s.isListCollapsed);
 	const toggleCollapsed = usePortsStore((s) => s.toggleListCollapsed);
 
-	const utils = trpc.useUtils();
-
-	const { data: allStaticPortsData } = trpc.ports.getAllStatic.useQuery();
-
-	trpc.ports.subscribeStatic.useSubscription(
-		{ workspaceId: activeWorkspace?.id ?? "" },
-		{
-			enabled: !!activeWorkspace?.id,
-			onData: () => {
-				utils.ports.getAllStatic.invalidate();
-			},
-		},
-	);
-
-	const { data: initialPorts } = trpc.ports.getAll.useQuery();
-
-	useEffect(() => {
-		if (initialPorts) {
-			setPorts(initialPorts);
-		}
-	}, [initialPorts, setPorts]);
-
-	trpc.ports.subscribe.useSubscription(undefined, {
-		onData: (event) => {
-			if (event.type === "add") {
-				addPort(event.port);
-			} else if (event.type === "remove") {
-				removePort(event.port.paneId, event.port.port);
-			}
-		},
-	});
-
-	const workspaceNames = useMemo(() => {
-		if (!allWorkspaces) return {};
-		return allWorkspaces.reduce(
-			(acc, ws) => {
-				acc[ws.id] = ws.name;
-				return acc;
-			},
-			{} as Record<string, string>,
-		);
-	}, [allWorkspaces]);
-
-	// Prevent showing duplicate error toasts on re-renders
-	const shownErrorsRef = useRef<Set<string>>(new Set());
-
-	useEffect(() => {
-		const errors = allStaticPortsData?.errors ?? [];
-		for (const { workspaceId, error } of errors) {
-			const errorKey = `${workspaceId}:${error}`;
-			if (!shownErrorsRef.current.has(errorKey)) {
-				shownErrorsRef.current.add(errorKey);
-				const workspaceName =
-					workspaceNames[workspaceId] || "Unknown workspace";
-				toast.error(`Failed to load ports.json in ${workspaceName}`, {
-					description: error,
-				});
-			}
-		}
-	}, [allStaticPortsData?.errors, workspaceNames]);
-
-	const allWorkspaceIds = useMemo(() => {
-		const ids = new Set<string>();
-
-		for (const port of allStaticPortsData?.ports ?? []) {
-			ids.add(port.workspaceId);
-		}
-
-		for (const port of ports) {
-			ids.add(port.workspaceId);
-		}
-
-		return Array.from(ids);
-	}, [allStaticPortsData?.ports, ports]);
-
-	const workspacePortGroups = useMemo(() => {
-		const allStaticPorts = allStaticPortsData?.ports ?? [];
-
-		const groups = allWorkspaceIds.map((workspaceId) => {
-			const staticPortsForWorkspace = allStaticPorts.filter(
-				(p) => p.workspaceId === workspaceId,
-			);
-
-			const merged = mergePorts({
-				staticPorts: staticPortsForWorkspace,
-				dynamicPorts: ports,
-				workspaceId,
-			});
-
-			return {
-				workspaceId,
-				workspaceName: workspaceNames[workspaceId] || "Unknown",
-				isCurrentWorkspace: workspaceId === activeWorkspace?.id,
-				ports: merged,
-			};
-		});
-
-		groups.sort((a, b) => {
-			if (a.isCurrentWorkspace && !b.isCurrentWorkspace) return -1;
-			if (!a.isCurrentWorkspace && b.isCurrentWorkspace) return 1;
-			return a.workspaceName.localeCompare(b.workspaceName);
-		});
-
-		return groups;
-	}, [
-		allWorkspaceIds,
-		allStaticPortsData?.ports,
-		ports,
-		workspaceNames,
-		activeWorkspace?.id,
-	]);
-
-	const totalPortCount = workspacePortGroups.reduce(
-		(sum, g) => sum + g.ports.length,
-		0,
-	);
+	const { workspacePortGroups, totalPortCount } = usePortsData();
 
 	if (totalPortCount === 0) {
 		return null;
@@ -191,52 +59,10 @@ export function PortsList() {
 			{!isCollapsed && (
 				<div className="space-y-2 max-h-72 overflow-y-auto pb-1 hide-scrollbar">
 					{workspacePortGroups.map((group) => (
-						<MergedWorkspacePortGroup key={group.workspaceId} group={group} />
+						<WorkspacePortGroup key={group.workspaceId} group={group} />
 					))}
 				</div>
 			)}
-		</div>
-	);
-}
-
-interface MergedWorkspacePortGroupProps {
-	group: MergedWorkspaceGroup;
-}
-
-function MergedWorkspacePortGroup({ group }: MergedWorkspacePortGroupProps) {
-	const setActiveMutation = trpc.workspaces.setActive.useMutation();
-	const utils = trpc.useUtils();
-
-	const handleWorkspaceClick = async () => {
-		if (group.isCurrentWorkspace) return;
-
-		await setActiveMutation.mutateAsync({ id: group.workspaceId });
-		await utils.workspaces.getActive.invalidate();
-	};
-
-	return (
-		<div>
-			<button
-				type="button"
-				onClick={handleWorkspaceClick}
-				disabled={group.isCurrentWorkspace}
-				className={`text-xs px-3 py-1 truncate text-left w-full transition-colors ${
-					group.isCurrentWorkspace
-						? "text-sidebar-foreground/80"
-						: "text-muted-foreground hover:text-sidebar-foreground cursor-pointer"
-				}`}
-			>
-				{group.workspaceName}
-			</button>
-			<div className="flex flex-wrap gap-1 px-3">
-				{group.ports.map((port) => (
-					<MergedPortBadge
-						key={port.port}
-						port={port}
-						isCurrentWorkspace={group.isCurrentWorkspace}
-					/>
-				))}
-			</div>
 		</div>
 	);
 }
