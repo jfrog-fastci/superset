@@ -6,6 +6,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
+	DropdownMenuShortcut,
 	DropdownMenuSub,
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
@@ -13,15 +14,21 @@ import {
 } from "@superset/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { useLiveQuery } from "@tanstack/react-db";
+import { FaDiscord, FaXTwitter } from "react-icons/fa6";
 import {
 	HiCheck,
 	HiChevronUpDown,
 	HiOutlineArrowRightOnRectangle,
+	HiOutlineCog6Tooth,
+	HiOutlineCommandLine,
+	HiOutlineEnvelope,
+	HiOutlineUserGroup,
 } from "react-icons/hi2";
 import { useAuth } from "renderer/contexts/AuthProvider";
 import { useCollections } from "renderer/contexts/CollectionsProvider";
 import { trpc } from "renderer/lib/trpc";
 import { useOpenSettings } from "renderer/stores/app-state";
+import { useHotkeyText } from "renderer/stores/hotkeys";
 
 interface OrganizationDropdownProps {
 	isCollapsed?: boolean;
@@ -35,6 +42,7 @@ export function OrganizationDropdown({
 	const setActiveOrg = trpc.auth.setActiveOrganization.useMutation();
 	const signOut = trpc.auth.signOut.useMutation();
 	const openSettings = useOpenSettings();
+	const hotkeysShortcut = useHotkeyText("SHOW_HOTKEYS");
 
 	const activeOrganizationId = session?.session?.activeOrganizationId;
 
@@ -102,13 +110,30 @@ export function OrganizationDropdown({
 				{activeOrganization && (
 					<>
 						{/* Settings */}
-						<DropdownMenuItem onSelect={() => openSettings()}>
+						<DropdownMenuItem onSelect={() => openSettings()} className="gap-2">
+							<HiOutlineCog6Tooth className="h-4 w-4" />
 							<span>Settings</span>
 						</DropdownMenuItem>
 
 						{/* Team management */}
-						<DropdownMenuItem onSelect={() => openSettings("team")}>
-							<span>Invite and manage members</span>
+						<DropdownMenuItem
+							onSelect={() => openSettings("team")}
+							className="gap-2"
+						>
+							<HiOutlineUserGroup className="h-4 w-4" />
+							<span>Team</span>
+						</DropdownMenuItem>
+
+						{/* Hotkeys */}
+						<DropdownMenuItem
+							onSelect={() => openSettings("keyboard")}
+							className="gap-2"
+						>
+							<HiOutlineCommandLine className="h-4 w-4" />
+							<span className="flex-1">Hotkeys</span>
+							{hotkeysShortcut !== "Unassigned" && (
+								<DropdownMenuShortcut>{hotkeysShortcut}</DropdownMenuShortcut>
+							)}
 						</DropdownMenuItem>
 
 						<DropdownMenuSeparator />
@@ -152,6 +177,43 @@ export function OrganizationDropdown({
 						<DropdownMenuSeparator />
 					</>
 				)}
+
+				{/* Contact Us */}
+				<DropdownMenuSub>
+					<DropdownMenuSubTrigger className="gap-2">
+						<HiOutlineEnvelope className="h-4 w-4" />
+						<span>Contact us</span>
+					</DropdownMenuSubTrigger>
+					<DropdownMenuSubContent>
+						<DropdownMenuItem
+							onSelect={() =>
+								window.open("https://discord.gg/superset", "_blank")
+							}
+							className="gap-2"
+						>
+							<FaDiscord className="h-4 w-4" />
+							<span>Discord</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onSelect={() =>
+								window.open("mailto:founders@superset.sh", "_blank")
+							}
+							className="gap-2"
+						>
+							<HiOutlineEnvelope className="h-4 w-4" />
+							<span>Email founders</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onSelect={() => window.open("https://x.com/supersetsh", "_blank")}
+							className="gap-2"
+						>
+							<FaXTwitter className="h-4 w-4" />
+							<span>X (Twitter)</span>
+						</DropdownMenuItem>
+					</DropdownMenuSubContent>
+				</DropdownMenuSub>
+
+				<DropdownMenuSeparator />
 
 				{/* Sign out - ALWAYS show so users can never get trapped */}
 				<DropdownMenuItem onSelect={handleSignOut} className="gap-2">
