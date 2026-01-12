@@ -53,6 +53,8 @@ export default defineConfig({
 			"process.env.NEXT_PUBLIC_POSTHOG_HOST": defineEnv(
 				process.env.NEXT_PUBLIC_POSTHOG_HOST,
 			),
+			// Canary build flag - determines auto-update feed URL
+			"process.env.CANARY_BUILD": defineEnv(process.env.CANARY_BUILD, "false"),
 		},
 
 		build: {

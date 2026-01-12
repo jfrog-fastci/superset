@@ -7,8 +7,12 @@ import { AUTO_UPDATE_STATUS, type AutoUpdateStatus } from "shared/auto-update";
 import { PLATFORM } from "shared/constants";
 
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 4; // 4 hours
-const UPDATE_FEED_URL =
-	"https://github.com/superset-sh/superset/releases/latest/download";
+
+// Canary builds check the canary release tag, stable builds check latest release
+const IS_CANARY = process.env.CANARY_BUILD === "true";
+const UPDATE_FEED_URL = IS_CANARY
+	? "https://github.com/superset-sh/superset/releases/download/desktop-canary"
+	: "https://github.com/superset-sh/superset/releases/latest/download";
 
 export interface AutoUpdateStatusEvent {
 	status: AutoUpdateStatus;
