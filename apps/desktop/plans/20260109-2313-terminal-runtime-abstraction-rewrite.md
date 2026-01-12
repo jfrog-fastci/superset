@@ -1,4 +1,4 @@
-# Terminal Runtime Abstraction (Daemon vs In-Process)
+# Workspace Runtime Abstraction (Terminals: Daemon vs In-Process)
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -18,20 +18,21 @@ Reference: This plan follows conventions from `AGENTS.md`, `apps/desktop/AGENTS.
 - [Plan of Work](#plan-of-work)
 - [Target Shape (After Refactor)](#target-shape-after-refactor)
   - [File Tree (Proposed)](#file-tree-proposed)
-  - [Terminal Runtime Types (Main Process)](#terminal-runtime-types-main-process)
+  - [Identity + Lifecycle (State Machines)](#identity--lifecycle-state-machines)
+  - [Workspace Runtime Types (Main Process)](#workspace-runtime-types-main-process)
   - [tRPC Router Shape (No Daemon Type Checks)](#trpc-router-shape-no-daemon-type-checks)
   - [Renderer Decomposition (Reducing `Terminal.tsx` Branching)](#renderer-decomposition-reducing-terminaltsx-branching)
   - [Diagrams (Call Flow)](#diagrams-call-flow)
-- [Milestones](#milestone-1-establish-a-backend-contract-and-invariants)
-  - [Milestone 1](#milestone-1-establish-a-backend-contract-and-invariants)
-  - [Milestone 2](#milestone-2-implement-terminalruntime-registry--capabilities)
-  - [Milestone 3](#milestone-3-migrate-trpc-terminal-router-to-the-runtime)
-  - [Milestone 4](#milestone-4-add-regression-coverage-for-the-abstraction-boundary)
-  - [Milestone 5](#milestone-5-manual-verification-high-coverage-low-surprises)
+- [Milestones](#milestone-1-contract--invariants-workspaceruntime)
+  - [Milestone 1](#milestone-1-contract--invariants-workspaceruntime)
+  - [Milestone 2](#milestone-2-workspaceruntime-registry--capabilities)
+  - [Milestone 3](#milestone-3-trpc-terminal-router-migration)
+  - [Milestone 4](#milestone-4-identity--stream-contract-backendsessionidclientid)
+  - [Milestone 5](#milestone-5-regression-coverage)
   - [Milestone 6a](#milestone-6a-build-a-terminal-init-plan-renderer)
   - [Milestone 6b](#milestone-6b-stream-subscription--buffering-hook-renderer)
   - [Milestone 6c](#milestone-6c-integrate-helpers-into-terminaltsx-ui-wiring-only)
-  - [Milestone 7 (Cloud Readiness)](#milestone-7-cloud-readiness-introduce-backendsessionid)
+  - [Milestone 7 (Cloud Readiness)](#milestone-7-cloud-readiness-workspaceruntime-skeleton)
 - [Validation](#validation)
 - [Idempotence / Safety](#idempotence--safety)
 - [Risks and Mitigations](#risks-and-mitigations)
@@ -43,15 +44,20 @@ Reference: This plan follows conventions from `AGENTS.md`, `apps/desktop/AGENTS.
 
 ## Purpose / Big Picture
 
-After this change, the desktop app still supports terminal persistence (daemon mode with cold restore) exactly as it does today, but the codebase no longer leaks “daemon vs in-process” branching across the tRPC router and UI. Backend selection becomes a single responsibility owned by `apps/desktop/src/main/lib/terminal/`.
+After this change, the desktop app still supports terminal persistence (daemon mode with cold restore) exactly as it does today, but the codebase no longer leaks “daemon vs in-process” branching across the tRPC router and UI.
 
-This plan also tightens the abstraction so it can become the **local implementation of a workspace-scoped “provider”** later (cloud/SSH/remote runners), without re-introducing backend branching across the application.
+The key change in this revised plan is that we **promote a workspace-scoped provider abstraction to be the primary seam**:
+
+- `WorkspaceRuntime` (aka provider) becomes the long-term boundary for local vs daemon vs cloud/SSH backends.
+- `TerminalRuntime` becomes a sub-component (`workspace.terminal`) rather than being “the” top-level runtime.
+
+This avoids re-cutting seams when we later move “changes/files/agent status” into the same provider boundary for cloud workspaces.
 
 Observable outcomes:
 
 1. With terminal persistence disabled, terminals behave as before (no persistence across app restarts), and Settings → Terminal “Manage sessions” shows that session management is unavailable.
 2. With terminal persistence enabled, terminals survive app restarts, cold restore works, and Settings → Terminal “Manage sessions” continues to list/kill sessions.
-3. The tRPC `terminal.*` router no longer needs `instanceof DaemonTerminalManager` checks; daemon awareness is centralized in the terminal runtime layer.
+3. The tRPC `terminal.*` router no longer needs `instanceof DaemonTerminalManager` checks; daemon awareness is centralized in the main-process runtime/provider layer.
 4. The renderer terminal component remains correct but is easier to reason about because backend-agnostic “session initialization” and “stream event handling” logic is extracted into small, testable helpers rather than being interleaved with UI rendering.
 
 
@@ -84,26 +90,34 @@ Pane ID (`paneId`): a stable identifier for a terminal pane in the renderer’s 
 
 Backend session ID (`backendSessionId`): an identifier assigned by the backend for the running session. For local backends, this may continue to equal `paneId`, but future backends (cloud/multi-device) should be free to assign their own IDs and map multiple panes/clients to the same backend session.
 
+Client ID (`clientId`): a stable identifier for the viewer/client instance attaching to sessions. This is required for multi-device and also maps cleanly to how the daemon protocol already works (it ties a client’s control + stream sockets together).
+
+Attachment ID (`attachmentId`): an ephemeral identifier for a specific attachment/subscription of a client to a session (a handle). This makes detach idempotent and is the cleanest path to supporting multiple panes viewing the same backend session.
+
+Event cursor (`eventId` / `cursor`): a monotonic per-session counter used to support bounded replay for late subscribers (“subscribe since cursor”). This prevents the “late subscriber misses early output” class of bugs without requiring UI-level correctness buffering.
+
 Terminal session: the running PTY process and its terminal emulator state.
 
 Warm attach: reconnecting to a still-running session (daemon still has the PTY).
 
 Cold restore: restoring scrollback from disk after an unclean shutdown or daemon session loss, before starting a new shell.
 
-Terminal runtime: a backend-agnostic surface (sessions/workspaces/events + capabilities) that callers use without knowing the implementation (local in-process, local daemon, cloud/SSH later).
+Terminal runtime: a backend-agnostic surface (session ops + events + capabilities) that callers use without knowing the implementation (local in-process, local daemon, cloud/SSH later).
 
-Terminal runtime registry: a process-scoped module in `apps/desktop/src/main/lib/terminal/` that selects the correct runtime for a given workspace/session and ensures runtimes are cached so we don’t multiply event listeners or backend connections.
+Workspace runtime (provider): a workspace-scoped boundary that can supply terminal IO, “changes/files”, and agent lifecycle events. Cloud terminals require this broader abstraction if we want to preserve the current UX.
+
+Workspace runtime registry: a process-scoped module in `apps/desktop/src/main/lib/workspace-runtime/` that selects the correct runtime/provider for a given workspace and caches instances so we don’t multiply event listeners or backend connections.
 
 Capabilities: optional features that exist only for some backends (for example “list/manage persistent sessions”). Callers should not use `instanceof` checks. Capability presence must be represented structurally (for example `management: null` when unavailable) and via explicit capability flags, so “unsupported” cannot be confused with “success”.
 
-Workspace provider / runtime: a workspace-scoped backend boundary that can supply terminal IO, agent lifecycle events, and “changes/files” operations for either local worktrees or cloud workspaces. This plan focuses on the terminal portion, but the boundary should be compatible with being embedded in a provider later.
+Note: this plan focuses on the terminal portion first, but it intentionally introduces the provider boundary now to avoid creating parallel “runtime registries” for terminals vs changes/files/agentEvents later.
 
 
 ## Non-Goals
 
 This refactor is intentionally conservative to avoid regressions:
 
-1. No protocol redesign between main and terminal-host.
+1. No large protocol redesign between main and terminal-host. Additive fields (typed error codes, cursors/watermarks, capability bits) are acceptable if they preserve backwards compatibility.
 2. No behavioral change to cold restore, attach scheduling, warm set mounting, or stream lifecycle.
 3. No implementation of cloud terminals in this PR. The plan only ensures the abstraction boundary is compatible with adding a cloud backend later.
 
@@ -114,6 +128,7 @@ This refactor is intentionally conservative to avoid regressions:
 2. The terminal persistence setting (`settings.terminalPersistence`) is treated as “requires restart” today; we keep that behavior for this refactor.
 3. tRPC subscriptions must use `observable` (per `apps/desktop/AGENTS.md`); we will not introduce generator-based subscriptions.
 4. The most important regression to prevent is the “listeners=0” cold-restore failure mode; specifically, the `terminal.stream` subscription must not complete on exit.
+   - This applies to `streamV2` as well; session exit is a state transition, not stream completion.
 
 
 ## Future Backend: Remote Runner / Cloud Terminals
@@ -131,7 +146,7 @@ The cloud workspace plan (`docs/CLOUD_WORKSPACE_PLAN.md`) makes a few things exp
 
 ### What’s local-only today (current coupling)
 
-1. **Terminal IO keys by `paneId` (client identity):** `terminal.createOrAttach`, `terminal.write`, and `terminal.stream` treat `paneId` as the stable session key (`apps/desktop/src/lib/trpc/routers/terminal/terminal.ts`).
+1. **Terminal IO keys by `paneId` (client identity):** today `terminal.createOrAttach`, `terminal.write`, and `terminal.stream` treat `paneId` as the stable session key (`apps/desktop/src/lib/trpc/routers/terminal/terminal.ts`). This rewrite moves the boundary to `{ backendSessionId, clientId, attachmentId }` (via `streamV2`) so multi-device/cloud doesn’t require reworking every callsite later.
 2. **Agent lifecycle events assume localhost hooks:** terminal env injects `SUPERSET_*` and `SUPERSET_PORT` (`apps/desktop/src/main/lib/terminal/env.ts`), and the notify hook script `curl`s `http://127.0.0.1:$SUPERSET_PORT/hook/complete` (`apps/desktop/src/main/lib/agent-setup/templates/notify-hook.template.sh`). This cannot work from a remote runner.
 3. **“Changes” assumes local worktree filesystem:** git status/diff/staging/commit/push/pull operate against a local `worktreePath` using `simple-git`, and file reads/writes are guarded by secure path validation (`apps/desktop/src/lib/trpc/routers/changes/*`).
 
@@ -139,7 +154,7 @@ The cloud workspace plan (`docs/CLOUD_WORKSPACE_PLAN.md`) makes a few things exp
 
 1. **Backend-agnostic event delivery:** `TerminalEventSource.subscribe…() => unsubscribe` is compatible with WebSocket/SSE backends and avoids leaking Node `EventEmitter` semantics.
 2. **Capabilities over “mode strings”:** cloud backends can expose a capability surface without introducing a new `"cloud"` mode string that bleeds into callers.
-3. **Identity decoupling is planned:** Milestone 7 (cloud readiness) introduces `backendSessionId`, which is required for cloud (server-assigned IDs, multi-device access).
+3. **Identity decoupling is planned:** Milestone 4 introduces `backendSessionId` + `clientId` + `attachmentId`, which are required for cloud (server-assigned IDs, multi-device access).
 
 ### The key realization: cloud terminals need a Workspace Runtime, not just a Terminal Runtime
 
@@ -150,7 +165,7 @@ A remote runner cannot be “just a terminal backend” if we want to preserve t
 3. **git + files:** status/diff/staging/commit/push/pull + safe file read/write (or an explicit sync layer)
 4. **sync (if local stays canonical):** bidirectional worktree synchronization when execution happens remotely
 
-The `TerminalRuntime` abstraction created in this plan should become one *component* of a broader “WorkspaceRuntime” concept as cloud work gets closer.
+The `TerminalRuntime` abstraction created in this plan is one component of the broader `WorkspaceRuntime` provider boundary.
 
 ### Preserving “agent interactions” in a remote runner world
 
@@ -181,9 +196,11 @@ This decision materially changes the scope and correctness model of cloud termin
 
 ## Open Questions
 
-1. Naming: should the main-process entry point be `getTerminalRuntimeRegistry()` (terminal-only) or `getWorkspaceProviderRegistry()` (terminal + future agentEvents/changes/files)? (This plan assumes `getTerminalRuntimeRegistry()` now, and we can later embed it inside a workspace provider registry without changing the router/UI contracts.)
-2. Should we keep the existing tRPC endpoint names (`terminal.listDaemonSessions`, `terminal.killAllDaemonSessions`, etc.) for backwards compatibility in the renderer? (This plan assumes “yes” to minimize churn and risk.)
-3. Provider selection: how do we decide whether a workspace uses the local terminal runtime vs a cloud/SSH runtime? (Expected: based on workspace metadata such as `cloudWorkspaceId` / workspace type, not on UI state.)
+1. **Multi-attach semantics:** do we want to allow multiple panes (or multiple devices) to attach to the same `backendSessionId` concurrently? If yes, we must make `clientId` + `attachmentId` first-class and define what “detach” means (viewer gone, not session stopped).
+2. **Replay window defaults:** what bounded replay do we want to guarantee for late subscribers (events count + bytes)? (Local can start small; cloud may offer larger server-side replay.)
+3. **Cloud terminal transport:** when cloud arrives, is the terminal data plane SSH-only, an authenticated WebSocket proxy, or a runner-native protocol? (This affects where replay/buffering lives and what connection/auth events look like.)
+4. **Provider selection:** how do we decide whether a workspace uses the local provider vs a cloud/SSH provider? (Expected: workspace metadata such as `cloudWorkspaceId` / workspace type, not UI state.)
+5. **tRPC compatibility:** do we keep legacy endpoint names like `listDaemonSessions` (yes) and add `*V2` endpoints for identity/cursor work, or do we accept a coordinated renderer+router update to evolve existing endpoints?
 
 
 ## Plan of Work
@@ -198,16 +215,22 @@ This section is illustrative. It shows the intended file layout, key types, and 
 
 ### File Tree (Proposed)
 
+    apps/desktop/src/main/lib/workspace-runtime/
+      index.ts                         # exports getWorkspaceRuntimeRegistry()
+      registry.ts                      # per-workspace selection + caching (process-scoped registry)
+      types.ts                         # WorkspaceRuntime contract + capability flags
+      local.ts                         # local implementation (terminal + future changes/files/agentEvents)
+      cloud.ts                         # (future) remote implementation skeleton (NOT_IMPLEMENTED)
+
     apps/desktop/src/main/lib/terminal/
-      index.ts                         # exports getTerminalRuntimeRegistry()
-      runtime-registry.ts               # per-workspace selection + caching (process-scoped registry)
-      runtime.ts                        # TerminalRuntime adapters/types (backend-agnostic surface)
+      runtime.ts                        # TerminalRuntime contract + adapters (backend-agnostic surface)
       manager.ts                        # in-process backend (existing)
       daemon-manager.ts                 # daemon backend (existing)
+      terminal-history.ts               # history persistence (existing)
       types.ts                          # existing shared terminal types (CreateSessionParams, SessionResult, events)
 
     apps/desktop/src/lib/trpc/routers/terminal/
-      terminal.ts                       # uses getTerminalRuntimeRegistry(); no instanceof checks
+      terminal.ts                       # uses getWorkspaceRuntimeRegistry(); no instanceof checks
       terminal.stream.test.ts           # stream invariants (exit does not complete)
 
     apps/desktop/src/renderer/.../Terminal/
@@ -220,29 +243,121 @@ This section is illustrative. It shows the intended file layout, key types, and 
         useTerminalConnection.ts         # tRPC mutations (existing)
 
 
-### Terminal Runtime Types (Main Process)
+### Identity + Lifecycle (State Machines)
 
-The goal is to stop encoding backend choice as a “mode string” that callers branch on. Callers should see capabilities and nullable management objects instead.
+The plan relies on **separating session lifecycle from subscription lifecycle**. This is the core invariant behind the “stream must not complete on exit” rule, and it becomes even more important for cloud/multi-device.
+
+Session lifecycle (backend truth; per `backendSessionId`):
+
+1. `spawning` (optional; cloud or tmux restore)
+2. `running`
+3. `exited` (PTY exited; session state remains queryable/attachable depending on backend semantics)
+4. `terminated` (explicitly killed or deleted; no longer attachable)
+
+Stream/subscription lifecycle (viewer truth; per `attachmentId`):
+
+1. `subscribed` → `live` (receiving events)
+2. `disconnected` (transport down; may reconnect; session may still be running)
+3. `unsubscribed` (the only terminal stream completion trigger — client disposed)
+
+Rule: **session exit must never transition the stream to “unsubscribed/completed”.** Exit is a state transition delivered as an event (and/or reflected via attach metadata), but the subscription remains open until the client explicitly unsubscribes.
+
+
+### Workspace Runtime Types (Main Process)
+
+The goal is to stop encoding backend choice as a “mode string” that callers branch on. Callers should see:
+
+1. A workspace-scoped provider (`WorkspaceRuntime`) selected by a registry in main.
+2. Provider-neutral capability flags + nullable capability objects (no `instanceof` branching outside the provider boundary).
+3. Explicit identities and lifecycle semantics that are compatible with multi-device/cloud.
+
+    export type WorkspaceRuntimeId = string;
+
+    export interface WorkspaceRuntimeRegistry {
+      getForWorkspaceId(workspaceId: string): WorkspaceRuntime;
+
+      // Transitional: used only by legacy/global endpoints (settings screens).
+      // Do not use this for per-session routing.
+      getDefault(): WorkspaceRuntime;
+    }
+
+    export interface WorkspaceRuntime {
+      id: WorkspaceRuntimeId;
+      terminal: TerminalRuntime;
+      // Future: changes/files/agentEvents become part of this provider boundary.
+      // Keep these as stubs until cloud work demands them; avoid creating parallel registries.
+      capabilities: {
+        terminal: TerminalCapabilities;
+        // changes/files/agentEvents capability flags will be added here later.
+      };
+    }
+
+Terminal identities (first-class in contracts):
+
+    export type TerminalClientId = string;
+    export type TerminalAttachmentId = string;
+    export type TerminalEventId = number; // monotonic per session (cursor)
+
+    export type TerminalErrorCode =
+      | "SESSION_NOT_FOUND"
+      | "WRITE_QUEUE_FULL"
+      | "WRITE_FAILED"
+      | "PTY_NOT_SPAWNED"
+      | "BACKEND_UNAVAILABLE"
+      | "PROTOCOL_MISMATCH"
+      | "REPLAY_UNAVAILABLE"
+      | "NOT_IMPLEMENTED";
+
+Terminal capabilities and management:
 
     export interface TerminalCapabilities {
-      /** Sessions can survive app restarts */
-      persistent: boolean;
-      /** Backend supports cold restore (disk-backed or otherwise) */
-      coldRestore: boolean;
-      /** Sessions can be managed remotely (future: cloud terminals) */
-      remoteManagement: boolean;
+      persistent: boolean;          // sessions can survive app restarts
+      coldRestore: boolean;         // cold restore is supported
+      replay: boolean;              // stream supports bounded replay via `since` cursor
+      multiAttach: boolean;         // multiple attachments can view one backend session
+      remoteManagement: boolean;    // sessions can be managed remotely (future: cloud)
+    }
+
+    export interface TerminalManagement {
+      listSessions(): Promise<ListSessionsResponse>;
+      killAllSessions(): Promise<void>;
+      resetHistoryPersistence(): Promise<void>;
+    }
+
+Terminal runtime surface:
+
+    export interface CreateOrAttachResult extends SessionResult {
+      backendSessionId: string;
+      clientId: TerminalClientId;
+      attachmentId: TerminalAttachmentId;
+      /**
+       * Watermark cursor: the snapshot/initial state returned by createOrAttach
+       * includes all events up to (and including) this cursor.
+       * Clients should subscribe with `since = watermark + 1` to avoid gaps.
+       */
+      watermarkEventId: TerminalEventId;
     }
 
     export interface TerminalSessionOperations {
       // Core lifecycle (normalized to async, even if an implementation is sync today)
-      createOrAttach(params: CreateSessionParams): Promise<SessionResult>;
-      write(params: { paneId: string; data: string }): Promise<void>;
-      resize(params: { paneId: string; cols: number; rows: number; seq?: number }): Promise<void>;
-      signal(params: { paneId: string; signal?: string }): Promise<void>;
-      kill(params: { paneId: string }): Promise<void>;
-      detach(params: { paneId: string; viewportY?: number }): Promise<void>;
-      clearScrollback(params: { paneId: string }): Promise<void>;
-      ackColdRestore(params: { paneId: string }): Promise<void>;
+      createOrAttach(params: CreateSessionParams & {
+        clientId: TerminalClientId;
+        attachmentId: TerminalAttachmentId;
+      }): Promise<CreateOrAttachResult>;
+
+      write(params: { backendSessionId: string; data: string }): Promise<void>;
+      resize(params: { backendSessionId: string; cols: number; rows: number; seq?: number }): Promise<void>;
+      signal(params: { backendSessionId: string; signal?: string }): Promise<void>;
+      kill(params: { backendSessionId: string }): Promise<void>;
+
+      detach(params: {
+        backendSessionId: string;
+        attachmentId: TerminalAttachmentId;
+        viewportY?: number;
+      }): Promise<void>;
+
+      clearScrollback(params: { backendSessionId: string }): Promise<void>;
+      ackColdRestore(params: { backendSessionId: string }): Promise<void>;
     }
 
     export interface TerminalWorkspaceOperations {
@@ -251,38 +366,36 @@ The goal is to stop encoding backend choice as a “mode string” that callers 
       refreshPromptsForWorkspace(workspaceId: string): Promise<void>;
     }
 
-    export type TerminalPaneEvent =
-      | { type: "data"; data: string }
-      | { type: "exit"; exitCode: number; signal?: number }
-      | { type: "disconnect"; reason: string }
-      | { type: "error"; error: string; code?: string };
+    export type TerminalSessionEvent =
+      | { type: "data"; backendSessionId: string; eventId: TerminalEventId; data: string }
+      | { type: "exit"; backendSessionId: string; eventId: TerminalEventId; exitCode: number; signal?: number }
+      | { type: "disconnect"; backendSessionId: string; eventId: TerminalEventId; reason: string }
+      | { type: "error"; backendSessionId: string; eventId: TerminalEventId; error: string; code?: TerminalErrorCode }
+      | { type: "connection_state"; backendSessionId: string; eventId: TerminalEventId; state: "connected" | "disconnected" | "reconnecting"; reason?: string }
+      | { type: "auth_state"; backendSessionId: string; eventId: TerminalEventId; state: "valid" | "expired"; reauthUrl?: string };
 
     export interface TerminalEventSource {
-      // Backend-agnostic event subscription API (do not expose Node EventEmitter semantics)
-      subscribePane(params: {
-        paneId: string;
-        onEvent: (event: TerminalPaneEvent) => void;
+      /**
+       * Backend-agnostic subscription API (do not expose Node EventEmitter semantics).
+       * Must NOT complete on `exit`.
+       *
+       * Replay contract:
+       * - If `since` is provided and the backend supports replay, it should replay a bounded window of events.
+       * - If the replay window cannot satisfy `since`, the backend should still subscribe live but should
+       *   surface `REPLAY_UNAVAILABLE` explicitly (error event or a typed meta event) so the UI can rely on snapshot.
+       */
+      subscribeSession(params: {
+        backendSessionId: string;
+        clientId: TerminalClientId;
+        attachmentId: TerminalAttachmentId;
+        since?: TerminalEventId;
+        onEvent: (event: TerminalSessionEvent) => void;
       }): () => void;
 
       // Low-volume lifecycle events used for correctness when panes are unmounted.
       subscribeTerminalExit(params: {
-        onExit: (event: { paneId: string; exitCode: number; signal?: number }) => void;
+        onExit: (event: { backendSessionId: string; exitCode: number; signal?: number }) => void;
       }): () => void;
-    }
-
-    export interface TerminalManagement {
-      listSessions(): Promise<ListSessionsResponse>;
-      forceKillAll(): Promise<void>;
-      resetHistoryPersistence(): Promise<void>;
-    }
-
-    export interface TerminalRuntimeRegistry {
-      // Runtime selection should be workspace-scoped (local vs cloud later).
-      getForWorkspaceId(workspaceId: string): TerminalRuntime;
-      // Transitional: allow lookups by pane until backendSessionId is fully introduced.
-      getForPaneId(paneId: string): TerminalRuntime;
-      // For legacy/global endpoints that aren't workspace-scoped yet.
-      getDefault(): TerminalRuntime;
     }
 
     export interface TerminalRuntime {
@@ -293,123 +406,54 @@ The goal is to stop encoding backend choice as a “mode string” that callers 
       capabilities: TerminalCapabilities;
     }
 
-`getTerminalRuntimeRegistry()` must return the same registry instance across the process lifetime, and the registry must return stable runtime objects (at least stable `events`/listener wiring) so we do not multiply event listeners or backend connections.
+Provider boundary invariants:
 
-    let cachedRegistry: TerminalRuntimeRegistry | null = null;
-    const paneToRuntime = new Map<string, TerminalRuntime>();
-    // Implementation detail: keep this mapping updated from createOrAttach/detach/kill
-    // so `getForPaneId()` can route stream subscriptions correctly until backendSessionId.
-
-    export function getTerminalRuntimeRegistry(): TerminalRuntimeRegistry {
-      if (cachedRegistry) return cachedRegistry;
-
-      const backend = getActiveTerminalManager(); // existing selection logic (cached by “requires restart”)
-      const daemonManager = backend instanceof DaemonTerminalManager ? backend : null;
-
-      const localRuntime: TerminalRuntime = {
-        sessions: {
-          createOrAttach: (params) => backend.createOrAttach(params),
-          write: async (params) => backend.write(params),
-          resize: async (params) => backend.resize(params),
-          signal: async (params) => backend.signal(params),
-          kill: (params) => backend.kill(params),
-          detach: async (params) => backend.detach(params),
-          clearScrollback: async (params) => backend.clearScrollback(params),
-          ackColdRestore: async (params) => backend.ackColdRestore(params.paneId),
-        },
-        workspaces: {
-          killByWorkspaceId: (workspaceId) => backend.killByWorkspaceId(workspaceId),
-          getSessionCountByWorkspaceId: (workspaceId) =>
-            backend.getSessionCountByWorkspaceId(workspaceId),
-          refreshPromptsForWorkspace: async (workspaceId) =>
-            backend.refreshPromptsForWorkspace(workspaceId),
-        },
-        events: {
-          subscribePane: ({ paneId, onEvent }) => {
-            const onData = (data: string) => onEvent({ type: "data", data });
-            const onExit = (exitCode: number, signal?: number) =>
-              onEvent({ type: "exit", exitCode, signal });
-            const onDisconnect = (reason: string) =>
-              onEvent({ type: "disconnect", reason });
-            const onError = (payload: { error: string; code?: string }) =>
-              onEvent({ type: "error", error: payload.error, code: payload.code });
-
-            backend.on(`data:${paneId}`, onData);
-            backend.on(`exit:${paneId}`, onExit);
-            backend.on(`disconnect:${paneId}`, onDisconnect);
-            backend.on(`error:${paneId}`, onError);
-
-            return () => {
-              backend.off(`data:${paneId}`, onData);
-              backend.off(`exit:${paneId}`, onExit);
-              backend.off(`disconnect:${paneId}`, onDisconnect);
-              backend.off(`error:${paneId}`, onError);
-            };
-          },
-          subscribeTerminalExit: ({ onExit }) => {
-            backend.on("terminalExit", onExit);
-            return () => backend.off("terminalExit", onExit);
-          },
-        },
-        management: daemonManager
-          ? {
-              listSessions: () => daemonManager.listDaemonSessions(),
-              forceKillAll: () => daemonManager.forceKillAll(),
-              resetHistoryPersistence: () =>
-                daemonManager.resetHistoryPersistence(),
-            }
-          : null,
-        capabilities: {
-          persistent: daemonManager !== null,
-          coldRestore: daemonManager !== null,
-          remoteManagement: false,
-        },
-      };
-
-      cachedRegistry = {
-        getForWorkspaceId: (_workspaceId) => {
-          // Today: all workspaces use the local runtime. Future: cloud/SSH selection here.
-          return localRuntime;
-        },
-        getForPaneId: (paneId) => paneToRuntime.get(paneId) ?? localRuntime,
-        getDefault: () => localRuntime,
-      };
-
-      return cachedRegistry;
-    }
-
-Notes:
-
-1. The `backend instanceof DaemonTerminalManager` check is allowed here because this module is the only backend-selection boundary; the tRPC router and UI must not need it.
-2. If management capability exists but a call fails (daemon unreachable, request fails), we propagate the error. We do not convert failures into “persistence disabled” states.
-3. `runtime.management !== null` indicates the persistent backend is configured/active, not that it is healthy “right now”. If the daemon process crashes or the socket drops mid-session, operations may throw and the backend emits existing per-pane `disconnect:*` / `error:*` events. The runtime does not dynamically flip `management` to `null`.
+1. The registry must be process-scoped and cached (stable runtime objects; stable event wiring).
+2. `management !== null` indicates feature availability, not “health right now”; mid-session disconnects surface as events/errors.
+3. Backends must not require string-matching to classify errors. Normalize to `TerminalErrorCode` at the boundary and propagate codes unchanged through tRPC.
+4. Backends should enforce resize sequencing (drop stale `seq`); the renderer already provides `seq` today.
+5. Replay correctness belongs at the backend/provider boundary (bounded ring buffer + cursor), not in `Terminal.tsx`.
 
 
 ### tRPC Router Shape (No Daemon Type Checks)
 
-The terminal router captures the **runtime registry** once when the router is created. Each procedure then selects the correct runtime (local vs cloud later) without using `instanceof` checks.
+The terminal router captures the **workspace runtime registry** once when the router is created. Each procedure then selects the correct provider (local vs cloud later) without using `instanceof` checks.
 
 Key rule: capture the registry once, but do not assume there is only one runtime for the entire process forever.
 
     export const createTerminalRouter = () => {
-      const registry = getTerminalRuntimeRegistry();
+      const registry = getWorkspaceRuntimeRegistry();
 
       return router({
         createOrAttach: publicProcedure
           .input(...)
-          .mutation(async ({ input }) =>
-            registry.getForWorkspaceId(input.workspaceId).sessions.createOrAttach(input),
-          ),
+          .mutation(async ({ input }) => {
+            const workspace = registry.getForWorkspaceId(input.workspaceId);
+            return workspace.terminal.sessions.createOrAttach(input);
+          }),
 
-        stream: publicProcedure
-          .input(z.string())
-          .subscription(({ input: paneId }) =>
-            observable<TerminalPaneEvent>((emit) => {
+        // Prefer a V2 stream contract that is explicit about identity + replay.
+        // (Keep `stream(paneId)` temporarily only if needed for compatibility.)
+        streamV2: publicProcedure
+          .input(
+            z.object({
+              workspaceId: z.string(),
+              backendSessionId: z.string(),
+              clientId: z.string(),
+              attachmentId: z.string(),
+              since: z.number().optional(),
+            }),
+          )
+          .subscription(({ input }) =>
+            observable<TerminalSessionEvent>((emit) => {
               // IMPORTANT: do not complete on exit.
               // Exit is a state transition and must not terminate the subscription.
-              const runtime = registry.getForPaneId(paneId);
-              return runtime.events.subscribePane({
-                paneId,
+              const workspace = registry.getForWorkspaceId(input.workspaceId);
+              return workspace.terminal.events.subscribeSession({
+                backendSessionId: input.backendSessionId,
+                clientId: input.clientId,
+                attachmentId: input.attachmentId,
+                since: input.since,
                 onEvent: (event) => emit.next(event),
               });
             }),
@@ -417,7 +461,7 @@ Key rule: capture the registry once, but do not assume there is only one runtime
 
         listDaemonSessions: publicProcedure.query(async () => {
           // Note: endpoint name kept for backwards compatibility; capability is provider-neutral.
-          const runtime = registry.getDefault();
+          const runtime = registry.getDefault().terminal;
           if (!runtime.management) return { daemonModeEnabled: false, sessions: [] };
           const response = await runtime.management.listSessions();
           return { daemonModeEnabled: true, sessions: response.sessions };
@@ -470,11 +514,12 @@ The renderer still needs to implement UI behaviors (cold restore overlay, retry 
 
     export function useTerminalStream(params: {
       paneId: string;
+      backendSessionId: string;
       onEvent: (event: TerminalStreamEvent) => void;
       isReady: () => boolean;
       onBufferFlush: (events: TerminalStreamEvent[]) => void;
     }) {
-      // subscribe via trpc.terminal.stream.useSubscription
+      // subscribe via trpc.terminal.streamV2.useSubscription (with since cursor when available)
       // queue events while !isReady(), then flush deterministically when ready
     }
 
@@ -497,11 +542,11 @@ Main call flow (today and after refactor; the difference is where switching happ
 
     Renderer (Terminal.tsx + helpers)
       |
-      | trpc.terminal.createOrAttach / trpc.terminal.stream
+      | trpc.terminal.createOrAttach / trpc.terminal.streamV2
       v
     Electron Main (tRPC router)
       |
-      | getTerminalRuntimeRegistry().getForWorkspaceId(...)  (no backend checks in router)
+      | getWorkspaceRuntimeRegistry().getForWorkspaceId(...)  (no backend checks in router)
       v
     Terminal Backend (in-process OR daemon-manager)
       |
@@ -518,117 +563,144 @@ Renderer composition after Milestone 6c:
       └─ applyTerminalInitPlan()      (rehydrate → snapshot or alt-screen redraw → mark ready)
 
 
-### Milestone 1: Establish a Backend Contract and Invariants
+### Milestone 1: Contract + Invariants (WorkspaceRuntime)
 
-This milestone documents and codifies the contract we must preserve during the refactor. At completion, a reader can point to a single place in the codebase that defines “what the terminal backend must do”, and a single set of invariants that all implementations must satisfy.
+This milestone documents and codifies the contract we must preserve during the refactor, and makes identity + lifecycle explicit. At completion, a reader can point to a single place in the codebase that defines:
+
+- what the provider boundary is (`WorkspaceRuntime`)
+- what a terminal backend must do (`TerminalRuntime`)
+- what identities exist (`paneId`, `workspaceId`, `backendSessionId`, `clientId`, `attachmentId`)
+- what lifecycle/state machines exist (session vs subscription)
+- what errors look like (typed codes, no string matching)
 
 Scope:
 
-1. Identify the backend API surface currently used by callers outside `apps/desktop/src/main/lib/terminal/` by searching for usages of:
+1. Inventory current backend call sites and implicit contracts:
    - `getActiveTerminalManager()`
-   - events `data:${paneId}`, `exit:${paneId}`, `disconnect:${paneId}`, `error:${paneId}`, and `terminalExit`
-2. Write an explicit “terminal backend contract” type in `apps/desktop/src/main/lib/terminal/` (likely in `apps/desktop/src/main/lib/terminal/types.ts` or `runtime.ts`). This contract should include:
-   - `TerminalSessionOperations` for per-pane session lifecycle (create/attach/write/resize/signal/kill/detach/clearScrollback, cold restore ack).
-   - `TerminalWorkspaceOperations` for workspace-scoped helpers used by other routers (killByWorkspaceId, getSessionCountByWorkspaceId, refreshPromptsForWorkspace).
-   - `TerminalEventSource` for event delivery using a backend-agnostic `subscribe...() => unsubscribe` API (no Node EventEmitter semantics in the contract).
-   - A shared event union type (for example `TerminalPaneEvent`) that matches the tRPC stream payload shapes (`data`, `exit`, `disconnect`, `error`).
-3. Record invariants in code comments near the contract:
-   - `terminal.stream` must not complete on `exit`.
-   - `exit` is a state transition, not an end-of-stream.
-   - The output stream lifecycle is separate from session lifecycle: the stream completes only when the client unsubscribes (dispose), not when a session exits.
-   - Detach/reattach must preserve scroll restoration behavior where supported (currently: pass `viewportY` on detach and restore it on the next attach; see upstream PR #698).
-   - All backend operations must be normalized to async (Promise-returning) at the contract boundary, even if an implementation currently has a sync method (example: `clearScrollback`).
-   - Event delivery must be expressed via `subscribe` APIs at the boundary. Backends may use Node EventEmitter internally today, but callers must not depend on EventEmitter semantics.
-   - The terminal event source must be owned by the backend instance; the runtime facade must not introduce a shared/global EventEmitter or re-emit events in a way that can cause cross-talk or duplicate listeners.
+   - event names `data:*`, `exit:*`, `disconnect:*`, `error:*`, and `terminalExit`
+   - any string-matching of errors (example: “session not found” heuristics)
+2. Introduce provider boundary types in main:
+   - `apps/desktop/src/main/lib/workspace-runtime/types.ts` for `WorkspaceRuntime` and registry types
+   - `apps/desktop/src/main/lib/terminal/runtime.ts` for `TerminalRuntime` contract types
+3. Codify invariants as comments adjacent to the contract:
+   - stream must not complete on `exit` (completion only on unsubscribe)
+   - exit is a state transition; must arrive after all data events
+   - detach/reattach scroll restoration (`viewportY`) is preserved (PR #698 behavior)
+   - all operations are Promise-returning at the boundary (normalize sync to async)
+   - errors are normalized to typed `TerminalErrorCode` (no string matching)
+   - replay semantics are explicit (`eventId` cursor + bounded replay)
 
 Acceptance:
 
-1. A developer can find the contract definition in one place and see the invariants described in plain language.
+1. A developer can find the contract definition in one place and understand identity + lifecycle semantics.
 2. No runtime behavior changes yet.
 
 
-### Milestone 2: Implement TerminalRuntime Registry + Capabilities
+### Milestone 2: WorkspaceRuntime Registry + Capabilities
 
-This milestone introduces a single runtime **registry** entry point that owns backend selection and exposes backend-specific capabilities in a consistent, no-branching way to callers.
-
-Approach:
-
-1. Create a small facade in `apps/desktop/src/main/lib/terminal/` (recommended: `apps/desktop/src/main/lib/terminal/runtime-registry.ts`) that exports:
-   - `getTerminalRuntimeRegistry(): TerminalRuntimeRegistry`
-2. `TerminalRuntime` should have three parts:
-   - `sessions: TerminalSessionOperations` (per-pane session lifecycle operations; normalized to async)
-   - `workspaces: TerminalWorkspaceOperations` (workspace-scoped helpers; normalized to async)
-   - `events: TerminalEventSource` (backend-agnostic subscribe API for per-pane events and `terminalExit`)
-   - `management: TerminalManagement | null` (nullable capability object; `null` when persistence/session management is not supported/active)
-   - `capabilities: { persistent: boolean; coldRestore: boolean; remoteManagement: boolean }` (feature flags that do not encode implementation details and leave room for a future cloud backend)
-3. Do not use “no-op admin methods”. The absence of management capability must be represented structurally (`management: null`) so callers cannot confuse “unsupported” with “success”.
-4. Ensure the registry is process-scoped and constructed once. The tRPC router should capture the registry once at router construction time (not per request) to avoid multiplying event listeners or backend client connections.
-5. Export the registry from `apps/desktop/src/main/lib/terminal/index.ts` as the only supported way to reach backend-specific functionality.
-6. Clarify daemon mid-session failure semantics:
-   - `runtime.management !== null` reflects feature/mode availability, not daemon “health right now”.
-   - If the daemon disconnects, operations may throw and per-pane disconnect/error events are emitted; the runtime does not dynamically flip `management` to `null`.
-
-Acceptance:
-
-1. The runtime and capabilities surface is defined in `apps/desktop/src/main/lib/terminal/` and is the only code that knows which backend is active.
-2. In non-daemon mode, `runtime.management` is `null` and callers must handle that explicitly; unsupported operations are not silently treated as success.
-
-
-### Milestone 3: Migrate tRPC `terminal.*` Router to the Runtime
-
-This milestone removes daemon branching from the tRPC router by routing all terminal work through `getTerminalRuntimeRegistry()`.
+This milestone introduces a process-scoped **workspace runtime registry** entry point that owns backend selection and exposes provider-neutral capabilities in a consistent, no-branching way to callers.
 
 Scope:
 
-1. Update `apps/desktop/src/lib/trpc/routers/terminal/terminal.ts` to use:
-   - `const registry = getTerminalRuntimeRegistry()` (or equivalent)
-   - For mutations/queries that have `workspaceId` in input, select `const runtime = registry.getForWorkspaceId(input.workspaceId)` (future: local vs cloud).
-   - For `stream` while it is still keyed by `paneId`, select `const runtime = registry.getForPaneId(paneId)` (transitional until `backendSessionId` is fully wired).
-   - Replace `instanceof DaemonTerminalManager` checks with checks on `runtime.management` capability presence.
-   - Use `runtime.events.subscribePane(...)` for the `terminal.stream` subscription implementation (no direct EventEmitter usage in the router).
-2. Update any other main-process call sites that depend on EventEmitter event names (for example `apps/desktop/src/main/windows/main.ts` listening for `terminalExit`) to use `registry.getDefault().events.subscribeTerminalExit(...)` so EventEmitter semantics do not leak beyond the backend boundary.
-3. Preserve the existing endpoint names and response shapes so the renderer does not need behavioral changes:
-   - `listDaemonSessions` returns `{ daemonModeEnabled, sessions }`
-   - `killAllDaemonSessions` returns `{ daemonModeEnabled, killedCount }`
-   - `killDaemonSessionsForWorkspace` returns `{ daemonModeEnabled, killedCount }`
-   - `clearTerminalHistory` returns `{ success: true }` but calls history reset when the management capability is present
-4. Ensure the `stream` subscription continues to use `observable` and continues to not complete on `exit`.
-5. Error semantics must be explicit:
-   - If management capability is absent, return `daemonModeEnabled: false` (UI will show “restart app after enabling persistence” messaging).
-   - If management capability is present but the operation fails (daemon unreachable, request fails), surface the error (do not convert it into `daemonModeEnabled: false`).
+1. Implement `getWorkspaceRuntimeRegistry()` in `apps/desktop/src/main/lib/workspace-runtime/registry.ts`:
+   - cached across process lifetime
+   - returns stable provider instances (stable event wiring)
+2. Implement a `LocalWorkspaceRuntime` (initially only `terminal` is real; other components are stubs):
+   - backend selection is allowed to use `backend instanceof DaemonTerminalManager` internally (provider boundary only)
+   - expose `terminal.management: TerminalManagement | null` (no no-op admin methods)
+3. Implement the “correctness upgrades” at the backend/provider boundary (so the renderer does not have to):
+   - monotonic `eventId` per `backendSessionId`
+   - bounded ring buffer of recent events per session (bytes + frames cap)
+   - `subscribeSession({ since })` best-effort replay from the ring buffer
+   - include `watermarkEventId` in `createOrAttach` responses so the renderer can subscribe without gaps
+4. Normalize errors into `TerminalErrorCode`:
+   - daemon client/host and local backend must return typed codes (stop string-matching in routers/renderers)
+5. Enforce resize sequencing:
+   - honor `resize.seq` in both in-process and daemon implementations; drop stale resizes
 
 Acceptance:
 
-1. No usage of `instanceof DaemonTerminalManager` remains in `apps/desktop/src/lib/trpc/routers/terminal/terminal.ts`.
-2. The renderer does not need to change its API calls.
+1. Provider selection is centralized and callers can only reach it via the workspace runtime registry.
+2. `management === null` correctly represents “unsupported/unavailable”, while real failures propagate as errors.
+3. The terminal event contract supports cursor/replay (even if replay window is initially small).
 
 
-### Milestone 4: Add Regression Coverage for the Abstraction Boundary
+### Milestone 3: tRPC Terminal Router Migration
 
-This milestone makes the new boundary hard to accidentally regress later.
+This milestone removes daemon branching from the tRPC router by routing all terminal work through `getWorkspaceRuntimeRegistry()`.
 
 Scope:
 
-1. Add a unit test that asserts the non-daemon runtime returns `management: null` (capability absent) without requiring daemon availability. This test must not spawn a real daemon.
-2. Keep and/or extend the existing “stream does not complete on exit” regression test in `apps/desktop/src/lib/trpc/routers/terminal/terminal.stream.test.ts`.
-3. If we add any new helper modules, ensure they are covered by at least one focused unit test.
-4. Add a test that ensures admin operations fail loudly on error (for example, simulate a daemon management call throwing and assert the error propagates), so we do not accidentally reintroduce silent “disabled” fallbacks for real failures.
+1. Update `apps/desktop/src/lib/trpc/routers/terminal/terminal.ts` to:
+   - capture `const registry = getWorkspaceRuntimeRegistry()` once at router creation time
+   - select `const terminal = registry.getForWorkspaceId(input.workspaceId).terminal` for all workspace-scoped calls
+   - remove `instanceof DaemonTerminalManager` checks (replace with `terminal.management` and capability flags)
+2. Introduce/implement a V2 stream surface (recommended) that is explicit about identity + replay:
+   - `terminal.streamV2({ workspaceId, backendSessionId, clientId, attachmentId, since? })`
+   - subscription uses `terminal.events.subscribeSession(...)` and must not complete on exit
+   - keep legacy `stream(paneId)` only temporarily if needed for incremental migration
+3. Preserve legacy settings endpoints for session management (`listDaemonSessions`, etc.), but route them through `terminal.management` and propagate errors:
+   - `daemonModeEnabled: false` only when capability is absent
+   - failures when capability is present must throw (do not silently “disable”)
+4. Update other call sites that depended on EventEmitter semantics (example: `terminalExit`) to use `terminal.events.subscribeTerminalExit(...)`.
 
 Acceptance:
 
-1. Tests fail if someone reintroduces daemon-specific branching in the router or reintroduces “complete on exit”.
+1. No daemon branching remains in the terminal router.
+2. tRPC subscriptions remain observable-based and do not complete on exit.
 
 
-### Milestone 5: Manual Verification (High-Coverage, Low Surprises)
+### Milestone 4: Identity + Stream Contract (backendSessionId/clientId)
 
-This milestone uses the existing PR verification matrix (kept in the PR description) and focuses on the specific regressions most likely during a refactor: missing output, stuck exits, incorrect detach behavior, and workspace deletion behavior.
+This milestone pulls forward what used to be “cloud readiness”: it decouples pane identity from backend session identity and makes viewer identity explicit.
 
-Validation should be run both with terminal persistence disabled and enabled.
+Scope:
+
+1. Renderer generates and persists a stable `clientId` (per window/app instance) and a per-pane `attachmentId` (per mount/attach lifecycle).
+2. Extend `createOrAttach` to return:
+   - `backendSessionId` (local may equal `paneId`)
+   - `watermarkEventId` for gap-free subscription
+3. Store `{ paneId -> backendSessionId }` and `{ paneId -> lastSeenEventId }` in renderer state.
+4. Update renderer calls to use backend identity:
+   - write/resize/signal/kill/detach target `backendSessionId`
+   - stream uses `streamV2` with `since = watermarkEventId + 1` initially, then `since = lastSeenEventId + 1` on resubscribe
+5. Define detach/reattach semantics explicitly:
+   - detach unregisters the attachment (viewer gone), not the session
+   - detach is idempotent (safe to call even if session is already exited/terminated)
 
 Acceptance:
 
-1. The matrix items for non-daemon, daemon warm attach, and daemon cold restore all pass.
-2. Reattach scroll restoration passes (detach sends `viewportY`; attach restores it; see upstream PR #698).
+1. The renderer no longer assumes `paneId === sessionId` at the IPC boundary.
+2. Late subscribers do not lose early output (replay + snapshot + watermark semantics).
+
+
+### Milestone 5: Regression Coverage
+
+This milestone makes the boundary hard to accidentally regress and expands verification coverage (automated + manual matrix).
+
+Scope (tests):
+
+1. Keep and/or extend the “stream does not complete on exit” regression test (`terminal.stream.test.ts`).
+2. Add contract/invariant tests for:
+   - exit arrives after all data (ordering)
+   - cold restore + Start Shell does not replay stale exit into the new session
+   - replay cursor semantics (late subscribe sees output; bounded replay emits `REPLAY_UNAVAILABLE` explicitly when needed)
+   - resize sequencing (stale `seq` dropped)
+   - error code propagation (no string matching in router/renderer paths)
+3. Keep the existing capability presence tests (`management: null`) and add a test that “management present but failing throws loudly”.
+
+Scope (manual):
+
+4. Update the PR verification matrix (kept in PR description) to include:
+   - non-daemon: tab switch persistence, resize, paste large, exit/restart, multi-pane
+   - daemon warm attach and cold restore
+   - detach/reattach scroll restoration (`viewportY`)
+   - daemon disconnect/retry overlay (if applicable)
+
+Acceptance:
+
+1. Tests fail if someone reintroduces `emit.complete()` on exit or breaks cursor/replay semantics.
+2. Manual matrix passes with persistence disabled and enabled.
 
 
 ### Milestone 6a: Build a Terminal Init Plan (Renderer)
@@ -657,9 +729,10 @@ Acceptance:
 Scope:
 
 1. Add a small “stream handler” helper (or hook) that owns buffering until ready:
-   - Subscribe to `terminal.stream` and queue incoming events until the terminal is ready, then flush deterministically.
+   - Subscribe to `terminal.streamV2` and queue incoming events until the terminal is ready, then flush deterministically.
    - Keep the important invariant that the subscription does not complete on `exit` (exit is a state transition).
    - Keep the buffering mechanism bounded (by event count or bytes) and drop/compact safely if needed (prefer bounded queues over unbounded arrays).
+   - Note: buffering here is UI-readiness only (layout/restore ordering). Replay correctness belongs at the backend boundary.
 
 Acceptance:
 
@@ -686,25 +759,29 @@ Acceptance:
 2. No Node.js imports are introduced in renderer code as part of this refactor.
 
 
-### Milestone 7 (Cloud Readiness): Introduce `backendSessionId`
+### Milestone 7 (Cloud Readiness): WorkspaceRuntime Skeleton
 
-This milestone is required groundwork for cloud/SSH-style backends: it decouples renderer pane identity (`paneId`) from backend session identity (`backendSessionId`). Complete this before introducing any cloud/SSH provider to avoid reworking the router + renderer contracts again.
+This milestone ensures we are investing in the right direction for remote runners/cloud workspaces. It does not implement cloud terminals, but it makes the seams concrete so that adding a remote provider later does not require reworking router/UI contracts again.
 
 Scope:
 
-1. Extend `createOrAttach` to return `backendSessionId` (for local backends it can equal `paneId`).
-2. Store the mapping `{ paneId -> backendSessionId }` in renderer state and use `backendSessionId` for subsequent lifecycle operations (write/resize/signal/kill/detach and stream subscription), while continuing to key UI state by `paneId`.
-3. Update the runtime registry to route by backend session identity:
-   - Avoid relying on `getForPaneId(...)` as the long-term selection mechanism.
-   - Prefer selecting runtimes by workspace/session IDs (cloud-safe), not by UI pane IDs.
-4. Add lifecycle events needed for cloud-style backends (define the contract even if some implementations are stubs initially):
-   - connection lifecycle: `connectionStateChanged`, `authExpired`
-   - per-operation timeout/retry policy at the boundary (even if implemented as “none” initially)
+1. Implement a `CloudWorkspaceRuntime` skeleton behind the same `WorkspaceRuntime` interface:
+   - returns capability flags that make “unsupported” explicit
+   - all operations throw `NOT_IMPLEMENTED` (or equivalent) with clear error codes
+2. Add provider selection plumbing (stubbed):
+   - selection is driven by workspace metadata (ex: `cloudWorkspaceId`), not UI state
+   - all existing workspaces continue to resolve to `LocalWorkspaceRuntime` in this PR
+3. Ensure the terminal contract includes lifecycle events needed for remote:
+   - connection lifecycle (`connection_state` events)
+   - authentication lifecycle (`auth_state` events)
+4. Add minimal capability negotiation at the provider boundary (not UI branching):
+   - the provider surfaces `terminal.capabilities` (supportsReplay, supportsMultiAttach, etc.)
+   - if the daemon protocol needs additive fields to expose these, keep it additive (no redesign), and gate on protocol version.
 
 Acceptance:
 
-1. The contract no longer implies `paneId === backendSessionId`, but behavior remains identical for local backends.
-2. A future cloud backend can implement the same runtime contract without changing `Terminal.tsx` and the tRPC router again.
+1. A future remote provider can plug into the same registry without new `instanceof` checks in routers or renderer.
+2. The UI can surface “not supported” vs “failed” distinctly via typed error codes and capability presence.
 
 
 ## Validation
@@ -735,11 +812,18 @@ This plan is safe to apply iteratively:
 
 Risk: The runtime registry/adapters change event wiring in a way that causes missed output or duplicate listeners.
 
-Mitigation: Keep the EventEmitter contract unchanged (`data:${paneId}`, `exit:${paneId}`), keep `terminal.stream` semantics unchanged, and use tests + manual matrix to confirm “output still flows after exit/cold restore”.
+Mitigation: Keep event ownership scoped to the provider instance (no shared/global emitters), and gate changes with regression tests that confirm:
+- stream does not complete on exit
+- no duplicate listeners/cross-talk
+- output still flows after exit/cold restore
 
-Risk: Output loss during attach if the stream subscription attaches after early PTY output (race between `createOrAttach` and `terminal.stream` subscribe).
+Risk: Output loss during attach if the stream subscription attaches after early PTY output (race between `createOrAttach` and `streamV2` subscribe).
 
-Mitigation: Preserve the current renderer sequencing (subscription established while the component is mounted, initial state applied from snapshot/scrollback, and stream events queued until ready). During manual QA, include at least one “immediate output” command (example: `echo READY`) and confirm it is visible reliably. If a reproducible loss exists, add a small per-pane ring buffer (bounded bytes) at the backend boundary and flush it to the first subscriber (a “ready/attached handshake”).
+Mitigation: Move replay correctness to the backend boundary (Milestone 2):
+- `createOrAttach` returns `watermarkEventId`
+- renderer subscribes with `since = watermark + 1`
+- provider maintains a bounded ring buffer and replays gaps best-effort
+Renderer buffering remains UI-readiness only (restore ordering).
 
 Risk: Admin capability handling masks real errors (a true daemon failure being reported as “disabled”).
 
@@ -747,7 +831,7 @@ Mitigation: Represent persistence/session management as a nullable capability ob
 
 Risk: A future cloud backend would require different identity mapping than `paneId == sessionId`.
 
-Mitigation: Introduce `backendSessionId` (Milestone 7) so the contract no longer implies `paneId === backendSessionId` (local can keep equality as an implementation detail). The future cloud backend should implement the same contract behind `TerminalRuntime` without changing the renderer again.
+Mitigation: Introduce `backendSessionId` + `clientId` + `attachmentId` (Milestone 4) so the contract no longer implies `paneId === backendSessionId` (local can keep equality as an implementation detail). The future cloud backend should implement the same contract behind the provider boundary without changing the renderer again.
 
 Risk: Process-global runtime assumptions block local + cloud workspaces from coexisting (forcing branching to leak back into routers/UI).
 
@@ -766,33 +850,38 @@ Mitigation: Keep the “stream does not complete on exit” regression test as P
 
 ### Milestone 1
 
-- [ ] Inventory terminal backend call sites and events
-- [ ] Write TerminalBackend contract type and invariants comment
+- [ ] Inventory terminal backend call sites, events, and error string matching
+- [ ] Define `WorkspaceRuntime` + `TerminalRuntime` contracts (identities, lifecycle, error codes, replay)
 - [ ] Confirm no behavior change; run `bun run lint`
 
 ### Milestone 2
 
-- [ ] Implement `getTerminalRuntimeRegistry()` in `apps/desktop/src/main/lib/terminal/`
-- [ ] Implement session management as `management: TerminalManagement | null` (no no-op admin methods)
+- [ ] Implement `getWorkspaceRuntimeRegistry()` + `LocalWorkspaceRuntime` in `apps/desktop/src/main/lib/workspace-runtime/`
+- [ ] Implement session management as `terminal.management: TerminalManagement | null` (no no-op admin methods)
+- [ ] Add event cursor + bounded replay ring buffer at provider boundary
+- [ ] Normalize error codes (`TerminalErrorCode`) and enforce resize sequencing (`seq`)
 - [ ] Run `bun run typecheck --filter=@superset/desktop`
 
 ### Milestone 3
 
-- [ ] Migrate `apps/desktop/src/lib/trpc/routers/terminal/terminal.ts` to runtime registry (`getTerminalRuntimeRegistry()`)
+- [ ] Migrate `apps/desktop/src/lib/trpc/routers/terminal/terminal.ts` to `getWorkspaceRuntimeRegistry()`
 - [ ] Remove `instanceof DaemonTerminalManager` checks
+- [ ] Add `terminal.streamV2` (identity + since cursor) and migrate router internals to `subscribeSession`
 - [ ] Run `bun test --filter=@superset/desktop`
 
 ### Milestone 4
 
-- [ ] Add/adjust unit tests for capability presence (`management: null`) and error propagation
-- [ ] Confirm stream exit regression test still covers “no complete on exit”
+- [ ] Add renderer `clientId` + per-pane `attachmentId`
+- [ ] Add `{ paneId -> backendSessionId }` + `{ paneId -> lastSeenEventId }` mapping
+- [ ] Migrate renderer write/resize/signal/kill/detach/stream to backend identity + `streamV2`
+- [ ] Confirm “no complete on exit” and “no lost first output” invariants end-to-end
 - [ ] Run full validation commands
 
 ### Milestone 5
 
-- [ ] Manual verification with persistence disabled
-- [ ] Manual verification with persistence enabled (warm attach)
-- [ ] Manual verification for cold restore “Start Shell” path
+- [ ] Add/adjust unit tests for replay/cursor semantics, error codes, and resize sequencing
+- [ ] Confirm stream exit regression test still covers “no complete on exit”
+- [ ] Update PR verification matrix and run manual verification (non-daemon, warm attach, cold restore)
 
 ### Milestone 6a
 
@@ -812,10 +901,9 @@ Mitigation: Keep the “stream does not complete on exit” regression test as P
 
 ### Milestone 7 (Cloud Readiness)
 
-- [ ] Add `backendSessionId` to `createOrAttach` response (local backends: equals `paneId`)
-- [ ] Store `{ paneId -> backendSessionId }` mapping in renderer state; use backend ID for operations
-- [ ] Update runtime registry selection to be workspace/session-based (avoid long-term reliance on `getForPaneId`)
-- [ ] Define/introduce lifecycle events needed for cloud backends (connection/auth)
+- [ ] Add `CloudWorkspaceRuntime` skeleton and selection plumbing (metadata-driven)
+- [ ] Ensure terminal contract includes connection/auth lifecycle events
+- [ ] Add minimal capability negotiation (feature flags) at provider boundary
 
 
 ## Surprises & Discoveries
@@ -826,10 +914,13 @@ Mitigation: Keep the “stream does not complete on exit” regression test as P
 
 ## Decision Log
 
-- 2026-01-11: Use a process-scoped **runtime registry** (`getTerminalRuntimeRegistry()`), not a single global runtime; router captures the registry and selects runtimes per workspace/session so local + cloud can coexist later.
-- 2026-01-11: Keep the abstraction boundary provider-neutral: expose `management: TerminalManagement | null` (capability object) while keeping legacy endpoint names like `listDaemonSessions` for UI compatibility.
+- 2026-01-11: Promote `WorkspaceRuntime` (provider) to the primary abstraction; `TerminalRuntime` becomes `workspace.terminal` so future cloud work doesn’t re-cut seams for changes/files/agentEvents.
+- 2026-01-11: Use a process-scoped **workspace runtime registry** (`getWorkspaceRuntimeRegistry()`), not a single global runtime; router captures the registry and selects runtimes per workspace so local + cloud can coexist later.
+- 2026-01-11: Keep the abstraction boundary provider-neutral: expose `terminal.management: TerminalManagement | null` (capability object) while keeping legacy endpoint names like `listDaemonSessions` for UI compatibility.
+- 2026-01-11: Make identity explicit at the boundary: `paneId` (UI) is distinct from `backendSessionId` (execution), and multi-device compatibility requires `clientId` + `attachmentId`.
+- 2026-01-11: Move correctness buffering to the backend/provider boundary: add event cursor + bounded replay so late subscribers don’t lose output; renderer buffering becomes UI-readiness only.
 - 2026-01-11: Preserve renderer behavior; any `Terminal.tsx` changes are decomposition-only (init plan + applier + stream buffering), preserving “no complete on exit” and `viewportY` scroll restoration.
-- 2026-01-11: Treat `backendSessionId` as required groundwork for cloud/SSH backends (Milestone 7). Local may keep `backendSessionId === paneId` as an implementation detail, but the contract must not assume it.
+- 2026-01-11: Standardize typed error codes and enforce resize sequencing (`seq`) to reduce lifecycle/race regressions and avoid string-matching.
 
 
 ## Outcomes & Retrospective
