@@ -16,6 +16,7 @@ jobs:
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       short_sha: ${{ steps.check.outputs.short_sha }}
+      build_time: ${{ steps.check.outputs.build_time }}
 
     steps:
       - name: Checkout code
