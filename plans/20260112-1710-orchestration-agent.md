@@ -32,7 +32,7 @@ The orchestrator acts as a "manager" agent that coordinates specialized "worker"
 
 ## Progress
 
-- [ ] Milestone 1: Re-enable Chat Panel UI Foundation
+- [x] Milestone 1: Re-enable Chat Panel UI Foundation
 - [ ] Milestone 2: tRPC Router for Chat with Claude Opus 4.5
 - [ ] Milestone 3: Linear Integration Tools
 - [ ] Milestone 4: Sub-agent Spawning and Coordination
