@@ -25,6 +25,7 @@ export const env = createEnv({
 		QSTASH_CURRENT_SIGNING_KEY: z.string().min(1),
 		QSTASH_NEXT_SIGNING_KEY: z.string().min(1),
 		SENTRY_AUTH_TOKEN: z.string().optional(),
+		ANTHROPIC_API_KEY: z.string().min(1),
 	},
 	client: {
 		NEXT_PUBLIC_API_URL: z.string().url(),

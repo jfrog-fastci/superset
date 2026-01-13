@@ -7,29 +7,76 @@ import { cn } from "@superset/ui/utils";
 import { useEffect, useRef, useState } from "react";
 import { LuCornerDownLeft, LuRotateCcw, LuSquare, LuX } from "react-icons/lu";
 import { HotkeyTooltipContent } from "renderer/components/HotkeyTooltipContent";
-import { useChatPanelStore } from "renderer/stores";
+import { trpc } from "renderer/lib/trpc";
+import { useChatMessagesStore, useChatPanelStore } from "renderer/stores";
 
-interface ChatMessage {
-	id: string;
-	role: "user" | "assistant";
-	content: string;
-}
+type ChatStreamEvent =
+	| { type: "text-delta"; content: string }
+	| { type: "finish"; finishReason: string }
+	| { type: "error"; error: string };
 
 export function ChatPanel() {
 	const { togglePanel } = useChatPanelStore();
-	const [messages, setMessages] = useState<ChatMessage[]>([]);
-	const [input, setInput] = useState("");
-	const [isLoading, setIsLoading] = useState(false);
+	const {
+		messages,
+		isLoading,
+		error,
+		addUserMessage,
+		startAssistantMessage,
+		appendToAssistantMessage,
+		finishAssistantMessage,
+		setError,
+		setLoading,
+		clearMessages,
+	} = useChatMessagesStore();
+
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const assistantIdRef = useRef<string | null>(null);
+
+	// Track pending messages for the subscription
+	const [pendingMessages, setPendingMessages] = useState<
+		Array<{ id: string; role: "user" | "assistant"; content: string }>
+	>([]);
+	const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
+
+	// Handle streaming data
+	const handleStreamData = (data: ChatStreamEvent) => {
+		if (data.type === "text-delta" && data.content && assistantIdRef.current) {
+			appendToAssistantMessage(assistantIdRef.current, data.content);
+		} else if (data.type === "finish" && assistantIdRef.current) {
+			finishAssistantMessage(assistantIdRef.current);
+			assistantIdRef.current = null;
+			setSubscriptionEnabled(false);
+		} else if (data.type === "error") {
+			setError(data.error);
+			assistantIdRef.current = null;
+			setSubscriptionEnabled(false);
+		}
+	};
+
+	// Subscribe to chat stream
+	trpc.chat.sendMessage.useSubscription(
+		{ messages: pendingMessages },
+		{
+			enabled: subscriptionEnabled && pendingMessages.length > 0,
+			onData: handleStreamData,
+			onError: (err) => {
+				console.error("[chat] Subscription error:", err);
+				setError(err.message);
+				assistantIdRef.current = null;
+				setSubscriptionEnabled(false);
+			},
+		},
+	);
 
 	// Auto-scroll to bottom on new messages
-	const messagesLength = messages.length;
+	const _messagesLength = messages.length;
 	useEffect(() => {
 		if (scrollRef.current) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [messagesLength, isLoading]);
+	}, []);
 
 	// Focus textarea on mount
 	useEffect(() => {
@@ -37,30 +84,28 @@ export function ChatPanel() {
 	}, []);
 
 	const handleSubmit = () => {
-		if (!input.trim() || isLoading) return;
+		const text = textareaRef.current?.value.trim();
+		if (!text || isLoading) return;
 
-		const userMessage: ChatMessage = {
-			id: `user-${Date.now()}`,
-			role: "user",
-			content: input.trim(),
-		};
+		// Clear input
+		if (textareaRef.current) {
+			textareaRef.current.value = "";
+		}
 
-		setMessages((prev) => [...prev, userMessage]);
-		setInput("");
-		setIsLoading(true);
+		// Add user message
+		addUserMessage(text);
+		const assistantId = startAssistantMessage();
+		assistantIdRef.current = assistantId;
 
-		// TODO: Implement actual chat with tRPC in Milestone 2
-		setTimeout(() => {
-			const assistantMessage: ChatMessage = {
-				id: `assistant-${Date.now()}`,
-				role: "assistant",
-				content:
-					"This is a placeholder response. The chat will be connected to Claude in Milestone 2.",
-			};
-			setMessages((prev) => [...prev, assistantMessage]);
-			setIsLoading(false);
-			textareaRef.current?.focus();
-		}, 800);
+		// Build messages array for API
+		const allMessages = [
+			...messages.map((m) => ({ id: m.id, role: m.role, content: m.content })),
+			{ id: "temp", role: "user" as const, content: text },
+		];
+
+		// Trigger subscription
+		setPendingMessages(allMessages);
+		setSubscriptionEnabled(true);
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -71,18 +116,24 @@ export function ChatPanel() {
 	};
 
 	const handleClear = () => {
-		setMessages([]);
-		setInput("");
+		setSubscriptionEnabled(false);
+		assistantIdRef.current = null;
+		clearMessages();
 		textareaRef.current?.focus();
 	};
 
 	const handleStop = () => {
-		setIsLoading(false);
+		setSubscriptionEnabled(false);
+		if (assistantIdRef.current) {
+			finishAssistantMessage(assistantIdRef.current);
+			assistantIdRef.current = null;
+		}
+		setLoading(false);
 	};
 
 	return (
 		<div className="flex flex-col h-full border-l border-border bg-background">
-			{/* Header - minimal */}
+			{/* Header */}
 			<div className="flex items-center justify-between px-3 py-2 border-b border-border">
 				<span className="text-xs font-medium text-muted-foreground">Chat</span>
 				<div className="flex items-center gap-1">
@@ -153,26 +204,28 @@ export function ChatPanel() {
 									{message.role === "user" ? "You" : "Assistant"}
 								</div>
 								<div className="whitespace-pre-wrap">{message.content}</div>
+								{message.isStreaming && message.content === "" && (
+									<div className="flex items-center gap-1 mt-1">
+										<span className="size-1.5 rounded-full bg-foreground/40 animate-pulse" />
+										<span
+											className="size-1.5 rounded-full bg-foreground/40 animate-pulse"
+											style={{ animationDelay: "150ms" }}
+										/>
+										<span
+											className="size-1.5 rounded-full bg-foreground/40 animate-pulse"
+											style={{ animationDelay: "300ms" }}
+										/>
+									</div>
+								)}
 							</div>
 						))}
-						{isLoading && (
-							<div className="text-sm">
-								<div className="text-[10px] font-medium uppercase tracking-wide mb-1 text-muted-foreground/70">
-									Assistant
-								</div>
-								<div className="flex items-center gap-1">
-									<span className="size-1.5 rounded-full bg-foreground/40 animate-pulse" />
-									<span
-										className="size-1.5 rounded-full bg-foreground/40 animate-pulse"
-										style={{ animationDelay: "150ms" }}
-									/>
-									<span
-										className="size-1.5 rounded-full bg-foreground/40 animate-pulse"
-										style={{ animationDelay: "300ms" }}
-									/>
-								</div>
-							</div>
-						)}
+					</div>
+				)}
+
+				{/* Error display */}
+				{error && (
+					<div className="mx-3 mb-3 p-2 rounded-md bg-destructive/10 text-destructive text-xs">
+						{error}
 					</div>
 				)}
 			</div>
@@ -182,8 +235,6 @@ export function ChatPanel() {
 				<div className="relative">
 					<Textarea
 						ref={textareaRef}
-						value={input}
-						onChange={(e) => setInput(e.target.value)}
 						onKeyDown={handleKeyDown}
 						placeholder="Message..."
 						disabled={isLoading}
@@ -210,7 +261,6 @@ export function ChatPanel() {
 								variant="ghost"
 								className="size-6"
 								onClick={handleSubmit}
-								disabled={!input.trim()}
 							>
 								<LuCornerDownLeft className="size-3.5" />
 							</Button>

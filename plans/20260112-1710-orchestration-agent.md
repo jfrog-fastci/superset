@@ -22,18 +22,18 @@ The orchestrator acts as a "manager" agent that coordinates specialized "worker"
 2. **Linear integration is production-ready**: Existing OAuth + `getLinearClient()` utility in `packages/trpc`
 3. **tRPC for IPC**: All main-renderer communication uses tRPC (see `apps/desktop/src/lib/trpc`)
 4. **Subscriptions use observables**: Not async generators (required by trpc-electron)
-5. **AI SDK not yet installed**: Need to add `ai`, `@ai-sdk/anthropic` to apps/desktop
+5. **Backend proxy for AI**: AI calls go through `apps/api` (API key stays server-side)
 
 ## Open Questions
 
-1. **API Key Management**: Where should the Anthropic API key be stored? (Electron main process env? User settings?)
+1. ~~**API Key Management**: Where should the Anthropic API key be stored?~~ **RESOLVED**: Backend proxy approach - key lives in `apps/api` server environment only
 2. **Context Passing**: How to pass workspace context (current files, terminal output) to the agent?
 3. **Approval Workflow**: Which actions require approval before execution?
 
 ## Progress
 
 - [x] Milestone 1: Re-enable Chat Panel UI Foundation
-- [ ] Milestone 2: tRPC Router for Chat with Claude Opus 4.5
+- [x] Milestone 2: tRPC Router for Chat with Claude Opus 4.5 (now via backend proxy)
 - [ ] Milestone 3: Linear Integration Tools
 - [ ] Milestone 4: Sub-agent Spawning and Coordination
 - [ ] Milestone 5: Task Progress and Streaming UI
@@ -41,11 +41,54 @@ The orchestrator acts as a "manager" agent that coordinates specialized "worker"
 
 ## Surprises & Discoveries
 
-(To be updated during implementation)
+1. **AI SDK v6 API Change**: The `toDataStreamResponse()` method was renamed to `toTextStreamResponse()` in AI SDK v6. The data stream format with type prefixes (0:, d:, e:) was replaced with plain text streaming, simplifying the client-side parsing.
+
+2. **tRPC useSubscription Hook**: In the renderer, must use `trpc.chat.sendMessage.useSubscription()` hook pattern (similar to Terminal component), not `.subscribe()` method directly.
 
 ## Decision Log
 
-(To be updated during implementation)
+### 2026-01-12: Backend Proxy Architecture for AI Calls
+
+**Context**: Initially implemented AI calls directly in the Electron main process using the AI SDK. This works but raises security concerns for distributed apps.
+
+**Problem**: Any API key bundled or loaded in an Electron app can potentially be extracted by users (asar unpack, memory inspection, etc.). Even with obfuscation, if the key must be decrypted at runtime, it's vulnerable.
+
+**Decision**: Route all AI API calls through `apps/api` backend instead of calling Anthropic directly from the desktop app.
+
+**Architecture**:
+```
+Desktop App (renderer)
+    → Desktop tRPC (main process)
+    → Backend API (apps/api)
+    → Anthropic API
+         ↑
+    API key lives here only
+```
+
+**Benefits**:
+- API key never leaves the server
+- Can implement rate limiting per user
+- Usage tracking and billing possible
+- Can revoke access if abused
+- Works with existing auth system
+
+**Trade-offs**:
+- Requires internet connection (no offline mode for chat)
+- Added latency (extra network hop)
+- Backend must be available
+
+**Implementation** (COMPLETED):
+1. Created chat endpoint at `apps/api/src/app/api/chat/route.ts`
+2. Added `ANTHROPIC_API_KEY` to `apps/api/src/env.ts` validation
+3. Desktop chat router (`apps/desktop/src/lib/trpc/routers/chat/index.ts`) now calls backend via fetch
+4. Backend uses AI SDK `streamText` with `toTextStreamResponse()` for plain text streaming
+5. Desktop parses the stream and emits events to the observable for tRPC-electron
+
+**Files Modified**:
+- `apps/api/src/app/api/chat/route.ts` (created)
+- `apps/api/src/env.ts` (added ANTHROPIC_API_KEY)
+- `apps/api/package.json` (added ai, @ai-sdk/anthropic)
+- `apps/desktop/src/lib/trpc/routers/chat/index.ts` (updated to call backend)
 
 ## Outcomes & Retrospective
 
