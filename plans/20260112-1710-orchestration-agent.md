@@ -34,16 +34,33 @@ The orchestrator acts as a "manager" agent that coordinates specialized "worker"
 
 - [x] Milestone 1: Re-enable Chat Panel UI Foundation
 - [x] Milestone 2: tRPC Router for Chat with Claude Opus 4.5 (now via backend proxy)
-- [ ] Milestone 3: Linear Integration Tools
+- [x] Milestone 3: Workspace Tools (list, switch, create workspaces)
 - [ ] Milestone 4: Sub-agent Spawning and Coordination
 - [ ] Milestone 5: Task Progress and Streaming UI
-- [ ] Milestone 6: Approval Workflows
+- [ ] Milestone 6: Linear Integration Tools
+- [ ] Milestone 7: Approval Workflows
 
 ## Surprises & Discoveries
 
 1. **AI SDK v6 API Change**: The `toDataStreamResponse()` method was renamed to `toTextStreamResponse()` in AI SDK v6. The data stream format with type prefixes (0:, d:, e:) was replaced with plain text streaming, simplifying the client-side parsing.
 
 2. **tRPC useSubscription Hook**: In the renderer, must use `trpc.chat.sendMessage.useSubscription()` hook pattern (similar to Terminal component), not `.subscribe()` method directly.
+
+3. **Rich ai-elements Library**: The `@superset/ui/ai-elements` package has comprehensive components for AI chat interfaces:
+   - `Message`, `MessageContent`, `MessageResponse` - message rendering with Streamdown markdown
+   - `PromptInput`, `PromptInputTextarea`, `PromptInputSubmit` - form input with status handling
+   - `Tool`, `ToolHeader`, `ToolContent`, `ToolInput`, `ToolOutput` - tool invocation display
+   - `Loader` - streaming indicator
+   - Uses AI SDK types (`UIMessage`, `ToolUIPart`, `ChatStatus`, etc.)
+
+4. **AI SDK v6 Tool Schema Naming**: In AI SDK v6, tool schemas use `inputSchema` instead of `parameters`. The `tool()` helper function expects `inputSchema` with a Zod schema.
+
+5. **UI Message Stream Format**: `toUIMessageStreamResponse()` returns SSE-like data with prefixes:
+   - `0:` - text delta (JSON string)
+   - `9:` - tool call (JSON with toolCallId, toolName, args)
+   - `a:` - tool result
+   - `e:` - finish event
+   - `d:` - error
 
 ## Decision Log
 
@@ -1087,7 +1104,214 @@ cd apps/desktop && bun run dev
 
 ---
 
-### Milestone 3: Linear Integration Tools
+### Milestone 3: Workspace Tools
+
+This milestone enables the orchestration agent to manage workspaces within the current project. At completion, users can ask the agent to list, switch, and create workspaces.
+
+**Architecture Challenge:**
+
+Since we use a backend proxy for AI calls, but workspace operations are local to the desktop, we need a client-side tool execution pattern:
+
+1. Backend defines tools with schemas (no server-side execution)
+2. Claude generates tool calls in the response stream
+3. Desktop parses tool calls from the stream
+4. Desktop executes tools locally via existing tRPC procedures
+5. Desktop submits tool results to continue the conversation (multi-step flow)
+
+**Available Workspace Operations** (from existing tRPC):
+
+| Operation | tRPC Procedure | Description |
+|-----------|----------------|-------------|
+| List workspaces | `workspaces.getAllGrouped` | Get all workspaces grouped by project |
+| Get active workspace | `workspaces.getActive` | Get currently active workspace details |
+| Switch workspace | `workspaces.setActive` | Set a workspace as active |
+| Create workspace | `workspaces.create` | Create new worktree-based workspace |
+| Create branch workspace | `workspaces.createBranchWorkspace` | Create workspace on existing branch |
+
+**Scope:**
+
+1. Update backend chat endpoint to support tools (schema-only, no execution)
+2. Update desktop chat router to parse tool calls from stream
+3. Create workspace tool executor in main process
+4. Implement tool result submission for multi-step conversations
+5. Update ChatPanel UI to display tool invocations
+
+**Step 1: Define Workspace Tools Schema**
+
+Create `apps/api/src/app/api/chat/tools/workspace.ts`:
+```typescript
+import { z } from "zod";
+
+export const workspaceTools = {
+  listWorkspaces: {
+    description: "List all workspaces in the current project, grouped by project",
+    parameters: z.object({
+      projectId: z.string().optional().describe("Filter to specific project ID"),
+    }),
+  },
+
+  getActiveWorkspace: {
+    description: "Get details about the currently active workspace including project, branch, and path",
+    parameters: z.object({}),
+  },
+
+  switchWorkspace: {
+    description: "Switch to a different workspace by its ID",
+    parameters: z.object({
+      workspaceId: z.string().describe("The ID of the workspace to switch to"),
+    }),
+  },
+
+  createWorkspace: {
+    description: "Create a new workspace (git worktree) for a branch",
+    parameters: z.object({
+      projectId: z.string().describe("The project to create the workspace in"),
+      branchName: z.string().optional().describe("Branch name (auto-generated if not provided)"),
+      name: z.string().optional().describe("Display name for the workspace"),
+      baseBranch: z.string().optional().describe("Base branch to create from (defaults to main)"),
+    }),
+  },
+};
+```
+
+**Step 2: Update Backend Chat Endpoint**
+
+Update `apps/api/src/app/api/chat/route.ts` to include tool definitions:
+```typescript
+import { tool } from "ai";
+import { workspaceTools } from "./tools/workspace";
+
+// Convert schemas to AI SDK tools (execute returns pending status)
+const tools = {
+  listWorkspaces: tool({
+    ...workspaceTools.listWorkspaces,
+    execute: async (args) => ({ status: "pending", args }),
+  }),
+  // ... other tools
+};
+
+const result = streamText({
+  model: anthropic("claude-sonnet-4-20250514"),
+  system: SYSTEM_PROMPT,
+  messages,
+  tools,
+  maxSteps: 5,
+});
+```
+
+**Step 3: Update Desktop Chat Router**
+
+Update `apps/desktop/src/lib/trpc/routers/chat/index.ts` to handle tool calls:
+```typescript
+// Add new event types
+export type ChatStreamEvent =
+  | { type: "text-delta"; content: string }
+  | { type: "tool-call"; toolName: string; toolCallId: string; args: unknown }
+  | { type: "tool-result"; toolCallId: string; result: unknown }
+  | { type: "finish"; finishReason: string }
+  | { type: "error"; error: string };
+
+// In subscription handler, detect and execute tool calls
+// Then submit results back to continue conversation
+```
+
+**Step 4: Create Tool Executor**
+
+Create `apps/desktop/src/lib/trpc/routers/chat/tools/workspace-executor.ts`:
+```typescript
+import { localDb } from "main/lib/local-db";
+// ... import workspace utilities
+
+export async function executeWorkspaceTool(
+  toolName: string,
+  args: unknown,
+): Promise<unknown> {
+  switch (toolName) {
+    case "listWorkspaces":
+      return executeListWorkspaces(args);
+    case "getActiveWorkspace":
+      return executeGetActiveWorkspace();
+    case "switchWorkspace":
+      return executeSwitchWorkspace(args);
+    case "createWorkspace":
+      return executeCreateWorkspace(args);
+    default:
+      throw new Error(`Unknown tool: ${toolName}`);
+  }
+}
+
+async function executeListWorkspaces(args: { projectId?: string }) {
+  // Query local DB for workspaces
+  // Return formatted list
+}
+
+async function executeSwitchWorkspace(args: { workspaceId: string }) {
+  // Call setActiveWorkspace procedure
+  // Return success/failure
+}
+```
+
+**Step 5: Update ChatPanel for Tool Display**
+
+Use the existing `@superset/ui/ai-elements/tool` components for tool UI:
+```tsx
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@superset/ui/ai-elements/tool";
+
+// In message rendering:
+{message.toolCalls?.map((toolCall) => (
+  <Tool key={toolCall.toolCallId}>
+    <ToolHeader
+      title={toolCall.toolName}
+      type="tool-invocation"
+      state={toolCall.state} // "input-available" | "output-available" | etc
+    />
+    <ToolContent>
+      <ToolInput input={toolCall.args} />
+      <ToolOutput output={toolCall.result} errorText={toolCall.error} />
+    </ToolContent>
+  </Tool>
+))}
+```
+
+The ai-elements `Tool` components provide:
+- Collapsible UI with chevron toggle
+- Status badges (Pending, Running, Completed, Error)
+- JSON syntax highlighting for input/output
+- Error state styling
+
+**Acceptance:**
+```bash
+cd apps/desktop && bun run dev
+
+# Test 1: List workspaces
+# Ask "What workspaces do I have open?"
+# Agent calls listWorkspaces tool
+# See formatted list of workspaces
+
+# Test 2: Switch workspace
+# Ask "Switch to the feature-auth workspace"
+# Agent calls switchWorkspace tool
+# Workspace switches, confirmation shown
+
+# Test 3: Create workspace
+# Ask "Create a new workspace for a bug fix"
+# Agent calls createWorkspace tool
+# New workspace created and opened
+
+# Test 4: Multi-step
+# Ask "List my workspaces and switch to the oldest one"
+# Agent calls listWorkspaces, then switchWorkspace
+```
+
+---
+
+### Milestone 6: Linear Integration Tools
 
 This milestone adds Linear tools using the existing `getLinearClient()` infrastructure. At completion, the agent can list and search Linear issues.
 
@@ -1182,9 +1406,15 @@ const result = streamText({
 
 ---
 
-### Milestone 4-6: Sub-agents, Progress, Approvals
+### Milestone 4-5, 7: Sub-agents, Progress, Approvals
 
 (Details similar to original plan but adapted for desktop/tRPC architecture)
+
+**Milestone 4: Sub-agent Spawning and Coordination** - Enable orchestrator to spawn specialized agents for complex tasks
+
+**Milestone 5: Task Progress and Streaming UI** - Real-time progress display for multi-step agent operations
+
+**Milestone 7: Approval Workflows** - User confirmation before executing destructive or significant actions
 
 ---
 
@@ -1192,10 +1422,12 @@ const result = streamText({
 
 ### Final Acceptance Criteria
 
-1. **Chat Panel**: Opens/closes via TopBar button and `Cmd+Shift+L` hotkey
-2. **Basic Chat**: Streaming conversation with Claude Opus 4.5
-3. **Linear Tools**: Can list and search Linear issues
-4. **State Persistence**: Panel state and messages survive app restart
+1. **Chat Panel**: Opens/closes via TopBar button and `Cmd+J` hotkey
+2. **Basic Chat**: Streaming conversation with Claude Sonnet 4 via backend proxy
+3. **Workspace Tools**: Can list, switch, and create workspaces via agent
+4. **Sub-agents**: Orchestrator can spawn and coordinate specialized agents
+5. **Linear Tools**: Can list and search Linear issues
+6. **State Persistence**: Panel state and messages survive app restart
 
 ### Validation Commands
 
