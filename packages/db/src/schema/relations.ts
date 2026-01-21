@@ -10,6 +10,11 @@ import {
 } from "./auth";
 import { cloudWorkspaceSessions, cloudWorkspaces } from "./cloud-workspace";
 import {
+	githubInstallations,
+	githubPullRequests,
+	githubRepositories,
+} from "./github";
+import {
 	integrationConnections,
 	repositories,
 	taskStatuses,
@@ -26,6 +31,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 	connectedIntegrations: many(integrationConnections),
 	createdCloudWorkspaces: many(cloudWorkspaces, { relationName: "creator" }),
 	cloudWorkspaceSessions: many(cloudWorkspaceSessions),
+	githubInstallations: many(githubInstallations),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -50,6 +56,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
 	taskStatuses: many(taskStatuses),
 	integrations: many(integrationConnections),
 	cloudWorkspaces: many(cloudWorkspaces),
+	githubInstallations: many(githubInstallations),
 }));
 
 export const membersRelations = relations(members, ({ one }) => ({
@@ -166,6 +173,43 @@ export const cloudWorkspaceSessionsRelations = relations(
 		user: one(users, {
 			fields: [cloudWorkspaceSessions.userId],
 			references: [users.id],
+		}),
+	}),
+);
+
+// GitHub relations
+export const githubInstallationsRelations = relations(
+	githubInstallations,
+	({ one, many }) => ({
+		organization: one(organizations, {
+			fields: [githubInstallations.organizationId],
+			references: [organizations.id],
+		}),
+		connectedBy: one(users, {
+			fields: [githubInstallations.connectedByUserId],
+			references: [users.id],
+		}),
+		repositories: many(githubRepositories),
+	}),
+);
+
+export const githubRepositoriesRelations = relations(
+	githubRepositories,
+	({ one, many }) => ({
+		installation: one(githubInstallations, {
+			fields: [githubRepositories.installationId],
+			references: [githubInstallations.id],
+		}),
+		pullRequests: many(githubPullRequests),
+	}),
+);
+
+export const githubPullRequestsRelations = relations(
+	githubPullRequests,
+	({ one }) => ({
+		repository: one(githubRepositories, {
+			fields: [githubPullRequests.repositoryId],
+			references: [githubRepositories.id],
 		}),
 	}),
 );

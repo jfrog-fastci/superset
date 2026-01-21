@@ -16,12 +16,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
 import { HiArrowPath } from "react-icons/hi2";
-import { LuLoaderCircle } from "react-icons/lu";
+import { LuExpand, LuLoaderCircle, LuShrink, LuX } from "react-icons/lu";
 import { VscGitStash, VscGitStashApply } from "react-icons/vsc";
+import { HotkeyTooltipContent } from "renderer/components/HotkeyTooltipContent";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { PRIcon } from "renderer/screens/main/components/PRIcon";
 import { usePRStatus } from "renderer/screens/main/hooks";
 import { useChangesStore } from "renderer/stores/changes";
+import { SidebarMode, useSidebarStore } from "renderer/stores/sidebar-state";
 import type { ChangesViewMode } from "../../types";
 import { ViewModeToggle } from "../ViewModeToggle";
 
@@ -231,6 +233,13 @@ export function ChangesHeader({
 	onStashPop,
 	isStashPending,
 }: ChangesHeaderProps) {
+	const { toggleSidebar, currentMode, setMode } = useSidebarStore();
+	const isExpanded = currentMode === SidebarMode.Changes;
+
+	const handleExpandToggle = () => {
+		setMode(isExpanded ? SidebarMode.Tabs : SidebarMode.Changes);
+	};
+
 	return (
 		<div className="flex flex-col">
 			<div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -238,6 +247,44 @@ export function ChangesHeader({
 					Base:
 				</span>
 				<BaseBranchSelector worktreePath={worktreePath} />
+				<div className="flex-1" />
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={handleExpandToggle}
+							className="size-6 p-0"
+						>
+							{isExpanded ? (
+								<LuShrink className="size-3.5" />
+							) : (
+								<LuExpand className="size-3.5" />
+							)}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom" showArrow={false}>
+						{isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+					</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={toggleSidebar}
+							className="size-6 p-0"
+						>
+							<LuX className="size-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom" showArrow={false}>
+						<HotkeyTooltipContent
+							label="Close Changes Sidebar"
+							hotkeyId="TOGGLE_SIDEBAR"
+						/>
+					</TooltipContent>
+				</Tooltip>
 			</div>
 
 			<div className="flex items-center gap-0.5 px-2 pb-1.5">
