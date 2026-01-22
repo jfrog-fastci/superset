@@ -8,6 +8,7 @@
  * to avoid JSON escaping overhead on escape-sequence-heavy PTY output.
  */
 
+import { execSync } from "node:child_process";
 import { write as fsWrite } from "node:fs";
 import type { IPty } from "node-pty";
 import * as pty from "node-pty";
@@ -367,25 +368,55 @@ function handleKill(payload: Buffer): void {
 
 	const pid = ptyProcess.pid;
 
-	// Step 1: Send the requested signal (usually SIGTERM for graceful shutdown)
+	// Step 1: Get the TTY associated with the shell process
+	// All processes in the terminal share this TTY, even if they have different
+	// process groups (which happens with job control in interactive shells).
+	let tty: string | null = null;
 	try {
-		ptyProcess.kill(signal);
+		tty = execSync(`ps -o tty= -p ${pid}`, { encoding: "utf8" }).trim();
 	} catch {
-		// Process may already be dead
+		// Process may already be dead, fall back to process group kill
 	}
 
-	// Step 2: Escalate to SIGKILL if still alive after 2 seconds
+	// Step 2: Kill all processes on the TTY (shell + all descendants)
+	// This works because foreground jobs share the controlling terminal,
+	// even though zsh gives them their own process groups for job control.
+	if (tty) {
+		try {
+			const pkillSignal = signal.replace(/^SIG/, "");
+			execSync(`pkill -${pkillSignal} -t ${tty}`, { stdio: "ignore" });
+		} catch {
+			// pkill returns non-zero if no processes matched - that's fine
+		}
+	} else {
+		// Fallback: try process group kill (may not kill all children)
+		try {
+			process.kill(-pid, signal);
+		} catch {
+			// Process group already dead
+		}
+	}
+
+	// Step 3: Escalate to SIGKILL if still alive after 2 seconds
 	// node-pty's onExit callback may not fire reliably after pty.kill()
 	const escalationTimer = setTimeout(() => {
 		if (!ptyProcess) return; // Already exited via onExit
 
-		try {
-			ptyProcess.kill("SIGKILL");
-		} catch {
-			// Process may already be dead
+		if (tty) {
+			try {
+				execSync(`pkill -KILL -t ${tty}`, { stdio: "ignore" });
+			} catch {
+				// Process may already be dead
+			}
+		} else {
+			try {
+				process.kill(-pid, "SIGKILL");
+			} catch {
+				// Process group already dead
+			}
 		}
 
-		// Step 3: Force completion if onExit still hasn't fired after another 1 second
+		// Step 4: Force completion if onExit still hasn't fired after another 1 second
 		// This ensures the subprocess exits even if node-pty never emits onExit
 		const forceExitTimer = setTimeout(() => {
 			if (!ptyProcess) return; // Finally exited via onExit
@@ -440,10 +471,21 @@ function handleDispose(): void {
 	ptyFd = null;
 
 	if (ptyProcess) {
+		const pid = ptyProcess.pid;
+
+		// Get TTY and kill all processes on it (handles job control process groups)
 		try {
-			ptyProcess.kill("SIGKILL");
+			const tty = execSync(`ps -o tty= -p ${pid}`, { encoding: "utf8" }).trim();
+			if (tty) {
+				execSync(`pkill -KILL -t ${tty}`, { stdio: "ignore" });
+			}
 		} catch {
-			// Ignore
+			// Fallback to process group kill
+			try {
+				process.kill(-pid, "SIGKILL");
+			} catch {
+				// Process may already be dead
+			}
 		}
 		ptyProcess = null;
 	}
