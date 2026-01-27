@@ -33,7 +33,7 @@ export function StatusProperty({ task }: StatusPropertyProps) {
 	const currentStatus = task.status;
 
 	const sortedStatuses = useMemo(() => {
-		return statuses.sort(compareStatusesForDropdown);
+		return [...statuses].sort(compareStatusesForDropdown);
 	}, [statuses]);
 
 	const handleSelectStatus = (newStatus: SelectTaskStatus) => {
