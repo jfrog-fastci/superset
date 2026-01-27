@@ -22,11 +22,13 @@ import { Strike } from "@tiptap/extension-strike";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import { Text } from "@tiptap/extension-text";
+import { Underline } from "@tiptap/extension-underline";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { common, createLowlight } from "lowlight";
 import { env } from "renderer/env.renderer";
 import { Markdown } from "tiptap-markdown";
 
+import { BubbleMenu } from "./components/BubbleMenu";
 import { CodeBlockView } from "./components/CodeBlockView";
 import { SlashCommand } from "./components/SlashCommand";
 
@@ -138,6 +140,9 @@ export function TaskMarkdownRenderer({
 			Strike.configure({
 				HTMLAttributes: { class: "line-through" },
 			}),
+			Underline.configure({
+				HTMLAttributes: { class: "underline" },
+			}),
 			Code.configure({
 				HTMLAttributes: {
 					class: "font-mono text-sm px-1 py-0.5 rounded bg-muted",
@@ -223,5 +228,10 @@ export function TaskMarkdownRenderer({
 		},
 	});
 
-	return <EditorContent editor={editor} className="w-full" />;
+	return (
+		<div className="w-full">
+			{editor && <BubbleMenu editor={editor} />}
+			<EditorContent editor={editor} className="w-full" />
+		</div>
+	);
 }
