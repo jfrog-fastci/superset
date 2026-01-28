@@ -1,0 +1,103 @@
+---
+title: Task details, MCP docs, and workflow improvements
+date: 2026-01-28
+image: /changelog/IMAGE_PLACEHOLDER.png
+---
+
+{/* TODO: Replace header image with actual screenshot */}
+
+## Task Detail View <PRBadge url="https://github.com/superset-sh/superset/pull/977" />
+
+- Click any task to open a full detail page with Linear-style properties sidebar
+- Edit titles and descriptions inline with Markdown support
+- Manage task status, priority, assignees, and labels in the properties panel
+- View task creation details and activity history
+- Add comments for collaboration with slash-command palette and code block support
+
+{/* TODO: Add screenshot showing task detail page with properties sidebar */}
+
+## MCP Server Documentation <PRBadge url="https://github.com/superset-sh/superset/pull/1013" />
+
+- Added comprehensive documentation for the Superset MCP server
+- Includes setup instructions for Claude Desktop, Claude Code, and Cursor
+- Documents all 15 available tools across task, workspace, and device management
+
+<PRBadge url="https://github.com/superset-sh/superset/pull/1014" />
+
+- Added HTTP transport option to MCP documentation with tabbed interface
+- Users can now choose between SSE (`/api/agent/sse`) or HTTP (`/api/agent/mcp`) endpoints
+
+## Double-Click to Open Files <PRBadge url="https://github.com/superset-sh/superset/pull/1021" />
+
+- Double-click any file in the Changes View sidebar to open it directly in your editor
+- Single-click continues to work for selecting and highlighting files
+- Matches familiar browser tab behavior for faster navigation
+
+{/* TODO: Add screenshot showing Changes View with file interaction */}
+
+## Project Renaming <PRBadge url="https://github.com/superset-sh/superset/pull/994" />
+
+- Right-click on any project in the sidebar and select "Rename" from the context menu
+- Double-click project names in the expanded sidebar to rename inline
+- Input auto-focuses with text pre-selected for quick editing
+- Press Enter to confirm or Escape to cancel
+
+## Comprehensive Documentation <PRBadge url="https://github.com/superset-sh/superset/pull/981" />
+
+- Added 10 new documentation pages covering core Superset features
+- Topics include workspaces and branches, diff viewer, terminal integration, agent integration, monorepo support, environment variables, and more
+- Reorganized navigation structure for easier discovery
+- Added FAQ section with frequently asked questions and known issues
+
+## Auto-Apply Default Preset <PRBadge url="https://github.com/superset-sh/superset/pull/948" />
+
+- Your default terminal preset now automatically applies when creating new workspaces
+- When both setup script and preset exist, they run in split panes within the same tab
+- When only the preset exists, it creates its own tab with parallel panes if configured
+- Disable this behavior in Terminal settings with "Auto-apply default preset" option
+
+## Git Fetch Actions <PRBadge url="https://github.com/superset-sh/superset/pull/983" />
+
+- Added "Fetch" option to retrieve remote updates without pulling
+- Added "Fetch & Pull" to retrieve and merge updates in one operation
+- Both actions available in the commit dropdown menu in Changes View
+- Success and error notifications display operation status
+
+## Preset Hotkey Improvements <PRBadge url="https://github.com/superset-sh/superset/pull/991" />
+
+- Keyboard shortcuts now displayed next to each preset in the dropdown menu
+- Makes it easier to discover and remember preset hotkeys
+- Shortcuts respect user customizations from hotkey settings
+- Shows platform-specific format (⌘⇧1 on macOS, Ctrl+Shift+1 on Windows/Linux)
+
+<PRBadge url="https://github.com/superset-sh/superset/pull/993" />
+
+- Preset hotkeys rebound from Cmd+Shift+1-9 to Ctrl+1-9
+- Fixes conflict with macOS screenshot shortcuts
+- Follows familiar Chrome tab-switching pattern
+
+## Workflow Enhancements
+
+<PRBadge url="https://github.com/superset-sh/superset/pull/947" />
+
+- Added "Import repo" option to the project selector in Open Workspace modal
+- Import repositories without leaving your workflow
+
+<PRBadge url="https://github.com/superset-sh/superset/pull/971" />
+
+- Branch names now auto-generate from workspace titles when creating workspaces
+- Creates clean, descriptive branch names like `author/my-feature` when you enter "My Feature"
+
+<PRBadge url="https://github.com/superset-sh/superset/pull/962" />
+
+- Branch prefixes now use your GitHub username instead of git author name
+- Results in cleaner prefixes like `kitenite/` instead of `kiet-ho/`
+- Falls back to git config if GitHub CLI is not authenticated
+
+## Port Scanning Fix <PRBadge url="https://github.com/superset-sh/superset/pull/964" />
+
+Fixed port scanning not working for terminals already running after app restart or update. Ports are now detected immediately without requiring you to open each terminal tab.
+
+## Inline Diff Improvements <PRBadge url="https://github.com/superset-sh/superset/pull/1019" />
+
+Line number columns in inline diff view now have proper visual spacing. The width automatically adjusts based on file size for better readability.
