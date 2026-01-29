@@ -243,12 +243,6 @@ export class DurableChatClient {
 		const messageId = crypto.randomUUID();
 		const now = new Date().toISOString();
 
-		// Wrap content in WholeMessageChunk format for materialize.ts
-		const chunkContent = JSON.stringify({
-			type: "whole-message",
-			content,
-		});
-
 		await this._appendToStream([
 			{
 				type: "chunk",
@@ -257,7 +251,7 @@ export class DurableChatClient {
 					messageId,
 					actorId: user.userId,
 					role: "user",
-					chunk: chunkContent,
+					chunk: { type: "whole-message", content },
 					seq: 0,
 					createdAt: now,
 				},

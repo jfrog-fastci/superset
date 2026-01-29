@@ -30,7 +30,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 		? { userId: session.user.id, name: session.user.name ?? "Unknown" }
 		: null;
 
-	// Get messages from the durable stream (single source of truth)
 	const { users, messages, streamingMessage, draft, setDraft, sendMessage } =
 		useChatSession({
 			proxyUrl: STREAM_SERVER_URL,
@@ -51,8 +50,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 		await refetchIsActive();
 	}, [sessionId, startSessionMutation, refetchIsActive]);
 
-	// Send messages directly to the stream - the session manager's stream watcher
-	// will detect new messages and trigger Claude processing
 	const [isSending, setIsSending] = useState(false);
 	const handleSend = useCallback(
 		async (content: string) => {
@@ -67,16 +64,22 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 		[sendMessage, setDraft],
 	);
 
-	// Convert MessageRow to ChatMessageList format
 	const allMessages = useMemo((): Array<Message | StreamingMessage> => {
 		const result: Array<Message | StreamingMessage> = messages.map((m) => ({
 			id: m.id,
 			role: m.role as "user" | "assistant",
 			content: m.content,
+			contentBlocks: m.contentBlocks,
+			toolResults: m.toolResults,
 			createdAt: m.createdAt,
 		}));
 		if (streamingMessage) {
-			result.push({ type: "streaming", content: streamingMessage.content });
+			result.push({
+				type: "streaming",
+				content: streamingMessage.content,
+				contentBlocks: streamingMessage.contentBlocks,
+				toolResults: streamingMessage.toolResults,
+			});
 		}
 		return result;
 	}, [messages, streamingMessage]);

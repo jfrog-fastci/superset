@@ -2,6 +2,10 @@
  * Stream module exports
  */
 
+export type {
+	BetaContentBlock,
+	BetaToolUseBlock,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 export {
 	createSessionActions,
 	createStream,
@@ -16,11 +20,11 @@ export {
 	type SessionCollections,
 } from "./client";
 export {
-	type ChunkContent,
 	type ChunkRow,
 	type MessageRole,
 	type MessageRow,
 	materializeMessage,
+	type ToolResult,
 } from "./materialize";
 export {
 	type SessionStateSchema,

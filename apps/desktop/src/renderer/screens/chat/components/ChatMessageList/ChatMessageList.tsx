@@ -2,6 +2,7 @@
  * Chat message list with auto-scroll
  */
 
+import type { BetaContentBlock, ToolResult } from "@superset/ai-chat/stream";
 import { ScrollArea } from "@superset/ui/scroll-area";
 import { cn } from "@superset/ui/utils";
 import { useEffect, useRef } from "react";
@@ -11,12 +12,16 @@ export interface Message {
 	id: string;
 	role: "user" | "assistant";
 	content: string;
+	contentBlocks?: BetaContentBlock[];
+	toolResults?: Map<string, ToolResult>;
 	createdAt: Date;
 }
 
 export interface StreamingMessage {
 	type: "streaming";
 	content: string;
+	contentBlocks?: BetaContentBlock[];
+	toolResults?: Map<string, ToolResult>;
 }
 
 export interface ChatMessageListProps {
@@ -33,7 +38,6 @@ export function ChatMessageList({
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const bottomRef = useRef<HTMLDivElement>(null);
 
-	// Auto-scroll to bottom on new messages
 	useEffect(() => {
 		if (autoScroll && bottomRef.current) {
 			bottomRef.current.scrollIntoView({ behavior: "smooth" });
@@ -48,8 +52,9 @@ export function ChatMessageList({
 						return (
 							<ChatMessage
 								key="streaming"
-								role="assistant"
 								content={msg.content}
+								contentBlocks={msg.contentBlocks}
+								toolResults={msg.toolResults}
 								isStreaming
 							/>
 						);
@@ -61,6 +66,8 @@ export function ChatMessageList({
 							key={message.id || index}
 							role={message.role}
 							content={message.content}
+							contentBlocks={message.contentBlocks}
+							toolResults={message.toolResults}
 							timestamp={message.createdAt}
 						/>
 					);

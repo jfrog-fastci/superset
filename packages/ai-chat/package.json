@@ -14,6 +14,8 @@
 		"typecheck": "tsc --noEmit --emitDeclarationOnly false"
 	},
 	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "^0.2.19",
+		"@anthropic-ai/sdk": "^0.71.2",
 		"@durable-streams/client": "^0.2.0",
 		"@durable-streams/state": "^0.2.0",
 		"@superset/ui": "workspace:*",

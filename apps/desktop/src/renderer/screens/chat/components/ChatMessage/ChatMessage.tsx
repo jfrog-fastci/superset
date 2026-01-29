@@ -2,22 +2,120 @@
  * Individual chat message component
  */
 
+import type { BetaContentBlock, ToolResult } from "@superset/ai-chat/stream";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@superset/ui/collapsible";
 import { cn } from "@superset/ui/utils";
+import { useState } from "react";
+import { LuChevronRight } from "react-icons/lu";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import { ToolCallPart } from "../ToolCallPart";
 
 export interface ChatMessageProps {
-	role: "user" | "assistant" | "streaming";
+	role?: "user" | "assistant";
 	content: string;
+	contentBlocks?: BetaContentBlock[];
+	toolResults?: Map<string, ToolResult>;
 	timestamp?: Date;
 	isStreaming?: boolean;
 }
 
-export function ChatMessage({
-	role,
+function ThinkingBlock({ thinking }: { thinking: string }) {
+	const [isOpen, setIsOpen] = useState(false);
+
+	return (
+		<Collapsible open={isOpen} onOpenChange={setIsOpen}>
+			<CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+				<LuChevronRight
+					className={cn("h-3 w-3 transition-transform", isOpen && "rotate-90")}
+				/>
+				Thinking
+			</CollapsibleTrigger>
+			<CollapsibleContent>
+				<div className="mt-1 rounded border border-border bg-muted/30 p-2 text-xs text-muted-foreground italic whitespace-pre-wrap">
+					{thinking}
+				</div>
+			</CollapsibleContent>
+		</Collapsible>
+	);
+}
+
+function AssistantContent({
 	content,
+	contentBlocks,
+	toolResults,
+}: {
+	content: string;
+	contentBlocks?: BetaContentBlock[];
+	toolResults?: Map<string, ToolResult>;
+}) {
+	if (!contentBlocks || contentBlocks.length === 0) {
+		return (
+			<div className="prose prose-sm dark:prose-invert max-w-none">
+				<ReactMarkdown
+					remarkPlugins={[remarkGfm]}
+					rehypePlugins={[rehypeRaw, rehypeSanitize]}
+				>
+					{content}
+				</ReactMarkdown>
+			</div>
+		);
+	}
+
+	return (
+		<div className="space-y-3">
+			{contentBlocks.map((block, index) => {
+				switch (block.type) {
+					case "text":
+						return (
+							<div
+								key={index}
+								className="prose prose-sm dark:prose-invert max-w-none"
+							>
+								<ReactMarkdown
+									remarkPlugins={[remarkGfm]}
+									rehypePlugins={[rehypeRaw, rehypeSanitize]}
+								>
+									{block.text}
+								</ReactMarkdown>
+							</div>
+						);
+					case "tool_use":
+						return (
+							<ToolCallPart
+								key={block.id}
+								block={block}
+								result={toolResults?.get(block.id)}
+							/>
+						);
+					case "thinking":
+						return <ThinkingBlock key={index} thinking={block.thinking} />;
+					default:
+						return (
+							<div
+								key={index}
+								className="rounded border border-border bg-muted/30 p-2 text-xs text-muted-foreground"
+							>
+								<span className="font-mono">{block.type}</span> block
+							</div>
+						);
+				}
+			})}
+		</div>
+	);
+}
+
+export function ChatMessage({
+	role = "assistant",
+	content,
+	contentBlocks,
+	toolResults,
 	timestamp,
 	isStreaming,
 }: ChatMessageProps) {
@@ -39,14 +137,11 @@ export function ChatMessage({
 				{isUser ? (
 					<p className="whitespace-pre-wrap">{content}</p>
 				) : (
-					<div className="prose prose-sm dark:prose-invert max-w-none">
-						<ReactMarkdown
-							remarkPlugins={[remarkGfm]}
-							rehypePlugins={[rehypeRaw, rehypeSanitize]}
-						>
-							{content}
-						</ReactMarkdown>
-					</div>
+					<AssistantContent
+						content={content}
+						contentBlocks={contentBlocks}
+						toolResults={toolResults}
+					/>
 				)}
 				{timestamp && (
 					<span className="mt-1 block text-xs opacity-60">

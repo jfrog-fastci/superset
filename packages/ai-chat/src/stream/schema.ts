@@ -20,7 +20,7 @@ export const chunkSchema = z.object({
 	messageId: z.string(),
 	actorId: z.string(),
 	role: z.enum(["user", "assistant", "system"]),
-	chunk: z.string(),
+	chunk: z.record(z.string(), z.unknown()),
 	seq: z.number(),
 	createdAt: z.string(),
 });
