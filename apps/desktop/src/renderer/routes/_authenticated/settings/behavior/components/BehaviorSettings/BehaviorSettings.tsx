@@ -32,6 +32,10 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 		SETTING_ITEM_ID.BEHAVIOR_BRANCH_PREFIX,
 		visibleItems,
 	);
+	const showVoiceCommands = isItemVisible(
+		SETTING_ITEM_ID.BEHAVIOR_VOICE_COMMANDS,
+		visibleItems,
+	);
 
 	const utils = electronTrpc.useUtils();
 
@@ -56,6 +60,33 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 
 	const handleConfirmToggle = (enabled: boolean) => {
 		setConfirmOnQuit.mutate({ enabled });
+	};
+
+	const { data: voiceCommandsEnabled, isLoading: isVoiceLoading } =
+		electronTrpc.settings.getVoiceCommandsEnabled.useQuery();
+	const setVoiceCommandsEnabled =
+		electronTrpc.settings.setVoiceCommandsEnabled.useMutation({
+			onMutate: async ({ enabled }) => {
+				await utils.settings.getVoiceCommandsEnabled.cancel();
+				const previous = utils.settings.getVoiceCommandsEnabled.getData();
+				utils.settings.getVoiceCommandsEnabled.setData(undefined, enabled);
+				return { previous };
+			},
+			onError: (_err, _vars, context) => {
+				if (context?.previous !== undefined) {
+					utils.settings.getVoiceCommandsEnabled.setData(
+						undefined,
+						context.previous,
+					);
+				}
+			},
+			onSettled: () => {
+				utils.settings.getVoiceCommandsEnabled.invalidate();
+			},
+		});
+
+	const handleVoiceToggle = (enabled: boolean) => {
+		setVoiceCommandsEnabled.mutate({ enabled });
 	};
 
 	const { data: branchPrefix, isLoading: isBranchPrefixLoading } =
@@ -133,6 +164,25 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 							checked={confirmOnQuit ?? true}
 							onCheckedChange={handleConfirmToggle}
 							disabled={isConfirmLoading || setConfirmOnQuit.isPending}
+						/>
+					</div>
+				)}
+
+				{showVoiceCommands && (
+					<div className="flex items-center justify-between">
+						<div className="space-y-0.5">
+							<Label htmlFor="voice-commands" className="text-sm font-medium">
+								Voice Commands
+							</Label>
+							<p className="text-xs text-muted-foreground">
+								Enable wake word detection and voice commands
+							</p>
+						</div>
+						<Switch
+							id="voice-commands"
+							checked={voiceCommandsEnabled ?? false}
+							onCheckedChange={handleVoiceToggle}
+							disabled={isVoiceLoading || setVoiceCommandsEnabled.isPending}
 						/>
 					</div>
 				)}
