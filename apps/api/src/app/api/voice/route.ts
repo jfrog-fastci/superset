@@ -1,5 +1,5 @@
 import { auth } from "@superset/auth/server";
-import type { McpContext } from "@/lib/mcp/auth";
+import type { McpContext } from "@superset/mcp/auth";
 import { runVoicePipeline } from "./voice-service";
 
 async function authenticate(request: Request): Promise<McpContext | null> {

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { OpenAI } from "openai";
 import { env } from "@/env";
-import type { McpContext } from "@/lib/mcp/auth";
+import type { McpContext } from "@superset/mcp/auth";
 import {
 	executeTool,
 	getToolDefinitions,

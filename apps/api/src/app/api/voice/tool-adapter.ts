@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { McpContext } from "@/lib/mcp/auth";
+import type { McpContext } from "@superset/mcp/auth";
 
 type ToolHandler = (
 	params: Record<string, unknown>,
@@ -77,7 +77,7 @@ export async function getToolDefinitions(): Promise<ToolDefinition[]> {
 		},
 	};
 
-	const { registerTools } = await import("@/lib/mcp/tools");
+	const { registerTools } = await import("@superset/mcp");
 	registerTools(interceptServer as never);
 
 	cachedTools = tools;

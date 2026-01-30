@@ -41,7 +41,6 @@ export const env = createEnv({
 		STRIPE_PRO_YEARLY_PRICE_ID: z.string(),
 		SENTRY_AUTH_TOKEN: z.string().optional(),
 		OPENAI_API_KEY: z.string().min(1),
-		ANTHROPIC_API_KEY: z.string().min(1),
 	},
 	client: {
 		NEXT_PUBLIC_API_URL: z.string().url(),
