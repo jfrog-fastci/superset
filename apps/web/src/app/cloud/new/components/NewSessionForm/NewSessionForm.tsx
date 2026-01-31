@@ -235,7 +235,7 @@ export function NewSessionForm({
 											<div className="p-3 text-sm text-muted-foreground space-y-2">
 												<p>No repositories found.</p>
 												<a
-													href={`https://github.com/settings/installations`}
+													href="https://github.com/apps/superset-app/installations/new"
 													target="_blank"
 													rel="noopener noreferrer"
 													className="text-primary hover:underline inline-flex items-center gap-1"
