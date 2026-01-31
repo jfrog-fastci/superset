@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import type { CreateSessionParams, SessionResult } from "../terminal/types";
 import type {
 	TerminalCapabilities,
 	TerminalManagement,
@@ -16,7 +17,6 @@ import type {
 	WorkspaceRuntime,
 	WorkspaceRuntimeId,
 } from "./types";
-import type { CreateSessionParams, SessionResult } from "../terminal/types";
 
 // =============================================================================
 // Cloud Event Types
@@ -30,7 +30,14 @@ export interface CloudSessionConfig {
 
 export interface CloudEvent {
 	id: string;
-	type: "tool_call" | "tool_result" | "token" | "error" | "git_sync" | "execution_complete" | "heartbeat";
+	type:
+		| "tool_call"
+		| "tool_result"
+		| "token"
+		| "error"
+		| "git_sync"
+		| "execution_complete"
+		| "heartbeat";
 	timestamp: number;
 	data: unknown;
 	messageId?: string;
@@ -68,9 +75,7 @@ class CloudWebSocketConnection extends EventEmitter {
 	private reconnectDelay = 1000;
 	private pingInterval: NodeJS.Timeout | null = null;
 
-	constructor(
-		private config: CloudSessionConfig,
-	) {
+	constructor(private config: CloudSessionConfig) {
 		super();
 	}
 
@@ -128,7 +133,10 @@ class CloudWebSocketConnection extends EventEmitter {
 	}): void {
 		switch (message.type) {
 			case "subscribed":
-				this.emit("subscribed", { sessionId: message.sessionId, state: message.state });
+				this.emit("subscribed", {
+					sessionId: message.sessionId,
+					state: message.state,
+				});
 				break;
 
 			case "event":
@@ -183,7 +191,7 @@ class CloudWebSocketConnection extends EventEmitter {
 		}
 
 		this.reconnectAttempts++;
-		const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+		const delay = this.reconnectDelay * 2 ** (this.reconnectAttempts - 1);
 
 		setTimeout(() => {
 			this.connect().catch((error) => {
@@ -230,10 +238,13 @@ class CloudTerminalRuntime extends EventEmitter implements TerminalRuntime {
 		this.connection = new CloudWebSocketConnection(this.config);
 
 		// Forward connection events
-		this.connection.on("subscribed", (data: { sessionId: string; state: CloudSessionState }) => {
-			this.sessionState = data.state;
-			this.emit("subscribed", data);
-		});
+		this.connection.on(
+			"subscribed",
+			(data: { sessionId: string; state: CloudSessionState }) => {
+				this.sessionState = data.state;
+				this.emit("subscribed", data);
+			},
+		);
 
 		this.connection.on("event", (event: CloudEvent) => {
 			// Emit events in a format similar to terminal data
@@ -317,7 +328,9 @@ class CloudTerminalRuntime extends EventEmitter implements TerminalRuntime {
 		// No cold restore in cloud mode
 	}
 
-	getSession(paneId: string): { isAlive: boolean; cwd: string; lastActive: number } | null {
+	getSession(
+		paneId: string,
+	): { isAlive: boolean; cwd: string; lastActive: number } | null {
 		if (paneId !== this.config.sessionId) {
 			return null;
 		}
@@ -329,11 +342,17 @@ class CloudTerminalRuntime extends EventEmitter implements TerminalRuntime {
 		};
 	}
 
+	getSessionState(): CloudSessionState | null {
+		return this.sessionState;
+	}
+
 	// ===========================================================================
 	// Workspace Operations
 	// ===========================================================================
 
-	async killByWorkspaceId(_workspaceId: string): Promise<{ killed: number; failed: number }> {
+	async killByWorkspaceId(
+		_workspaceId: string,
+	): Promise<{ killed: number; failed: number }> {
 		// Cloud workspaces have only one session per workspace
 		this.connection?.disconnect();
 		return { killed: 1, failed: 0 };
@@ -407,6 +426,6 @@ export class CloudWorkspaceRuntime implements WorkspaceRuntime {
 	 * Get the current session state.
 	 */
 	getState(): CloudSessionState | null {
-		return (this.terminalRuntime as CloudTerminalRuntime)["sessionState"];
+		return (this.terminalRuntime as CloudTerminalRuntime).getSessionState();
 	}
 }

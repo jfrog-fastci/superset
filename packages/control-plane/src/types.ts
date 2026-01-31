@@ -30,7 +30,12 @@ export interface Env {
 /**
  * Session status values.
  */
-export type SessionStatus = "created" | "active" | "paused" | "completed" | "archived";
+export type SessionStatus =
+	| "created"
+	| "active"
+	| "paused"
+	| "completed"
+	| "archived";
 
 /**
  * Sandbox status values.
@@ -71,6 +76,34 @@ export interface ClientInfo {
 }
 
 /**
+ * Sandbox connection info for WebSocket management.
+ */
+export interface SandboxInfo {
+	sandboxId: string;
+	authenticatedAt: number;
+}
+
+/**
+ * Messages sent from sandbox to control plane.
+ */
+export type SandboxMessage =
+	| { type: "sandbox_connect"; sandboxId: string; token: string }
+	| { type: "event"; event: SandboxEvent }
+	| { type: "execution_started"; messageId: string }
+	| { type: "execution_complete"; messageId: string; success: boolean }
+	| { type: "pong" };
+
+/**
+ * Messages sent from control plane to sandbox.
+ */
+export type ControlPlaneToSandboxMessage =
+	| { type: "sandbox_connected"; sessionId: string }
+	| { type: "prompt"; messageId: string; content: string }
+	| { type: "stop" }
+	| { type: "ping" }
+	| { type: "error"; message: string };
+
+/**
  * Messages sent from clients to the server.
  */
 export type ClientMessage =
@@ -80,10 +113,24 @@ export type ClientMessage =
 	| { type: "ping" };
 
 /**
+ * Historical message data sent to clients on subscribe.
+ */
+export interface HistoricalMessage {
+	id: string;
+	content: string;
+	role: string;
+	status: string;
+	participantId: string | null;
+	createdAt: number;
+	completedAt: number | null;
+}
+
+/**
  * Messages sent from server to clients.
  */
 export type ServerMessage =
 	| { type: "subscribed"; sessionId: string; state: SessionState }
+	| { type: "history"; messages: HistoricalMessage[] }
 	| { type: "event"; event: SandboxEvent }
 	| { type: "state_update"; state: Partial<SessionState> }
 	| { type: "error"; message: string }
