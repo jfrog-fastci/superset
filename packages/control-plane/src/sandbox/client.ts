@@ -70,10 +70,14 @@ export class ModalClient {
 
 	constructor(secret: string, workspace: string) {
 		if (!secret) {
-			throw new Error("ModalClient requires MODAL_API_SECRET for authentication");
+			throw new Error(
+				"ModalClient requires MODAL_API_SECRET for authentication",
+			);
 		}
 		if (!workspace) {
-			throw new Error("ModalClient requires MODAL_WORKSPACE for URL construction");
+			throw new Error(
+				"ModalClient requires MODAL_WORKSPACE for URL construction",
+			);
 		}
 		this.secret = secret;
 		const baseUrl = getModalBaseUrl(workspace);
@@ -110,7 +114,9 @@ export class ModalClient {
 	/**
 	 * Create a new sandbox for a session.
 	 */
-	async createSandbox(request: CreateSandboxRequest): Promise<CreateSandboxResponse> {
+	async createSandbox(
+		request: CreateSandboxRequest,
+	): Promise<CreateSandboxResponse> {
 		console.log("[ModalClient] Creating sandbox:", request.sessionId);
 
 		const headers = await this.getPostHeaders();
@@ -166,7 +172,11 @@ export class ModalClient {
 		repoName: string;
 		controlPlaneUrl?: string;
 	}): Promise<{ sandboxId: string; status: string }> {
-		console.log("[ModalClient] Warming sandbox:", request.repoOwner, request.repoName);
+		console.log(
+			"[ModalClient] Warming sandbox:",
+			request.repoOwner,
+			request.repoName,
+		);
 
 		const headers = await this.getPostHeaders();
 		const response = await fetch(this.warmSandboxUrl, {
@@ -236,7 +246,9 @@ export class ModalClient {
 			throw new Error(`Modal API error: ${response.status} ${text}`);
 		}
 
-		const result = (await response.json()) as ModalApiResponse<{ snapshot_id: string }>;
+		const result = (await response.json()) as ModalApiResponse<{
+			snapshot_id: string;
+		}>;
 
 		if (!result.success || !result.data) {
 			throw new Error(`Modal API error: ${result.error || "Unknown error"}`);
@@ -254,7 +266,10 @@ export class ModalClient {
 		controlPlaneUrl: string;
 		sandboxAuthToken: string;
 	}): Promise<CreateSandboxResponse> {
-		console.log("[ModalClient] Restoring sandbox from snapshot:", request.snapshotId);
+		console.log(
+			"[ModalClient] Restoring sandbox from snapshot:",
+			request.snapshotId,
+		);
 
 		const headers = await this.getPostHeaders();
 		const response = await fetch(this.restoreSandboxUrl, {
@@ -317,7 +332,10 @@ export class ModalClient {
 	/**
 	 * Get the latest snapshot for a repository.
 	 */
-	async getLatestSnapshot(repoOwner: string, repoName: string): Promise<SnapshotInfo | null> {
+	async getLatestSnapshot(
+		repoOwner: string,
+		repoName: string,
+	): Promise<SnapshotInfo | null> {
 		const url = `${this.snapshotUrl}?repo_owner=${encodeURIComponent(repoOwner)}&repo_name=${encodeURIComponent(repoName)}`;
 
 		const headers = await this.getGetHeaders();
@@ -340,6 +358,9 @@ export class ModalClient {
 /**
  * Create a new Modal client instance.
  */
-export function createModalClient(secret: string, workspace: string): ModalClient {
+export function createModalClient(
+	secret: string,
+	workspace: string,
+): ModalClient {
 	return new ModalClient(secret, workspace);
 }

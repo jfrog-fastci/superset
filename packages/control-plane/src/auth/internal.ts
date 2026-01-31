@@ -21,7 +21,11 @@ export async function generateInternalToken(secret: string): Promise<string> {
 		["sign"],
 	);
 
-	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+	const signature = await crypto.subtle.sign(
+		"HMAC",
+		key,
+		encoder.encode(payload),
+	);
 
 	const signatureHex = Array.from(new Uint8Array(signature))
 		.map((b) => b.toString(16).padStart(2, "0"))
@@ -47,7 +51,7 @@ export async function verifyInternalToken(
 	const [timestampStr, signatureHex] = parts;
 	const timestamp = parseInt(timestampStr, 10);
 
-	if (isNaN(timestamp)) {
+	if (Number.isNaN(timestamp)) {
 		return false;
 	}
 
@@ -71,7 +75,12 @@ export async function verifyInternalToken(
 		signatureHex.match(/.{2}/g)?.map((byte) => parseInt(byte, 16)) || [],
 	);
 
-	return crypto.subtle.verify("HMAC", key, signatureBytes, encoder.encode(timestampStr));
+	return crypto.subtle.verify(
+		"HMAC",
+		key,
+		signatureBytes,
+		encoder.encode(timestampStr),
+	);
 }
 
 /**

@@ -10,7 +10,13 @@ import {
 	updateCloudWorkspaceSchema,
 } from "./schema";
 
-function getOrganizationId(ctx: { session: { session: { activeOrganizationId: string | null } } }) {
+const CONTROL_PLANE_URL =
+	process.env.CONTROL_PLANE_URL ||
+	"https://superset-control-plane.avi-6ac.workers.dev";
+
+function getOrganizationId(ctx: {
+	session: { session: { activeOrganizationId: string | null } };
+}) {
 	const organizationId = ctx.session.session.activeOrganizationId;
 	if (!organizationId) {
 		throw new TRPCError({
@@ -144,7 +150,8 @@ export const cloudWorkspaceRouter = {
 
 			const sessionId = crypto.randomUUID();
 			const branch =
-				input.branch ?? `superset/${ctx.session.user.id.slice(0, 8)}/${sessionId.slice(0, 8)}`;
+				input.branch ??
+				`superset/${ctx.session.user.id.slice(0, 8)}/${sessionId.slice(0, 8)}`;
 
 			const [workspace] = await db
 				.insert(cloudWorkspaces)
@@ -164,10 +171,36 @@ export const cloudWorkspaceRouter = {
 				})
 				.returning();
 
-			// TODO: Call control plane to initialize session with initial prompt
-			// if (input.initialPrompt) {
-			//   await initializeCloudSession(workspace.sessionId, input.initialPrompt);
-			// }
+			// Initialize session in control plane
+			try {
+				const initResponse = await fetch(`${CONTROL_PLANE_URL}/api/sessions`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${ctx.session.session.id}`, // Use session ID as auth for now
+					},
+					body: JSON.stringify({
+						sessionId, // Pass our session ID to control plane
+						organizationId,
+						userId: ctx.session.user.id,
+						repoOwner: input.repoOwner,
+						repoName: input.repoName,
+						branch,
+						baseBranch: input.baseBranch,
+						model: input.model,
+					}),
+				});
+
+				if (!initResponse.ok) {
+					console.error(
+						"[cloud-workspace] Failed to initialize control plane session:",
+						await initResponse.text(),
+					);
+					// Don't fail the creation - control plane session can be retried
+				}
+			} catch (error) {
+				console.error("[cloud-workspace] Control plane error:", error);
+			}
 
 			return workspace;
 		}),
@@ -286,11 +319,80 @@ export const cloudWorkspaceRouter = {
 			if (!workspace) {
 				throw new TRPCError({
 					code: "NOT_FOUND",
-					message: "Cloud workspace not found or must be archived before deletion",
+					message:
+						"Cloud workspace not found or must be archived before deletion",
 				});
 			}
 
 			return { success: true };
+		}),
+
+	// Spawn a sandbox for a cloud workspace
+	spawnSandbox: protectedProcedure
+		.input(z.object({ sessionId: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = getOrganizationId(ctx);
+
+			// Verify workspace exists and belongs to this org
+			const [workspace] = await db
+				.select()
+				.from(cloudWorkspaces)
+				.where(
+					and(
+						eq(cloudWorkspaces.sessionId, input.sessionId),
+						eq(cloudWorkspaces.organizationId, organizationId),
+					),
+				)
+				.limit(1);
+
+			if (!workspace) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Cloud workspace not found",
+				});
+			}
+
+			// Call control plane to spawn sandbox
+			try {
+				const response = await fetch(
+					`${CONTROL_PLANE_URL}/api/sessions/${input.sessionId}/spawn-sandbox`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${ctx.session.session.id}`,
+						},
+					},
+				);
+
+				if (!response.ok) {
+					const error = await response.text();
+					console.error("[cloud-workspace] Failed to spawn sandbox:", error);
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
+						message: "Failed to spawn sandbox",
+					});
+				}
+
+				const result = await response.json();
+
+				// Update workspace status
+				await db
+					.update(cloudWorkspaces)
+					.set({
+						sandboxStatus: "warming",
+						updatedAt: new Date(),
+					})
+					.where(eq(cloudWorkspaces.sessionId, input.sessionId));
+
+				return result;
+			} catch (error) {
+				console.error("[cloud-workspace] Spawn sandbox error:", error);
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to spawn sandbox",
+				});
+			}
 		}),
 
 	// Update sandbox status (called by control plane webhook or polling)

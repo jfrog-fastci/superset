@@ -41,9 +41,7 @@ function DashboardLayout() {
 	);
 
 	// Cloud workspace state
-	const activeCloudSessionId = useCloudWorkspaceStore(
-		(s) => s.activeSessionId,
-	);
+	const activeCloudSessionId = useCloudWorkspaceStore((s) => s.activeSessionId);
 
 	const {
 		isOpen: isWorkspaceSidebarOpen,

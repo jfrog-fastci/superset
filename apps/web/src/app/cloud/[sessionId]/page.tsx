@@ -25,11 +25,14 @@ export default async function CloudWorkspacePage({
 	const trpc = await api();
 
 	try {
-		const workspace = await trpc.cloudWorkspace.getBySessionId.query({
-			sessionId,
-		});
+		const [workspace, workspaces] = await Promise.all([
+			trpc.cloudWorkspace.getBySessionId.query({ sessionId }),
+			trpc.cloudWorkspace.list.query(),
+		]);
 
-		return <CloudWorkspaceContent workspace={workspace} />;
+		return (
+			<CloudWorkspaceContent workspace={workspace} workspaces={workspaces} />
+		);
 	} catch {
 		notFound();
 	}

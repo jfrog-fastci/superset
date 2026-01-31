@@ -1,6 +1,7 @@
 """Git operations for sandbox environment."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -30,6 +31,14 @@ class GitOperations:
     def clone_repo(self, github_token: str) -> bool:
         """Clone the repository."""
         self.emitter.emit_git_sync("cloning")
+
+        # Clean up existing workspace directory if it exists
+        if self.workspace_path.exists():
+            try:
+                shutil.rmtree(self.workspace_path)
+            except Exception as e:
+                self.emitter.emit_error(f"Failed to clean workspace: {str(e)}")
+                return False
 
         # Construct clone URL with token
         clone_url = f"https://x-access-token:{github_token}@github.com/{self.config.repo_owner}/{self.config.repo_name}.git"

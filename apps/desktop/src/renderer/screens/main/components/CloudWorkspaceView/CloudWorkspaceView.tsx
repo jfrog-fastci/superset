@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { LuCloud, LuExternalLink, LuRefreshCw, LuX } from "react-icons/lu";
-import { apiTrpc } from "renderer/lib/api-trpc";
 import { env } from "renderer/env.renderer";
+import { apiTrpc } from "renderer/lib/api-trpc";
 import { ApiTRPCProvider } from "renderer/providers/ApiTRPCProvider";
 import { electronQueryClient } from "renderer/providers/ElectronTRPCProvider";
 import { useCloudWorkspaceStore } from "renderer/stores/cloud-workspace";
@@ -40,10 +40,11 @@ function CloudWorkspaceViewContent() {
 	const { activeSessionId, clearActiveSession } = useCloudWorkspaceStore();
 	const webviewRef = useRef<HTMLElement>(null);
 
-	const { data: workspace, isLoading } = apiTrpc.cloudWorkspace.getBySessionId.useQuery(
-		{ sessionId: activeSessionId ?? "" },
-		{ enabled: !!activeSessionId },
-	);
+	const { data: workspace, isLoading } =
+		apiTrpc.cloudWorkspace.getBySessionId.useQuery(
+			{ sessionId: activeSessionId ?? "" },
+			{ enabled: !!activeSessionId },
+		);
 
 	// Set up webview event listeners
 	useEffect(() => {
@@ -66,7 +67,7 @@ function CloudWorkspaceViewContent() {
 			webview.removeEventListener("did-fail-load", handleDidFailLoad);
 			webview.removeEventListener("did-finish-load", handleDidFinishLoad);
 		};
-	}, [workspace?.sessionId]);
+	}, []);
 
 	if (!activeSessionId) {
 		return null;
@@ -76,7 +77,10 @@ function CloudWorkspaceViewContent() {
 		return (
 			<div className="flex-1 flex items-center justify-center bg-background">
 				<div className="flex flex-col items-center gap-3 text-muted-foreground">
-					<LuCloud className="size-8 animate-pulse" strokeWidth={STROKE_WIDTH} />
+					<LuCloud
+						className="size-8 animate-pulse"
+						strokeWidth={STROKE_WIDTH}
+					/>
 					<span className="text-sm">Loading cloud workspace...</span>
 				</div>
 			</div>
@@ -106,7 +110,9 @@ function CloudWorkspaceViewContent() {
 	const cloudWorkspaceUrl = `${env.NEXT_PUBLIC_WEB_URL}/cloud/${workspace.sessionId}`;
 
 	const handleRefresh = () => {
-		const webview = webviewRef.current as (HTMLElement & { reload?: () => void }) | null;
+		const webview = webviewRef.current as
+			| (HTMLElement & { reload?: () => void })
+			| null;
 		if (webview?.reload) {
 			webview.reload();
 		}

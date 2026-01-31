@@ -1,6 +1,6 @@
 export {
 	generateInternalToken,
-	verifyInternalToken,
 	generateSandboxToken,
 	hashToken,
+	verifyInternalToken,
 } from "./internal";

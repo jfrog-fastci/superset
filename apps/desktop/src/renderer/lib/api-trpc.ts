@@ -1,5 +1,5 @@
-import { createTRPCReact } from "@trpc/react-query";
 import type { AppRouter } from "@superset/trpc";
+import { createTRPCReact } from "@trpc/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 
 /**

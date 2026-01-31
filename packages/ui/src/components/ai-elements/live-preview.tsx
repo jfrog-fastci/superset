@@ -57,9 +57,7 @@ const LivePreviewContext = createContext<LivePreviewContextValue | null>(null);
 const useLivePreview = () => {
 	const context = useContext(LivePreviewContext);
 	if (!context) {
-		throw new Error(
-			"LivePreview components must be used within a LivePreview",
-		);
+		throw new Error("LivePreview components must be used within a LivePreview");
 	}
 	return context;
 };
@@ -120,7 +118,7 @@ export const LivePreview = ({
 			setUrlState(defaultUrl);
 			setState(defaultUrl ? "loading" : "empty");
 		}
-	}, [defaultUrl]);
+	}, [defaultUrl, url]);
 
 	// Handle escape key to close expanded view
 	useEffect(() => {
@@ -237,12 +235,7 @@ export const LivePreviewCollapsibleTrigger = ({
 								</span>
 							)}
 						</div>
-						<Button
-							asChild
-							className="size-6"
-							size="icon"
-							variant="ghost"
-						>
+						<Button asChild className="size-6" size="icon" variant="ghost">
 							<span>
 								{isCollapsed ? (
 									<ChevronUpIcon className="size-4" />

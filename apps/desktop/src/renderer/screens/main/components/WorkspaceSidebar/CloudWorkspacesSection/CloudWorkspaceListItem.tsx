@@ -7,7 +7,12 @@ import {
 } from "@superset/ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
-import { LuArchive, LuCloud, LuExternalLink, LuGitBranch } from "react-icons/lu";
+import {
+	LuArchive,
+	LuCloud,
+	LuExternalLink,
+	LuGitBranch,
+} from "react-icons/lu";
 import type { ApiRouterOutputs } from "renderer/lib/api-trpc";
 import { AsciiSpinner } from "renderer/screens/main/components/AsciiSpinner";
 import { StatusIndicator } from "renderer/screens/main/components/StatusIndicator";
@@ -24,7 +29,10 @@ interface CloudWorkspaceListItemProps {
 	onSelect?: () => void;
 }
 
-const SANDBOX_STATUS_TO_PANE_STATUS: Record<string, ActivePaneStatus | undefined> = {
+const SANDBOX_STATUS_TO_PANE_STATUS: Record<
+	string,
+	ActivePaneStatus | undefined
+> = {
 	pending: undefined,
 	warming: "working",
 	syncing: "working",
@@ -94,7 +102,10 @@ export function CloudWorkspaceListItem({
 						{workspace.prUrl && (
 							<>
 								<ContextMenuItem onSelect={handleOpenPR}>
-									<LuExternalLink className="size-4 mr-2" strokeWidth={STROKE_WIDTH} />
+									<LuExternalLink
+										className="size-4 mr-2"
+										strokeWidth={STROKE_WIDTH}
+									/>
 									Open PR
 								</ContextMenuItem>
 								<ContextMenuSeparator />
@@ -181,7 +192,10 @@ export function CloudWorkspaceListItem({
 
 							{/* Row 2: Branch info */}
 							<div className="flex items-center gap-1 text-[11px] text-muted-foreground/60">
-								<LuGitBranch className="size-3 shrink-0" strokeWidth={STROKE_WIDTH} />
+								<LuGitBranch
+									className="size-3 shrink-0"
+									strokeWidth={STROKE_WIDTH}
+								/>
 								<span className="truncate font-mono leading-tight">
 									{workspace.branch}
 								</span>
@@ -194,7 +208,10 @@ export function CloudWorkspaceListItem({
 				{workspace.prUrl && (
 					<>
 						<ContextMenuItem onSelect={handleOpenPR}>
-							<LuExternalLink className="size-4 mr-2" strokeWidth={STROKE_WIDTH} />
+							<LuExternalLink
+								className="size-4 mr-2"
+								strokeWidth={STROKE_WIDTH}
+							/>
 							Open PR
 						</ContextMenuItem>
 						<ContextMenuSeparator />

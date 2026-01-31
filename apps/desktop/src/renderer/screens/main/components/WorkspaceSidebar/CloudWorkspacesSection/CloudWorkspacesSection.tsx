@@ -37,10 +37,13 @@ function CloudWorkspacesSectionInner(props: CloudWorkspacesSectionProps) {
 	const isCollapsed = isProjectCollapsed(CLOUD_SECTION_ID);
 
 	// Always render content - the collapse state is handled internally
-	return <CloudWorkspacesSectionContent {...props} sectionCollapsed={isCollapsed} />;
+	return (
+		<CloudWorkspacesSectionContent {...props} sectionCollapsed={isCollapsed} />
+	);
 }
 
-interface CloudWorkspacesSectionContentProps extends CloudWorkspacesSectionProps {
+interface CloudWorkspacesSectionContentProps
+	extends CloudWorkspacesSectionProps {
 	sectionCollapsed: boolean;
 }
 

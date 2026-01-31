@@ -31,8 +31,6 @@ export class SessionDO extends DurableObject<Env> {
 	private sql: SqlStorage;
 	private clients: Map<WebSocket, ClientInfo>;
 	private sandboxWs: WebSocket | null = null;
-	private sandboxInfo: { sandboxId: string; authenticatedAt: number } | null =
-		null;
 	private pendingMessages: Map<string, { content: string; createdAt: number }> =
 		new Map();
 	private initialized = false;

@@ -7,9 +7,8 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { SessionDO } from "./session";
+import { generateSandboxToken, hashToken, verifyInternalToken } from "./auth";
 import { createModalClient } from "./sandbox/client";
-import { verifyInternalToken, generateSandboxToken, hashToken } from "./auth";
 import { generateId } from "./session/schema";
 import type { Env } from "./types";
 
@@ -51,6 +50,7 @@ app.post("/api/sessions", async (c) => {
 	}
 
 	const body = await c.req.json<{
+		sessionId?: string; // Optional - if not provided, one will be generated
 		organizationId: string;
 		userId: string;
 		repoOwner: string;
@@ -60,8 +60,8 @@ app.post("/api/sessions", async (c) => {
 		model?: string;
 	}>();
 
-	// Generate session ID
-	const sessionId = generateId();
+	// Use provided session ID or generate one
+	const sessionId = body.sessionId || generateId();
 
 	// Get the Durable Object stub
 	const doId = c.env.SESSION_DO.idFromName(sessionId);
@@ -96,9 +96,13 @@ app.post("/api/sessions", async (c) => {
 	const sandboxTokenHash = await hashToken(sandboxToken);
 
 	// Store token hash in KV for later verification
-	await c.env.SESSION_TOKENS.put(`session:${sessionId}:sandbox_token`, sandboxTokenHash, {
-		expirationTtl: 86400 * 7, // 7 days
-	});
+	await c.env.SESSION_TOKENS.put(
+		`session:${sessionId}:sandbox_token`,
+		sandboxTokenHash,
+		{
+			expirationTtl: 86400 * 7, // 7 days
+		},
+	);
 
 	return c.json({
 		success: true,
@@ -116,7 +120,9 @@ app.get("/api/sessions/:sessionId", async (c) => {
 	const doId = c.env.SESSION_DO.idFromName(sessionId);
 	const stub = c.env.SESSION_DO.get(doId);
 
-	const response = await stub.fetch(new Request("https://internal/internal/state"));
+	const response = await stub.fetch(
+		new Request("https://internal/internal/state"),
+	);
 
 	if (!response.ok) {
 		return c.json({ error: "Session not found" }, 404);
@@ -323,7 +329,9 @@ app.post("/api/sessions/:sessionId/spawn-sandbox", async (c) => {
 	const doId = c.env.SESSION_DO.idFromName(sessionId);
 	const stub = c.env.SESSION_DO.get(doId);
 
-	const stateResponse = await stub.fetch(new Request("https://internal/internal/state"));
+	const stateResponse = await stub.fetch(
+		new Request("https://internal/internal/state"),
+	);
 	if (!stateResponse.ok) {
 		return c.json({ error: "Session not found" }, 404);
 	}
@@ -338,7 +346,9 @@ app.post("/api/sessions/:sessionId/spawn-sandbox", async (c) => {
 	};
 
 	// Get sandbox token from KV
-	const sandboxTokenHash = await c.env.SESSION_TOKENS.get(`session:${sessionId}:sandbox_token`);
+	const sandboxTokenHash = await c.env.SESSION_TOKENS.get(
+		`session:${sessionId}:sandbox_token`,
+	);
 	if (!sandboxTokenHash) {
 		return c.json({ error: "Session token not found" }, 404);
 	}
@@ -347,7 +357,10 @@ app.post("/api/sessions/:sessionId/spawn-sandbox", async (c) => {
 	const sandboxToken = generateSandboxToken();
 
 	// Create Modal client and spawn sandbox
-	const modalClient = createModalClient(c.env.MODAL_API_SECRET, c.env.MODAL_WORKSPACE);
+	const modalClient = createModalClient(
+		c.env.MODAL_API_SECRET,
+		c.env.MODAL_WORKSPACE,
+	);
 
 	try {
 		const result = await modalClient.createSandbox({
@@ -376,10 +389,13 @@ app.post("/api/sessions/:sessionId/spawn-sandbox", async (c) => {
  * Terminate a sandbox.
  */
 app.post("/api/sessions/:sessionId/terminate-sandbox", async (c) => {
-	const sessionId = c.req.param("sessionId");
+	const _sessionId = c.req.param("sessionId");
 	const body = await c.req.json<{ sandboxId: string }>();
 
-	const modalClient = createModalClient(c.env.MODAL_API_SECRET, c.env.MODAL_WORKSPACE);
+	const modalClient = createModalClient(
+		c.env.MODAL_API_SECRET,
+		c.env.MODAL_WORKSPACE,
+	);
 
 	try {
 		await modalClient.terminateSandbox(body.sandboxId);
