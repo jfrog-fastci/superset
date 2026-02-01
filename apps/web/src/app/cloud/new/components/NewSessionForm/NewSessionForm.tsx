@@ -29,6 +29,7 @@ import {
 	LuLock,
 } from "react-icons/lu";
 
+import { env } from "@/env";
 import { useTRPC } from "@/trpc/react";
 
 interface GitHubInstallation {
@@ -168,7 +169,7 @@ export function NewSessionForm({
 							</p>
 							<div className="flex gap-3">
 								<Button asChild>
-									<a href={`/api/github/install?organizationId=${organizationId}`}>
+									<a href={`${env.NEXT_PUBLIC_NGROK_URL ?? env.NEXT_PUBLIC_API_URL}/api/github/install?organizationId=${organizationId}`}>
 										<LuGithub className="size-4 mr-2" />
 										Connect GitHub
 									</a>

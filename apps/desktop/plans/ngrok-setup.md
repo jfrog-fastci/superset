@@ -92,15 +92,17 @@ Forwarding                    https://your-name-superset.ngrok-free.app -> http:
 
 ### 5. Update Environment Variables
 
-In your `.env` file, update the API URL to point to ngrok:
+In your `.env` file, add `NEXT_PUBLIC_NGROK_URL` for GitHub OAuth while keeping the regular API URL on localhost:
 
 ```bash
-# Before (local only)
+# Regular API URL stays on localhost for Google OAuth and other features
 NEXT_PUBLIC_API_URL=http://localhost:3001
 
-# After (with ngrok)
-NEXT_PUBLIC_API_URL=https://your-name-superset.ngrok-free.app
+# Ngrok URL is only used for GitHub OAuth (which requires public callback URL)
+NEXT_PUBLIC_NGROK_URL=https://your-name-superset.ngrok-free.app
 ```
+
+This approach keeps Google OAuth working (which requires the registered `localhost` redirect URI) while enabling GitHub OAuth through ngrok.
 
 ### 6. Start Development Servers
 
@@ -171,13 +173,15 @@ Use the `dev:cloud` script to run ngrok + dev servers together:
 ```bash
 # 1. Add to your .env:
 NGROK_SUBDOMAIN=superset-dev
-NEXT_PUBLIC_API_URL=https://superset-dev.ngrok.io
+NEXT_PUBLIC_NGROK_URL=https://superset-dev.ngrok.io
 
 # 2. Run everything:
 bun run dev:cloud
 ```
 
 This starts ngrok in the background and runs the dev servers. When you stop the servers (Ctrl+C), ngrok also shuts down.
+
+Note: `NEXT_PUBLIC_API_URL` stays on `http://localhost:3001` for Google OAuth and general API calls. Only GitHub OAuth uses the ngrok URL.
 
 ## Manual Commands
 
