@@ -143,7 +143,7 @@ export function FilesView() {
 		[worktreePath, childrenCache, loadingFolders, showHiddenFiles, trpcUtils],
 	);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on these changes
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset cache on workspace/visibility change
 	useEffect(() => {
 		setChildrenCache({});
 	}, [worktreePath, showHiddenFiles]);
