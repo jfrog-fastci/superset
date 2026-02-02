@@ -13,7 +13,7 @@ import { ScrollArea } from "@superset/ui/scroll-area";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	LuChevronDown,
 	LuGithub,
@@ -26,10 +26,6 @@ import {
 
 import { env } from "@/env";
 import { useTRPC } from "@/trpc/react";
-
-const CONTROL_PLANE_URL =
-	env.NEXT_PUBLIC_CONTROL_PLANE_URL ||
-	"https://superset-control-plane.avi-6ac.workers.dev";
 
 function _SupersetIcon({ className }: { className?: string }) {
 	return (
@@ -137,16 +133,7 @@ export function CloudHomePage({
 	const [selectedModel, setSelectedModel] = useState<
 		"claude-sonnet-4" | "claude-opus-4" | "claude-haiku-3-5"
 	>("claude-sonnet-4");
-
-	// Pre-warming state
-	const [pendingSession, setPendingSession] = useState<{
-		sessionId: string;
-		repoId: string;
-	} | null>(null);
-	const [isPrewarming, setIsPrewarming] = useState(false);
-	const wsRef = useRef<WebSocket | null>(null);
-	const hasTypedRef = useRef(false);
-	const isCreatingSessionRef = useRef(false);
+	const [error, setError] = useState<string | null>(null);
 
 	// Get recent repos (from recent workspaces)
 	const recentRepos = useMemo(() => {
@@ -162,190 +149,51 @@ export function CloudHomePage({
 		return Array.from(repoMap.values()).slice(0, 3);
 	}, [workspaces, githubRepositories]);
 
-	// Create session mutation (for pre-warming)
+	// Create session mutation - simple, like NewSessionForm
 	const createMutation = useMutation(
 		trpc.cloudWorkspace.create.mutationOptions({
 			onSuccess: (workspace) => {
 				if (workspace) {
-					console.log("[CloudHomePage] Session created for pre-warming:", workspace.sessionId);
-					setPendingSession({
-						sessionId: workspace.sessionId,
-						repoId: selectedRepo?.id || "",
-					});
-					isCreatingSessionRef.current = false;
-					// Connect to WebSocket and send typing event
-					connectAndWarm(workspace.sessionId);
+					const prompt = promptInput.trim();
+					const url = prompt
+						? `/cloud/${workspace.sessionId}?prompt=${encodeURIComponent(prompt)}`
+						: `/cloud/${workspace.sessionId}`;
+					router.push(url);
 				}
 			},
-			onError: (error) => {
-				console.error("[CloudHomePage] Failed to create session:", error);
-				isCreatingSessionRef.current = false;
-				setIsPrewarming(false);
+			onError: (err) => {
+				console.error("[CloudHomePage] Create error:", err);
+				setError(err.message || "Failed to create session");
 			},
 		}),
 	);
 
-	// Connect to WebSocket and send typing event to trigger pre-warming
-	const connectAndWarm = useCallback((sessionId: string) => {
-		if (wsRef.current?.readyState === WebSocket.OPEN) {
-			// Already connected, just send typing
-			wsRef.current.send(JSON.stringify({ type: "typing" }));
-			return;
-		}
-
-		const wsUrl = CONTROL_PLANE_URL
-			.replace("https://", "wss://")
-			.replace("http://", "ws://");
-
-		const url = `${wsUrl}/api/sessions/${sessionId}/ws`;
-
-		try {
-			const ws = new WebSocket(url);
-			wsRef.current = ws;
-
-			ws.onopen = () => {
-				console.log("[CloudHomePage] WebSocket connected for pre-warming");
-				// Subscribe first
-				ws.send(JSON.stringify({ type: "subscribe", token: "" }));
-			};
-
-			ws.onmessage = (event) => {
-				try {
-					const message = JSON.parse(event.data as string);
-					if (message.type === "subscribed") {
-						// Now send typing to trigger sandbox warm-up
-						console.log("[CloudHomePage] Subscribed, sending typing event");
-						ws.send(JSON.stringify({ type: "typing" }));
-						setIsPrewarming(true);
-					} else if (message.type === "state_update") {
-						// Track sandbox status for UI feedback
-						const status = message.state?.sandboxStatus;
-						if (status === "ready" || status === "running") {
-							setIsPrewarming(false);
-						}
-					}
-				} catch (e) {
-					console.error("[CloudHomePage] Failed to parse message:", e);
-				}
-			};
-
-			ws.onerror = () => {
-				console.error("[CloudHomePage] WebSocket error");
-				setIsPrewarming(false);
-			};
-
-			ws.onclose = () => {
-				wsRef.current = null;
-			};
-		} catch (e) {
-			console.error("[CloudHomePage] Failed to connect WebSocket:", e);
-			setIsPrewarming(false);
-		}
-	}, []);
-
-	// Cleanup WebSocket on unmount or repo change
-	useEffect(() => {
-		return () => {
-			if (wsRef.current) {
-				wsRef.current.close();
-				wsRef.current = null;
-			}
-		};
-	}, []);
-
-	// Reset pending session when repo changes
-	useEffect(() => {
-		if (selectedRepo?.id !== pendingSession?.repoId) {
-			if (wsRef.current) {
-				wsRef.current.close();
-				wsRef.current = null;
-			}
-			setPendingSession(null);
-			hasTypedRef.current = false;
-			setIsPrewarming(false);
-		}
-	}, [selectedRepo?.id, pendingSession?.repoId]);
-
-	// Handle typing - create session and warm sandbox
-	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const value = e.target.value;
-		setPromptInput(value);
-
-		// Start pre-warming when user starts typing with a repo selected
-		if (
-			value.length > 0 &&
-			selectedRepo &&
-			!pendingSession &&
-			!hasTypedRef.current &&
-			!isCreatingSessionRef.current
-		) {
-			hasTypedRef.current = true;
-			isCreatingSessionRef.current = true;
-			console.log("[CloudHomePage] User typing, creating session for pre-warming");
-			createMutation.mutate({
-				repositoryId: selectedRepo.id,
-				repoOwner: selectedRepo.owner,
-				repoName: selectedRepo.name,
-				title: `${selectedRepo.owner}/${selectedRepo.name}`,
-				model: selectedModel,
-				baseBranch: selectedRepo.defaultBranch,
-			});
-		}
-	};
-
 	const handleQuickCreate = () => {
 		if (!selectedRepo) return;
+		setError(null);
 
-		const prompt = promptInput.trim();
+		const title =
+			promptInput.trim() || `${selectedRepo.owner}/${selectedRepo.name}`;
 
-		// If we have a pending session, navigate directly to it
-		if (pendingSession) {
-			console.log("[CloudHomePage] Using pre-warmed session:", pendingSession.sessionId);
-			const url = prompt
-				? `/cloud/${pendingSession.sessionId}?prompt=${encodeURIComponent(prompt)}`
-				: `/cloud/${pendingSession.sessionId}`;
-			router.push(url);
-			return;
-		}
-
-		// Otherwise create new session
+		// Match NewSessionForm - don't pass repositoryId
 		createMutation.mutate({
-			repositoryId: selectedRepo.id,
 			repoOwner: selectedRepo.owner,
 			repoName: selectedRepo.name,
-			title: prompt || `${selectedRepo.owner}/${selectedRepo.name}`,
+			title,
 			model: selectedModel,
 			baseBranch: selectedRepo.defaultBranch,
 		});
 	};
 
-	// Navigation mutation for when we have a pending session
-	const handleNavigate = useCallback(() => {
-		if (pendingSession && promptInput.trim()) {
-			const prompt = promptInput.trim();
-			router.push(`/cloud/${pendingSession.sessionId}?prompt=${encodeURIComponent(prompt)}`);
-		}
-	}, [pendingSession, promptInput, router]);
-
-	// Update mutation success handler to navigate when not pre-warming
-	useEffect(() => {
-		if (createMutation.isSuccess && createMutation.data && !pendingSession) {
-			const prompt = promptInput.trim();
-			const url = prompt
-				? `/cloud/${createMutation.data.sessionId}?prompt=${encodeURIComponent(prompt)}`
-				: `/cloud/${createMutation.data.sessionId}`;
-			router.push(url);
-		}
-	}, [createMutation.isSuccess, createMutation.data, pendingSession, promptInput, router]);
-
 	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && !e.shiftKey && selectedRepo && promptInput.trim()) {
+		if (
+			e.key === "Enter" &&
+			!e.shiftKey &&
+			selectedRepo &&
+			promptInput.trim()
+		) {
 			e.preventDefault();
-			if (pendingSession) {
-				handleNavigate();
-			} else {
-				handleQuickCreate();
-			}
+			handleQuickCreate();
 		}
 	};
 
@@ -434,11 +282,7 @@ export function CloudHomePage({
 							<div className="flex items-center gap-2 flex-wrap">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button
-											variant="outline"
-											size="sm"
-											className="gap-2 h-8"
-										>
+										<Button variant="outline" size="sm" className="gap-2 h-8">
 											<LuGithub className="size-4" />
 											{selectedRepo ? (
 												<span className="flex items-center gap-1">
@@ -504,6 +348,12 @@ export function CloudHomePage({
 							</div>
 						)}
 
+						{error && (
+							<div className="text-sm text-destructive text-center">
+								{error}
+							</div>
+						)}
+
 						<div className="relative">
 							<Input
 								placeholder={
@@ -512,18 +362,12 @@ export function CloudHomePage({
 										: "Select a repository to get started"
 								}
 								value={promptInput}
-								onChange={handleInputChange}
+								onChange={(e) => setPromptInput(e.target.value)}
 								onKeyDown={handleKeyDown}
 								disabled={!selectedRepo || createMutation.isPending}
 								className="h-12 px-4 pr-24 text-base rounded-xl border-border/50 shadow-sm"
 							/>
 							<div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-								{isPrewarming && (
-									<span className="text-xs text-muted-foreground mr-1 flex items-center gap-1">
-										<span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-										Warming
-									</span>
-								)}
 								<Button variant="ghost" size="icon" className="size-8">
 									<LuPaperclip className="size-4 text-muted-foreground" />
 								</Button>
@@ -531,11 +375,13 @@ export function CloudHomePage({
 									size="icon"
 									className="size-8 rounded-lg"
 									disabled={
-										!selectedRepo || !promptInput.trim() || (createMutation.isPending && !pendingSession)
+										!selectedRepo ||
+										!promptInput.trim() ||
+										createMutation.isPending
 									}
-									onClick={pendingSession ? handleNavigate : handleQuickCreate}
+									onClick={handleQuickCreate}
 								>
-									{createMutation.isPending && !pendingSession ? (
+									{createMutation.isPending ? (
 										<LuLoader className="size-4 animate-spin" />
 									) : (
 										<LuSend className="size-4" />
