@@ -1,6 +1,11 @@
-import { HiOutlineCog6Tooth, HiOutlineFolder } from "react-icons/hi2";
+import {
+	HiOutlineCog6Tooth,
+	HiOutlineFolder,
+	HiOutlinePhoto,
+} from "react-icons/hi2";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { ClickablePath } from "../../../../components/ClickablePath";
+import { IconUploader } from "./components/IconUploader";
 import { ScriptsEditor } from "./components/ScriptsEditor";
 
 interface ProjectSettingsProps {
@@ -8,8 +13,16 @@ interface ProjectSettingsProps {
 }
 
 export function ProjectSettings({ projectId }: ProjectSettingsProps) {
+	const utils = electronTrpc.useUtils();
 	const { data: project } = electronTrpc.projects.get.useQuery({
 		id: projectId,
+	});
+
+	const setIcon = electronTrpc.projects.setProjectIcon.useMutation({
+		onSuccess: () => {
+			utils.projects.get.invalidate({ id: projectId });
+			utils.workspaces.getAllGrouped.invalidate();
+		},
 	});
 
 	if (!project) {
@@ -23,6 +36,25 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
 			</div>
 
 			<div className="space-y-6">
+				<div className="space-y-2">
+					<h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+						<HiOutlinePhoto className="h-4 w-4" />
+						Project Icon
+					</h3>
+					<p className="text-sm text-muted-foreground">
+						Upload a custom icon or use the auto-discovered favicon.
+					</p>
+					<IconUploader
+						projectId={projectId}
+						projectName={project.name}
+						iconUrl={project.iconUrl ?? null}
+						iconOverride={project.iconOverride ?? null}
+						githubOwner={project.githubOwner ?? null}
+						onIconChange={(icon) => setIcon.mutate({ id: projectId, icon })}
+						isPending={setIcon.isPending}
+					/>
+				</div>
+
 				<div className="space-y-2">
 					<h3 className="text-base font-semibold text-foreground">Name</h3>
 					<p>{project.name}</p>

@@ -33,6 +33,7 @@ import {
 	sanitizeAuthorPrefix,
 } from "../workspaces/utils/git";
 import { getDefaultProjectColor } from "./utils/colors";
+import { discoverFavicon } from "./utils/favicon-discovery";
 import { fetchGitHubOwner, getGitHubAvatarUrl } from "./utils/github";
 
 type Project = SelectProject;
@@ -55,7 +56,7 @@ export type OpenNewResult =
 /**
  * Creates or updates a project record in the database.
  * If a project with the same mainRepoPath exists, updates lastOpenedAt.
- * Otherwise, creates a new project.
+ * Otherwise, creates a new project and triggers favicon discovery.
  */
 function upsertProject(mainRepoPath: string, defaultBranch: string): Project {
 	const name = basename(mainRepoPath);
@@ -72,6 +73,27 @@ function upsertProject(mainRepoPath: string, defaultBranch: string): Project {
 			.set({ lastOpenedAt: Date.now(), defaultBranch })
 			.where(eq(projects.id, existing.id))
 			.run();
+
+		// Fire-and-forget discovery for existing projects without icons
+		if (!existing.iconOverride && !existing.iconUrl) {
+			discoverFavicon(mainRepoPath)
+				.then((icon) => {
+					if (icon) {
+						localDb
+							.update(projects)
+							.set({ iconUrl: icon })
+							.where(eq(projects.id, existing.id))
+							.run();
+						console.log(
+							`[upsertProject] Discovered favicon for existing project: ${existing.id}`,
+						);
+					}
+				})
+				.catch((err) => {
+					console.error("[upsertProject] Favicon discovery error:", err);
+				});
+		}
+
 		return { ...existing, lastOpenedAt: Date.now(), defaultBranch };
 	}
 
@@ -85,6 +107,23 @@ function upsertProject(mainRepoPath: string, defaultBranch: string): Project {
 		})
 		.returning()
 		.get();
+
+	discoverFavicon(mainRepoPath)
+		.then((icon) => {
+			if (icon) {
+				localDb
+					.update(projects)
+					.set({ iconUrl: icon })
+					.where(eq(projects.id, project.id))
+					.run();
+				console.log(
+					`[upsertProject] Discovered favicon for new project: ${project.id}`,
+				);
+			}
+		})
+		.catch((err) => {
+			console.error("[upsertProject] Favicon discovery error:", err);
+		});
 
 	return project;
 }
@@ -1026,6 +1065,71 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					name: authorName,
 					prefix: sanitizeAuthorPrefix(authorName),
 				};
+			}),
+
+		setProjectIcon: publicProcedure
+			.input(
+				z.object({
+					id: z.string(),
+					icon: z.string().nullable(), // Base64 data URL or null to remove
+				}),
+			)
+			.mutation(({ input }) => {
+				const project = localDb
+					.select()
+					.from(projects)
+					.where(eq(projects.id, input.id))
+					.get();
+
+				if (!project) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: `Project ${input.id} not found`,
+					});
+				}
+
+				// Update iconOverride field
+				localDb
+					.update(projects)
+					.set({ iconOverride: input.icon })
+					.where(eq(projects.id, input.id))
+					.run();
+
+				return { success: true };
+			}),
+
+		discoverProjectIcon: publicProcedure
+			.input(z.object({ id: z.string() }))
+			.mutation(async ({ input }) => {
+				const project = localDb
+					.select()
+					.from(projects)
+					.where(eq(projects.id, input.id))
+					.get();
+
+				if (!project) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: `Project ${input.id} not found`,
+					});
+				}
+
+				// Skip if icon already exists
+				if (project.iconOverride || project.iconUrl) {
+					return { success: true, found: false, skipped: true };
+				}
+
+				const icon = await discoverFavicon(project.mainRepoPath);
+
+				if (icon) {
+					localDb
+						.update(projects)
+						.set({ iconUrl: icon })
+						.where(eq(projects.id, input.id))
+						.run();
+				}
+
+				return { success: true, found: !!icon };
 			}),
 	});
 };

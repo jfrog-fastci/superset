@@ -8,6 +8,8 @@ interface ProjectThumbnailProps {
 	projectName: string;
 	projectColor: string;
 	githubOwner: string | null;
+	iconUrl?: string | null; // Auto-discovered favicon
+	iconOverride?: string | null; // User-uploaded icon (takes priority)
 	className?: string;
 }
 
@@ -37,15 +39,23 @@ export function ProjectThumbnail({
 	projectName,
 	projectColor,
 	githubOwner,
+	iconUrl,
+	iconOverride,
 	className,
 }: ProjectThumbnailProps) {
 	const [imageError, setImageError] = useState(false);
+	const [iconError, setIconError] = useState(false);
 
+	// Determine which icon to show
+	const effectiveIcon = iconOverride || iconUrl;
+
+	// Only fetch GitHub avatar if no icon is set
 	const { data: avatarData } = electronTrpc.projects.getGitHubAvatar.useQuery(
 		{ id: projectId },
 		{
 			staleTime: 1000 * 60 * 5,
 			refetchOnWindowFocus: false,
+			enabled: !effectiveIcon,
 		},
 	);
 
@@ -62,7 +72,28 @@ export function ProjectThumbnail({
 		? { borderColor: hexToRgba(projectColor, 0.6) }
 		: undefined;
 
-	// Show GitHub avatar if available
+	// Priority 1: Show project icon (override or discovered)
+	if (effectiveIcon && !iconError) {
+		return (
+			<div
+				className={cn(
+					"relative size-6 rounded overflow-hidden flex-shrink-0 bg-muted",
+					borderClasses,
+					className,
+				)}
+				style={borderStyle}
+			>
+				<img
+					src={effectiveIcon}
+					alt={`${projectName} icon`}
+					className="size-full object-cover"
+					onError={() => setIconError(true)}
+				/>
+			</div>
+		);
+	}
+
+	// Priority 2: Show GitHub avatar if available
 	if (owner && !imageError) {
 		return (
 			<div
@@ -83,7 +114,7 @@ export function ProjectThumbnail({
 		);
 	}
 
-	// Fallback: show first letter
+	// Priority 3: Fallback to first letter
 	return (
 		<div
 			className={cn(
