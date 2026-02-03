@@ -223,6 +223,10 @@ async function ensureMainWorkspace(project: Project): Promise<void> {
 // Allows most valid Git repo names while avoiding path traversal characters
 const SAFE_REPO_NAME_REGEX = /^[a-zA-Z0-9._\- ]+$/;
 
+// Icon data URL validation
+const ICON_DATA_URL_REGEX = /^data:image\/[a-z0-9.+-]+;base64,/i;
+const MAX_ICON_DATA_URL_LENGTH = 512 * 1024;
+
 /**
  * Extracts and validates a repository name from a git URL.
  * Handles HTTP/HTTPS URLs, SSH-style URLs (git@host:user/repo), and edge cases.
@@ -1080,7 +1084,12 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 			.input(
 				z.object({
 					id: z.string(),
-					icon: z.string().nullable(), // Base64 data URL or null to remove
+					icon: z
+						.string()
+						.trim()
+						.max(MAX_ICON_DATA_URL_LENGTH, "Icon data URL is too large")
+						.regex(ICON_DATA_URL_REGEX, "Icon must be a base64 image data URL")
+						.nullable(), // Base64 data URL or null to remove
 				}),
 			)
 			.mutation(({ input }) => {
