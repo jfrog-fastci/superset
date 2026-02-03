@@ -8,6 +8,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@superset/ui/select";
+import { toast } from "@superset/ui/sonner";
 import { useEffect, useState } from "react";
 import {
 	HiOutlineCog6Tooth,
@@ -114,6 +115,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
 		},
 		onError: (err) => {
 			console.error("[project-settings/setIcon] Failed to update icon:", err);
+			toast.error(`Failed to update icon: ${err.message}`);
 		},
 	});
 
