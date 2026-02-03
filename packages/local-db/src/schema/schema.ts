@@ -37,8 +37,8 @@ export const projects = sqliteTable(
 		githubOwner: text("github_owner"),
 		branchPrefixMode: text("branch_prefix_mode").$type<BranchPrefixMode>(),
 		branchPrefixCustom: text("branch_prefix_custom"),
-		iconUrl: text("icon_url"), // Auto-discovered favicon (base64 data URL)
-		iconOverride: text("icon_override"), // User-uploaded icon (base64 data URL)
+		iconUrl: text("icon_url"),
+		iconOverride: text("icon_override"),
 	},
 	(table) => [
 		index("projects_main_repo_path_idx").on(table.mainRepoPath),

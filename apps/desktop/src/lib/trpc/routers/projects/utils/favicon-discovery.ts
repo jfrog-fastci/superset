@@ -3,14 +3,11 @@ import fg from "fast-glob";
 
 const FAVICON_GLOB = "**/favicon.{ico,png,svg,jpg,jpeg,webp}";
 
-// Maximum file size to read (prevent memory issues)
 const MAX_FILE_SIZE = 500 * 1024; // 500KB
 
 /**
- * Discover favicon in project directory.
- *
- * @param repoPath - Path to the git repository
- * @returns Base64 data URL or null if not found
+ * Discovers a favicon in the project directory and returns it as a base64 data URL.
+ * Picks the favicon closest to the project root if multiple are found.
  */
 export async function discoverFavicon(
 	repoPath: string,
@@ -20,15 +17,13 @@ export async function discoverFavicon(
 			cwd: repoPath,
 			absolute: true,
 			onlyFiles: true,
-			dot: false, // Ignore dotfiles/directories
+			dot: false,
 		});
 
 		if (matches.length === 0) return null;
 
-		// Pick shortest path (closest to project root)
 		const shortest = matches.sort((a, b) => a.length - b.length)[0];
 
-		// Check file size
 		const stats = statSync(shortest);
 		if (stats.size > MAX_FILE_SIZE) {
 			console.log(
@@ -37,7 +32,6 @@ export async function discoverFavicon(
 			return null;
 		}
 
-		// Read and convert to base64 data URL
 		const buffer = readFileSync(shortest);
 		const base64 = buffer.toString("base64");
 		const ext = shortest.split(".").pop()?.toLowerCase();

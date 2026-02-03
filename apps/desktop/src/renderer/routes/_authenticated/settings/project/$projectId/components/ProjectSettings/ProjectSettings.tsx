@@ -142,7 +142,6 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
 						Upload a custom icon or use the auto-discovered favicon.
 					</p>
 					<IconUploader
-						projectId={projectId}
 						projectName={project.name}
 						iconUrl={project.iconUrl ?? null}
 						iconOverride={project.iconOverride ?? null}

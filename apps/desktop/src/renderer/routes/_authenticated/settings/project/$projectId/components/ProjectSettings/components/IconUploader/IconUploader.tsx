@@ -6,10 +6,9 @@ import { LuUpload } from "react-icons/lu";
 import { processIconFile } from "./utils";
 
 interface IconUploaderProps {
-	projectId: string;
 	projectName: string;
-	iconUrl: string | null; // Auto-discovered
-	iconOverride: string | null; // User-uploaded
+	iconUrl: string | null;
+	iconOverride: string | null;
 	githubOwner: string | null;
 	onIconChange: (icon: string | null) => void;
 	isPending?: boolean;
@@ -32,7 +31,6 @@ export function IconUploader({
 	const [error, setError] = useState<string | null>(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 
-	// Determine which icon to show
 	const effectiveIcon = iconOverride || iconUrl;
 	const hasCustomIcon = !!iconOverride;
 	const hasDiscoveredIcon = !!iconUrl && !iconOverride;
@@ -108,9 +106,7 @@ export function IconUploader({
 
 	return (
 		<div className="space-y-4">
-			{/* Current Icon Preview */}
 			<div className="flex items-start gap-4">
-				{/* Preview */}
 				<div
 					className={cn(
 						"relative size-16 rounded-lg overflow-hidden flex-shrink-0 border border-border",
@@ -136,7 +132,6 @@ export function IconUploader({
 					)}
 				</div>
 
-				{/* Info and Actions */}
 				<div className="flex-1 min-w-0 space-y-2">
 					<div className="text-sm">
 						{hasCustomIcon && (
@@ -234,7 +229,6 @@ export function IconUploader({
 				)}
 			</div>
 
-			{/* Hidden file input */}
 			<input
 				ref={fileInputRef}
 				type="file"
@@ -243,7 +237,6 @@ export function IconUploader({
 				className="hidden"
 			/>
 
-			{/* Error message */}
 			{error && <div className="text-sm text-destructive">{error}</div>}
 		</div>
 	);

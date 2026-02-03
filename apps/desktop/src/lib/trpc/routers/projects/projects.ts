@@ -55,6 +55,35 @@ export type OpenNewResult =
 	| OpenNewError;
 
 /**
+ * Fire-and-forget favicon discovery for a project.
+ * Finds a favicon in the repo directory and stores it as a base64 data URL.
+ */
+function triggerFaviconDiscovery({
+	projectId,
+	repoPath,
+}: {
+	projectId: string;
+	repoPath: string;
+}): void {
+	discoverFavicon(repoPath)
+		.then((icon) => {
+			if (icon) {
+				localDb
+					.update(projects)
+					.set({ iconUrl: icon })
+					.where(eq(projects.id, projectId))
+					.run();
+				console.log(
+					`[upsertProject] Discovered favicon for project: ${projectId}`,
+				);
+			}
+		})
+		.catch((err) => {
+			console.error("[upsertProject] Favicon discovery error:", err);
+		});
+}
+
+/**
  * Creates or updates a project record in the database.
  * If a project with the same mainRepoPath exists, updates lastOpenedAt.
  * Otherwise, creates a new project and triggers favicon discovery.
@@ -75,24 +104,11 @@ function upsertProject(mainRepoPath: string, defaultBranch: string): Project {
 			.where(eq(projects.id, existing.id))
 			.run();
 
-		// Fire-and-forget discovery for existing projects without icons
 		if (!existing.iconOverride && !existing.iconUrl) {
-			discoverFavicon(mainRepoPath)
-				.then((icon) => {
-					if (icon) {
-						localDb
-							.update(projects)
-							.set({ iconUrl: icon })
-							.where(eq(projects.id, existing.id))
-							.run();
-						console.log(
-							`[upsertProject] Discovered favicon for existing project: ${existing.id}`,
-						);
-					}
-				})
-				.catch((err) => {
-					console.error("[upsertProject] Favicon discovery error:", err);
-				});
+			triggerFaviconDiscovery({
+				projectId: existing.id,
+				repoPath: mainRepoPath,
+			});
 		}
 
 		return { ...existing, lastOpenedAt: Date.now(), defaultBranch };
@@ -109,22 +125,7 @@ function upsertProject(mainRepoPath: string, defaultBranch: string): Project {
 		.returning()
 		.get();
 
-	discoverFavicon(mainRepoPath)
-		.then((icon) => {
-			if (icon) {
-				localDb
-					.update(projects)
-					.set({ iconUrl: icon })
-					.where(eq(projects.id, project.id))
-					.run();
-				console.log(
-					`[upsertProject] Discovered favicon for new project: ${project.id}`,
-				);
-			}
-		})
-		.catch((err) => {
-			console.error("[upsertProject] Favicon discovery error:", err);
-		});
+	triggerFaviconDiscovery({ projectId: project.id, repoPath: mainRepoPath });
 
 	return project;
 }
@@ -223,8 +224,8 @@ async function ensureMainWorkspace(project: Project): Promise<void> {
 // Allows most valid Git repo names while avoiding path traversal characters
 const SAFE_REPO_NAME_REGEX = /^[a-zA-Z0-9._\- ]+$/;
 
-// Icon data URL validation
-const ICON_DATA_URL_REGEX = /^data:image\/[a-z0-9.+-]+;base64,/i;
+const ICON_DATA_URL_REGEX =
+	/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
 const MAX_ICON_DATA_URL_LENGTH = 512 * 1024;
 
 /**
@@ -756,7 +757,6 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					const git = simpleGit();
 					await git.clone(input.url, clonePath);
 
-					// Create new project
 					const name = basename(clonePath);
 					const defaultBranch = await getDefaultBranch(clonePath);
 					const project = localDb
@@ -770,7 +770,11 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						.returning()
 						.get();
 
-					// Auto-create main workspace if it doesn't exist
+					triggerFaviconDiscovery({
+						projectId: project.id,
+						repoPath: clonePath,
+					});
+
 					await ensureMainWorkspace(project);
 
 					track("project_opened", {
@@ -1106,7 +1110,6 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					});
 				}
 
-				// Update iconOverride field
 				localDb
 					.update(projects)
 					.set({ iconOverride: input.icon })
@@ -1132,7 +1135,6 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					});
 				}
 
-				// Skip if icon already exists
 				if (project.iconOverride || project.iconUrl) {
 					return { success: true, found: false, skipped: true };
 				}
