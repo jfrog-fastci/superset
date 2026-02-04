@@ -189,7 +189,7 @@ export function useChatSession(
 			(d: StreamDraft) => d.userId === user.userId,
 		);
 		return myDraft?.content ?? "";
-	}, [draftRows, clientOptions.user]);
+	}, [draftRows]);
 
 	// Connection status (we don't have sessionMeta collection, use client directly)
 	const connectionStatus = client.connectionStatus;

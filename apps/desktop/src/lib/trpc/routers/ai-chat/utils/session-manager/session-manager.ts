@@ -106,6 +106,7 @@ async function closeProducer(sessionId: string): Promise<void> {
 class StreamWatcher {
 	private intervalId: ReturnType<typeof setInterval> | null = null;
 	private seenMessageIds: Set<string> = new Set();
+	private isPolling = false;
 	private onNewUserMessage: (messageId: string, content: string) => void;
 	private sessionId = "";
 
@@ -113,14 +114,63 @@ class StreamWatcher {
 		this.onNewUserMessage = onNewUserMessage;
 	}
 
-	start(sessionId: string): void {
+	/**
+	 * Fetch the current stream and seed seenMessageIds with all existing
+	 * user_input keys, then start polling for new messages.
+	 * This prevents reprocessing historical messages after a restart.
+	 */
+	async start(sessionId: string): Promise<void> {
 		this.sessionId = sessionId;
 		this.seenMessageIds.clear();
+
+		// Seed with existing messages before polling
+		await this.seedExistingMessages();
+
 		this.intervalId = setInterval(() => this.poll(), 500);
-		console.log(`[stream-watcher] Started polling for ${sessionId}`);
+		console.log(
+			`[stream-watcher] Started polling for ${sessionId} (${this.seenMessageIds.size} existing messages seeded)`,
+		);
+	}
+
+	/**
+	 * Fetch all existing events from the stream and record their keys
+	 * so they are not treated as new messages.
+	 */
+	private async seedExistingMessages(): Promise<void> {
+		try {
+			const response = await fetch(
+				`${DURABLE_STREAM_URL}/streams/${this.sessionId}`,
+				{ headers: { Accept: "application/json" } },
+			);
+
+			if (!response.ok) return;
+
+			const events = (await response.json()) as Array<Record<string, unknown>>;
+
+			for (const event of events) {
+				if (event.type !== "chunk") continue;
+
+				const value = event.value as Record<string, unknown> | undefined;
+				if (!value || value.type !== "user_input") continue;
+
+				const key = event.key as string;
+				if (key) {
+					this.seenMessageIds.add(key);
+				}
+			}
+		} catch (error) {
+			console.warn(
+				`[stream-watcher] Failed to seed existing messages for ${this.sessionId}:`,
+				error,
+			);
+		}
 	}
 
 	private async poll(): Promise<void> {
+		// Prevent overlapping polls if a previous one hasn't finished
+		if (this.isPolling) return;
+		this.isPolling = true;
+
 		try {
 			const response = await fetch(
 				`${DURABLE_STREAM_URL}/streams/${this.sessionId}`,
@@ -153,6 +203,8 @@ class StreamWatcher {
 			}
 		} catch {
 			// Ignore poll errors
+		} finally {
+			this.isPolling = false;
 		}
 	}
 
@@ -245,7 +297,7 @@ class ClaudeSessionManager extends EventEmitter {
 			});
 
 			session.streamWatcher = watcher;
-			watcher.start(sessionId);
+			await watcher.start(sessionId);
 		}
 
 		this.emit("event", {

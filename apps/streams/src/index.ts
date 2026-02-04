@@ -169,8 +169,8 @@ console.log(`[streams] Starting on port ${port}`);
 durableServer.start().then((durableUrl) => {
 	console.log(`[streams] Durable streams internal: ${durableUrl}`);
 
-	server.listen(port, "0.0.0.0", () => {
-		console.log(`[streams] Server running at http://0.0.0.0:${port}`);
+	server.listen(port, "127.0.0.1", () => {
+		console.log(`[streams] Server running at http://127.0.0.1:${port}`);
 	});
 });
 

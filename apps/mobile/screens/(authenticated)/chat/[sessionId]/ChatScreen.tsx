@@ -116,7 +116,7 @@ export function ChatScreen() {
 				console.error("[chat] Failed to send message:", err);
 			}
 		},
-		[user?.userId, streamsUrl, sessionId],
+		[user?.userId, sessionId],
 	);
 
 	const allMessages = streamingMessage

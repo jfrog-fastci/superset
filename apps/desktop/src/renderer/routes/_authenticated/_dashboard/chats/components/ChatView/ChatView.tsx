@@ -9,6 +9,7 @@ import { ChatInput, PresenceBar } from "@superset/ai-chat/components";
 import { useChatSession } from "@superset/ai-chat/stream";
 import { cn } from "@superset/ui/utils";
 import { useCallback, useMemo, useState } from "react";
+import { env } from "renderer/env.renderer";
 import { authClient } from "renderer/lib/auth-client";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import {
@@ -17,11 +18,29 @@ import {
 	type StreamingMessage,
 } from "../ChatMessageList";
 
-const STREAM_SERVER_URL = "http://localhost:8080";
-
 export interface ChatViewProps {
 	sessionId: string;
 	className?: string;
+}
+
+/**
+ * Get the most recently opened workspace path from grouped workspaces.
+ */
+function getMostRecentWorkspacePath(
+	groups: Array<{
+		workspaces: Array<{
+			worktreePath: string;
+			lastOpenedAt: number;
+		}>;
+	}>,
+): string | null {
+	const allWorkspaces = groups.flatMap((g) => g.workspaces);
+	if (allWorkspaces.length === 0) return null;
+
+	const sorted = [...allWorkspaces].sort(
+		(a, b) => b.lastOpenedAt - a.lastOpenedAt,
+	);
+	return sorted[0].worktreePath || null;
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
@@ -32,7 +51,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
 	const { users, messages, streamingMessage, draft, setDraft, sendMessage } =
 		useChatSession({
-			proxyUrl: STREAM_SERVER_URL,
+			proxyUrl: env.NEXT_PUBLIC_STREAMS_URL,
 			sessionId,
 			user,
 			autoConnect: !!user,
@@ -42,13 +61,31 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 	const { data: isActive, refetch: refetchIsActive } =
 		electronTrpc.aiChat.isSessionActive.useQuery({ sessionId });
 
+	// Query workspaces to get the most recently opened workspace path for cwd
+	const { data: workspaceGroups } =
+		electronTrpc.workspaces.getAllGrouped.useQuery();
+	const mostRecentWorkspacePath = useMemo(
+		() =>
+			workspaceGroups ? getMostRecentWorkspacePath(workspaceGroups) : null,
+		[workspaceGroups],
+	);
+
 	const handleStartSession = useCallback(async () => {
+		if (!mostRecentWorkspacePath) {
+			console.error("[ChatView] No workspace available to start session");
+			return;
+		}
 		await startSessionMutation.mutateAsync({
 			sessionId,
-			cwd: "/Users/satyapatel/code/superset",
+			cwd: mostRecentWorkspacePath,
 		});
 		await refetchIsActive();
-	}, [sessionId, startSessionMutation, refetchIsActive]);
+	}, [
+		sessionId,
+		startSessionMutation,
+		refetchIsActive,
+		mostRecentWorkspacePath,
+	]);
 
 	const [isSending, setIsSending] = useState(false);
 	const handleSend = useCallback(
@@ -106,11 +143,17 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 					/>
 				) : (
 					<div className="flex items-center justify-center gap-4">
-						<span className="text-muted-foreground">Session not active</span>
+						<span className="text-muted-foreground">
+							{mostRecentWorkspacePath
+								? "Session not active"
+								: "No workspace available"}
+						</span>
 						<button
 							type="button"
 							onClick={handleStartSession}
-							disabled={startSessionMutation.isPending}
+							disabled={
+								startSessionMutation.isPending || !mostRecentWorkspacePath
+							}
 							className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
 						>
 							{startSessionMutation.isPending ? "Starting..." : "Start Session"}

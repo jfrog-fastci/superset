@@ -4,9 +4,8 @@ import { ScrollArea } from "@superset/ui/scroll-area";
 import { cn } from "@superset/ui/utils";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { env } from "renderer/env.renderer";
 import { useChatStore } from "./stores/chatStore";
-
-const STREAM_SERVER_URL = "http://localhost:8080";
 
 export const Route = createFileRoute("/_authenticated/_dashboard/chats/")({
 	component: ChatIndexPage,
@@ -19,7 +18,7 @@ function ChatIndexPage() {
 	const handleCreateChat = useCallback(async () => {
 		const session = createSession();
 		// Create stream on server
-		await createStream(STREAM_SERVER_URL, session.id);
+		await createStream(env.NEXT_PUBLIC_STREAMS_URL, session.id);
 		// Navigate to the new chat
 		navigate({ to: "/chats/$chatId", params: { chatId: session.id } });
 	}, [navigate, createSession]);
@@ -27,7 +26,7 @@ function ChatIndexPage() {
 	const handleSelectChat = useCallback(
 		async (chatId: string) => {
 			// Ensure stream exists
-			await createStream(STREAM_SERVER_URL, chatId);
+			await createStream(env.NEXT_PUBLIC_STREAMS_URL, chatId);
 			navigate({ to: "/chats/$chatId", params: { chatId } });
 		},
 		[navigate],

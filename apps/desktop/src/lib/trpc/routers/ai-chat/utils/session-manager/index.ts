@@ -1,7 +1,7 @@
-export { claudeSessionManager } from "./session-manager";
 export type {
-	SessionStartEvent,
-	SessionEndEvent,
-	ErrorEvent,
 	ClaudeStreamEvent,
+	ErrorEvent,
+	SessionEndEvent,
+	SessionStartEvent,
 } from "./session-manager";
+export { claudeSessionManager } from "./session-manager";
