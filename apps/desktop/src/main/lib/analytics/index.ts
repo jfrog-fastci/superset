@@ -52,19 +52,14 @@ export function track(
 		});
 	}
 
-	// Outlit tracking
-	try {
-		outlit.track({
-			eventName: event,
-			userId,
-			properties: toOutlitProperties(properties),
-		});
+	outlit.track({
+		eventName: event,
+		userId,
+		properties: toOutlitProperties(properties),
+	});
 
-		// Fire user.activate() on project_opened (activation moment)
-		if (event === "project_opened") {
-			outlit.user.activate({ userId });
-		}
-	} catch (error) {
-		console.error("[analytics/outlit] Failed to track:", error);
+	// Fire user.activate() on project_opened (activation moment)
+	if (event === "project_opened") {
+		outlit.user.activate({ userId });
 	}
 }
