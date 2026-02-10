@@ -1,7 +1,8 @@
 import { app } from "electron";
 import { env } from "main/env.main";
-import { getOutlit } from "main/lib/outlit";
+import { outlit } from "main/lib/outlit";
 import { PostHog } from "posthog-node";
+import { toOutlitProperties } from "shared/analytics";
 import { DEFAULT_TELEMETRY_ENABLED } from "shared/constants";
 
 export let posthog: PostHog | null = null;
@@ -30,24 +31,6 @@ export function setUserId(id: string | null): void {
 	userId = id;
 }
 
-function toOutlitProperties(
-	properties?: Record<string, unknown>,
-): Record<string, string | number | boolean | null> | undefined {
-	if (!properties) return undefined;
-	const result: Record<string, string | number | boolean | null> = {};
-	for (const [key, value] of Object.entries(properties)) {
-		if (
-			value === null ||
-			typeof value === "string" ||
-			typeof value === "number" ||
-			typeof value === "boolean"
-		) {
-			result[key] = value;
-		}
-	}
-	return result;
-}
-
 export function track(
 	event: string,
 	properties?: Record<string, unknown>,
@@ -71,18 +54,15 @@ export function track(
 
 	// Outlit tracking
 	try {
-		const outlit = getOutlit();
-		if (outlit) {
-			outlit.track({
-				eventName: event,
-				userId,
-				properties: toOutlitProperties(properties),
-			});
+		outlit.track({
+			eventName: event,
+			userId,
+			properties: toOutlitProperties(properties),
+		});
 
-			// Fire user.activate() on project_opened (activation moment)
-			if (event === "project_opened") {
-				outlit.user.activate({ userId });
-			}
+		// Fire user.activate() on project_opened (activation moment)
+		if (event === "project_opened") {
+			outlit.user.activate({ userId });
 		}
 	} catch (error) {
 		console.error("[analytics/outlit] Failed to track:", error);

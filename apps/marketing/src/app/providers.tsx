@@ -6,24 +6,12 @@ import { ThemeProvider } from "next-themes";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 
-import { getOutlit } from "@/lib/outlit";
-
-function OutlitWrapper({ children }: { children: React.ReactNode }) {
-	const client = getOutlit();
-
-	if (!client) {
-		return <>{children}</>;
-	}
-
-	return (
-		<OutlitBrowserProvider client={client}>{children}</OutlitBrowserProvider>
-	);
-}
+import { outlit } from "@/lib/outlit";
 
 export function Providers({ children }: { children: React.ReactNode }) {
 	return (
 		<PostHogProvider client={posthog}>
-			<OutlitWrapper>
+			<OutlitBrowserProvider client={outlit}>
 				<ThemeProvider
 					attribute="class"
 					defaultTheme="dark"
@@ -33,7 +21,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 				>
 					{children}
 				</ThemeProvider>
-			</OutlitWrapper>
+			</OutlitBrowserProvider>
 		</PostHogProvider>
 	);
 }

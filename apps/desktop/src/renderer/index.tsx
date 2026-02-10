@@ -12,7 +12,7 @@ import {
 	markBootMounted,
 	reportBootError,
 } from "./lib/boot-errors";
-import { getOutlit } from "./lib/outlit";
+import { outlit } from "./lib/outlit";
 import { persistentHistory } from "./lib/persistent-hash-history";
 import { posthog } from "./lib/posthog";
 import { electronQueryClient } from "./providers/ElectronTRPCProvider";
@@ -36,7 +36,7 @@ const unsubscribe = router.subscribe("onResolved", (event) => {
 	posthog.capture("$pageview", {
 		$current_url: event.toLocation.pathname,
 	});
-	getOutlit()?.track("pageview", {
+	outlit.track("pageview", {
 		url: event.toLocation.pathname,
 	});
 });

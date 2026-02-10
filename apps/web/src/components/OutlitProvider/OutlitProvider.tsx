@@ -4,7 +4,7 @@ import { OutlitProvider as OutlitBrowserProvider } from "@outlit/browser/react";
 import { authClient } from "@superset/auth/client";
 import type React from "react";
 
-import { env } from "@/env";
+import { outlit } from "@/lib/outlit";
 
 interface OutlitProviderProps {
 	children: React.ReactNode;
@@ -14,14 +14,9 @@ export function OutlitProvider({ children }: OutlitProviderProps) {
 	const { data: session } = authClient.useSession();
 	const user = session?.user;
 
-	if (!env.NEXT_PUBLIC_OUTLIT_KEY) {
-		return <>{children}</>;
-	}
-
 	return (
 		<OutlitBrowserProvider
-			publicKey={env.NEXT_PUBLIC_OUTLIT_KEY}
-			trackPageviews
+			client={outlit}
 			user={
 				user
 					? {
