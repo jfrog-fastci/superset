@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
+	BRANCH_PREFIX_MODES,
 	projects,
 	type SelectProject,
 	settings,
@@ -27,27 +28,35 @@ import {
 import {
 	getCurrentBranch,
 	getDefaultBranch,
+	getGitAuthorName,
 	getGitRoot,
 	refreshDefaultBranch,
+	sanitizeAuthorPrefix,
 } from "../workspaces/utils/git";
 import { getDefaultProjectColor } from "./utils/colors";
 import { fetchGitHubOwner, getGitHubAvatarUrl } from "./utils/github";
 
 type Project = SelectProject;
 
-// Return types for openNew procedure
+// Return types for openNew procedure (single project)
 type OpenNewCanceled = { canceled: true };
-type OpenNewSuccess = { canceled: false; project: Project };
-type OpenNewNeedsGitInit = {
-	canceled: false;
-	needsGitInit: true;
-	selectedPath: string;
-};
 type OpenNewError = { canceled: false; error: string };
-export type OpenNewResult =
+type OpenNewResult =
 	| OpenNewCanceled
-	| OpenNewSuccess
-	| OpenNewNeedsGitInit
+	| { canceled: false; project: Project }
+	| { canceled: false; needsGitInit: true; selectedPath: string }
+	| OpenNewError;
+
+// Per-folder outcome for multi-select
+type FolderOutcome =
+	| { status: "success"; project: Project }
+	| { status: "needsGitInit"; selectedPath: string }
+	| { status: "error"; selectedPath: string; error: string };
+
+// Return types for openNew procedure (multi-select)
+type OpenNewMultiResult =
+	| OpenNewCanceled
+	| { canceled: false; multi: true; results: FolderOutcome[] }
 	| OpenNewError;
 
 /**
@@ -119,7 +128,7 @@ async function ensureMainWorkspace(project: Project): Promise<void> {
 			projectId: project.id,
 			type: "branch",
 			branch,
-			name: branch,
+			name: "default",
 			tabOrder: 0,
 		})
 		.onConflictDoNothing()
@@ -452,13 +461,13 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				},
 			),
 
-		openNew: publicProcedure.mutation(async (): Promise<OpenNewResult> => {
+		openNew: publicProcedure.mutation(async (): Promise<OpenNewMultiResult> => {
 			const window = getWindow();
 			if (!window) {
 				return { canceled: false, error: "No window available" };
 			}
 			const result = await dialog.showOpenDialog(window, {
-				properties: ["openDirectory"],
+				properties: ["openDirectory", "multiSelections"],
 				title: "Open Project",
 			});
 
@@ -466,35 +475,43 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				return { canceled: true };
 			}
 
-			const selectedPath = result.filePaths[0];
+			const outcomes: FolderOutcome[] = [];
 
-			let mainRepoPath: string;
-			try {
-				mainRepoPath = await getGitRoot(selectedPath);
-			} catch (_error) {
-				// Return a special response so the UI can offer to initialize git
-				return {
-					canceled: false,
-					needsGitInit: true,
-					selectedPath,
-				};
+			for (const selectedPath of result.filePaths) {
+				let mainRepoPath: string;
+				try {
+					mainRepoPath = await getGitRoot(selectedPath);
+				} catch {
+					outcomes.push({ status: "needsGitInit", selectedPath });
+					continue;
+				}
+
+				try {
+					const defaultBranch = await getDefaultBranch(mainRepoPath);
+					const project = upsertProject(mainRepoPath, defaultBranch);
+					await ensureMainWorkspace(project);
+
+					track("project_opened", {
+						project_id: project.id,
+						method: "open",
+					});
+
+					outcomes.push({ status: "success", project });
+				} catch (error) {
+					console.error(
+						"[projects/openNew] Failed to open project:",
+						selectedPath,
+						error,
+					);
+					outcomes.push({
+						status: "error",
+						selectedPath,
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
 			}
 
-			const defaultBranch = await getDefaultBranch(mainRepoPath);
-			const project = upsertProject(mainRepoPath, defaultBranch);
-
-			// Auto-create main workspace if it doesn't exist
-			await ensureMainWorkspace(project);
-
-			track("project_opened", {
-				project_id: project.id,
-				method: "open",
-			});
-
-			return {
-				canceled: false,
-				project,
-			};
+			return { canceled: false, multi: true, results: outcomes };
 		}),
 
 		openFromPath: publicProcedure
@@ -773,6 +790,9 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 								"Invalid project color",
 							)
 							.optional(),
+						branchPrefixMode: z.enum(BRANCH_PREFIX_MODES).nullable().optional(),
+						branchPrefixCustom: z.string().nullable().optional(),
+						hideImage: z.boolean().optional(),
 					}),
 				}),
 			)
@@ -792,6 +812,15 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						...(input.patch.name !== undefined && { name: input.patch.name }),
 						...(input.patch.color !== undefined && {
 							color: input.patch.color,
+						}),
+						...(input.patch.branchPrefixMode !== undefined && {
+							branchPrefixMode: input.patch.branchPrefixMode,
+						}),
+						...(input.patch.branchPrefixCustom !== undefined && {
+							branchPrefixCustom: input.patch.branchPrefixCustom,
+						}),
+						...(input.patch.hideImage !== undefined && {
+							hideImage: input.patch.hideImage,
 						}),
 						lastOpenedAt: Date.now(),
 					})
@@ -1011,6 +1040,30 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				return {
 					owner,
 					avatarUrl: getGitHubAvatarUrl(owner),
+				};
+			}),
+
+		getGitAuthor: publicProcedure
+			.input(z.object({ id: z.string() }))
+			.query(async ({ input }) => {
+				const project = localDb
+					.select()
+					.from(projects)
+					.where(eq(projects.id, input.id))
+					.get();
+
+				if (!project) {
+					return null;
+				}
+
+				const authorName = await getGitAuthorName(project.mainRepoPath);
+				if (!authorName) {
+					return null;
+				}
+
+				return {
+					name: authorName,
+					prefix: sanitizeAuthorPrefix(authorName),
 				};
 			}),
 	});

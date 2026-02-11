@@ -159,6 +159,7 @@ export const createQueryProcedures = () => {
 						tabOrder: number;
 						githubOwner: string | null;
 						mainRepoPath: string;
+						hideImage: boolean;
 					};
 					workspaces: Array<{
 						id: string;
@@ -173,6 +174,7 @@ export const createQueryProcedures = () => {
 						updatedAt: number;
 						lastOpenedAt: number;
 						isUnread: boolean;
+						isUnnamed: boolean;
 					}>;
 				}
 			>();
@@ -187,6 +189,7 @@ export const createQueryProcedures = () => {
 						tabOrder: project.tabOrder!,
 						githubOwner: project.githubOwner ?? null,
 						mainRepoPath: project.mainRepoPath,
+						hideImage: project.hideImage ?? false,
 					},
 					workspaces: [],
 				});
@@ -215,6 +218,7 @@ export const createQueryProcedures = () => {
 						type: workspace.type as "worktree" | "branch",
 						worktreePath,
 						isUnread: workspace.isUnread ?? false,
+						isUnnamed: workspace.isUnnamed ?? false,
 					});
 				}
 			}
