@@ -1,5 +1,6 @@
 import { workspaces } from "@superset/local-db";
 import { observable } from "@trpc/server/observable";
+import { eq } from "drizzle-orm";
 import { localDb } from "main/lib/local-db";
 import { loadStaticPorts } from "main/lib/static-ports";
 import { portManager } from "main/lib/terminal/port-manager";
@@ -13,38 +14,44 @@ type PortEvent =
 	| { type: "remove"; port: DetectedPort };
 
 /**
- * Build a lookup of port number → label from all workspaces' ports.json files.
- * Keyed by `${workspaceId}:${port}` to avoid collisions across workspaces.
+ * Get port → label lookup for a worktree path by loading its ports.json.
  */
-function buildStaticLabelMap(): Map<string, string> {
-	const labelMap = new Map<string, string>();
-	const allWorkspaces = localDb.select().from(workspaces).all();
+function getLabelsForPath(worktreePath: string): Map<number, string> | null {
+	const result = loadStaticPorts(worktreePath);
+	if (!result.exists || result.error || !result.ports) return null;
 
-	for (const workspace of allWorkspaces) {
-		const workspacePath = getWorkspacePath(workspace);
-		if (!workspacePath) continue;
-
-		const result = loadStaticPorts(workspacePath);
-		if (!result.exists || result.error || !result.ports) continue;
-
-		for (const p of result.ports) {
-			labelMap.set(`${workspace.id}:${p.port}`, p.label);
-		}
+	const labels = new Map<number, string>();
+	for (const p of result.ports) {
+		labels.set(p.port, p.label);
 	}
-
-	return labelMap;
+	return labels;
 }
 
 export const createPortsRouter = () => {
 	return router({
 		getAll: publicProcedure.query((): EnrichedPort[] => {
 			const detectedPorts = portManager.getAllPorts();
-			const labelMap = buildStaticLabelMap();
 
-			return detectedPorts.map((port) => ({
-				...port,
-				label: labelMap.get(`${port.workspaceId}:${port.port}`) ?? null,
-			}));
+			// Cache per workspace ID: resolve workspace → path → labels once
+			const labelCache = new Map<string, Map<number, string> | null>();
+
+			return detectedPorts.map((port) => {
+				if (!labelCache.has(port.workspaceId)) {
+					const ws = localDb
+						.select()
+						.from(workspaces)
+						.where(eq(workspaces.id, port.workspaceId))
+						.get();
+					const wsPath = ws ? getWorkspacePath(ws) : null;
+					labelCache.set(
+						port.workspaceId,
+						wsPath ? getLabelsForPath(wsPath) : null,
+					);
+				}
+
+				const labels = labelCache.get(port.workspaceId);
+				return { ...port, label: labels?.get(port.port) ?? null };
+			});
 		}),
 
 		subscribe: publicProcedure.subscription(() => {
