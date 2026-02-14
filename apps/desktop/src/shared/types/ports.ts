@@ -20,14 +20,10 @@ export interface StaticPortsResult {
 	error: string | null;
 }
 
-export interface MergedPort {
-	port: number;
-	workspaceId: string;
+/** A detected port enriched with its static label (from ports.json) */
+export interface EnrichedPort extends DetectedPort {
 	label: string | null;
-	isActive: boolean;
-	pid: number | null;
-	processName: string | null;
-	paneId: string | null;
-	address: string | null;
-	detectedAt: number | null;
 }
+
+/** @deprecated Use EnrichedPort instead */
+export type MergedPort = EnrichedPort;
