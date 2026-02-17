@@ -188,7 +188,7 @@ export const ModelSelectorLogo = ({
 	if (provider === "openai") {
 		return (
 			<svg
-				viewBox="0 0 721 721"
+				viewBox="118 119 485 481"
 				xmlns="http://www.w3.org/2000/svg"
 				className={cn("size-3", className)}
 			>
