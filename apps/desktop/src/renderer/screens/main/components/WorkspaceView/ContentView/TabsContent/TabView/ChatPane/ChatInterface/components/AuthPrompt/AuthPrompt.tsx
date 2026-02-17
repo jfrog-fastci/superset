@@ -1,8 +1,8 @@
+import { Button } from "@superset/ui/button";
+import { Input } from "@superset/ui/input";
 import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
-import { Button } from "@superset/ui/button";
-import { Input } from "@superset/ui/input";
 
 export function AuthPrompt() {
 	const [apiKey, setApiKey] = useState("");

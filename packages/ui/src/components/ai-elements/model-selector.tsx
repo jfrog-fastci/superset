@@ -173,6 +173,8 @@ export const ModelSelectorLogo = ({
 	if (provider === "anthropic") {
 		return (
 			<svg
+				aria-label="Anthropic logo"
+				role="img"
 				viewBox="0 0 24 24"
 				xmlns="http://www.w3.org/2000/svg"
 				className={cn("size-3", className)}
@@ -188,6 +190,8 @@ export const ModelSelectorLogo = ({
 	if (provider === "openai") {
 		return (
 			<svg
+				aria-label="OpenAI logo"
+				role="img"
 				viewBox="118 119 485 481"
 				xmlns="http://www.w3.org/2000/svg"
 				className={cn("size-3", className)}
