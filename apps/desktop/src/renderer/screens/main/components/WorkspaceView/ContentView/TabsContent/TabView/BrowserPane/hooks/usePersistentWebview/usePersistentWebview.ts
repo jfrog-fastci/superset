@@ -68,6 +68,7 @@ export function usePersistentWebview({
 }: UsePersistentWebviewOptions) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const isHistoryNavigation = useRef(false);
+	const isReparenting = useRef(false);
 	const faviconUrlRef = useRef<string | undefined>(undefined);
 	const initialUrlRef = useRef(initialUrl);
 
@@ -132,9 +133,16 @@ export function usePersistentWebview({
 		let webview = webviewRegistry.get(paneId);
 
 		if (webview) {
-			// Reclaim from hidden container
+			// Reclaim from hidden container.
+			// Suppress navigation events that Electron may fire when reparenting
+			// the <webview> (it can reload from its stale `src` attribute, which
+			// strips query params and corrupts the store history).
+			isReparenting.current = true;
 			container.appendChild(webview);
 			syncStoreFromWebview(webview);
+			setTimeout(() => {
+				isReparenting.current = false;
+			}, 500);
 		} else {
 			// Create new webview
 			webview = document.createElement("webview") as Electron.WebviewTag;
@@ -166,6 +174,7 @@ export function usePersistentWebview({
 		};
 
 		const handleDidStartLoading = () => {
+			if (isReparenting.current) return;
 			const store = useTabsStore.getState();
 			store.updateBrowserLoading(paneId, true);
 			store.setBrowserError(paneId, null);
@@ -173,6 +182,7 @@ export function usePersistentWebview({
 		};
 
 		const handleDidStopLoading = () => {
+			if (isReparenting.current) return;
 			const store = useTabsStore.getState();
 			store.updateBrowserLoading(paneId, false);
 
@@ -200,6 +210,7 @@ export function usePersistentWebview({
 		};
 
 		const handleDidNavigate = (e: Electron.DidNavigateEvent) => {
+			if (isReparenting.current) return;
 			if (isHistoryNavigation.current) {
 				isHistoryNavigation.current = false;
 				return;
@@ -215,6 +226,7 @@ export function usePersistentWebview({
 		};
 
 		const handleDidNavigateInPage = (e: Electron.DidNavigateInPageEvent) => {
+			if (isReparenting.current) return;
 			if (isHistoryNavigation.current) {
 				isHistoryNavigation.current = false;
 				return;
