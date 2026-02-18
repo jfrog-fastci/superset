@@ -59,8 +59,8 @@ export function ChatInputFooter({
 	onSlashCommandSend,
 }: ChatInputFooterProps) {
 	return (
-		<div className="border-t bg-background px-4 py-3">
-			<div className="mx-auto w-full max-w-3xl">
+		<div className="bg-background px-4 py-3">
+			<div className="mx-auto w-full max-w-3xl [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border-[0.5px] [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:dark:border-[#353535] [&_[data-slot=input-group]]:dark:bg-[#1C1C1C]">
 				{error && (
 					<div className="mb-3 select-text rounded-md border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
 						{error}
@@ -73,7 +73,7 @@ export function ChatInputFooter({
 								<PromptInput onSubmit={onSend}>
 									<PromptInputTextarea placeholder="Ask anything..." />
 									<PromptInputFooter>
-										<PromptInputTools>
+										<PromptInputTools className="[&_[data-size]]:border-[0.5px] [&_[data-size]]:border-border/50 [&_[data-size]]:dark:border-[#303030] [&_[data-size]]:dark:bg-[#212121]">
 											<PromptInputButton>
 												<HiMiniPaperClip className="size-4" />
 											</PromptInputButton>
@@ -105,6 +105,7 @@ export function ChatInputFooter({
 												</span>
 											)}
 											<PromptInputSubmit
+												className="rounded-full"
 												status={isStreaming ? "streaming" : undefined}
 												onClick={isStreaming ? onStop : undefined}
 											/>
