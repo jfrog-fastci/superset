@@ -1,6 +1,7 @@
 import { useParams } from "@tanstack/react-router";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useGitChangesStatus } from "renderer/screens/main/hooks/useGitChangesStatus";
+import { usePRComments } from "renderer/screens/main/hooks/usePRComments";
 import { InfiniteScrollView } from "./components/InfiniteScrollView";
 
 export function ChangesContent() {
@@ -15,6 +16,10 @@ export function ChangesContent() {
 		worktreePath,
 		refetchInterval: 2500,
 		refetchOnWindowFocus: true,
+	});
+
+	const { commentsByFile } = usePRComments({
+		workspaceId,
 	});
 
 	if (!worktreePath) {
@@ -47,6 +52,7 @@ export function ChangesContent() {
 				status={status}
 				worktreePath={worktreePath}
 				baseBranch={effectiveBaseBranch}
+				commentsByFile={commentsByFile}
 			/>
 		</div>
 	);

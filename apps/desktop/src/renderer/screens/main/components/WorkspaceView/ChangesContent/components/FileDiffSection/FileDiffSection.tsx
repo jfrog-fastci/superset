@@ -1,3 +1,4 @@
+import type { PRCommentThread } from "@superset/local-db";
 import { Button } from "@superset/ui/button";
 import { Collapsible, CollapsibleContent } from "@superset/ui/collapsible";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,6 +28,7 @@ interface FileDiffSectionProps {
 	onUnstage?: () => void;
 	onDiscard?: () => void;
 	isActioning?: boolean;
+	commentThreads?: PRCommentThread[];
 }
 
 const VISIBILITY_MARGIN = "200px 0px";
@@ -70,6 +72,7 @@ export function FileDiffSection({
 	onUnstage,
 	onDiscard,
 	isActioning = false,
+	commentThreads,
 }: FileDiffSectionProps) {
 	const sectionRef = useRef<HTMLDivElement>(null);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -244,6 +247,7 @@ export function FileDiffSection({
 					onUnstage={onUnstage}
 					onDiscard={onDiscard}
 					isActioning={isActioning}
+					commentCount={commentThreads?.length}
 				/>
 
 				<CollapsibleContent>
@@ -286,6 +290,7 @@ export function FileDiffSection({
 								viewMode={diffViewMode}
 								hideUnchangedRegions={hideUnchangedRegions}
 								filePath={file.path}
+								commentThreads={commentThreads}
 							/>
 						)
 					) : (
