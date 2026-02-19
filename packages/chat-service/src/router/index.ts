@@ -1,6 +1,6 @@
 import { initTRPC } from "@trpc/server";
 import { z } from "zod";
-import type { AgentManager } from "../agent/agent-manager";
+import type { ChatService } from "../chat-service";
 import { searchFiles } from "../workspace/file-search";
 import { getSlashCommands } from "../workspace/slash-commands";
 
@@ -21,11 +21,20 @@ export const sessionIdInput = z.object({
 	sessionId: z.string().uuid(),
 });
 
-export function createChatServiceRouter(deps: {
-	agentManager: AgentManager | null;
-	resolveWorkspaceRootPath: (workspaceId: string) => Promise<string | null>;
-}) {
+export function createChatServiceRouter(service: ChatService) {
 	return t.router({
+		start: t.procedure
+			.input(z.object({ organizationId: z.string(), authToken: z.string() }))
+			.mutation(async ({ input }) => {
+				await service.start(input);
+				return { success: true };
+			}),
+
+		stop: t.procedure.mutation(() => {
+			service.stop();
+			return { success: true };
+		}),
+
 		workspace: t.router({
 			searchFiles: t.procedure
 				.input(searchFilesInput)
@@ -48,12 +57,12 @@ export function createChatServiceRouter(deps: {
 		session: t.router({
 			isActive: t.procedure.input(sessionIdInput).query(({ input }) => {
 				return {
-					active: deps.agentManager?.hasWatcher(input.sessionId) ?? false,
+					active: service.hasWatcher(input.sessionId),
 				};
 			}),
 
 			activate: t.procedure.input(sessionIdInput).mutation(({ input }) => {
-				deps.agentManager?.ensureWatcher(input.sessionId);
+				service.ensureWatcher(input.sessionId);
 				return { active: true };
 			}),
 		}),

@@ -19,6 +19,8 @@ export {
 	sessionContext,
 	sessionRunIds,
 } from "./agent";
+export type { ChatServiceHostConfig } from "./chat-service";
+export { ChatService } from "./chat-service";
 export type { ChatServiceRouter } from "./router";
 export {
 	createChatServiceRouter,
