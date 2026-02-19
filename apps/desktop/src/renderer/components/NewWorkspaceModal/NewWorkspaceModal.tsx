@@ -67,7 +67,7 @@ export function NewWorkspaceModal() {
 	const isOpen = useNewWorkspaceModalOpen();
 	const closeModal = useCloseNewWorkspaceModal();
 	const preSelectedProjectId = usePreSelectedProjectId();
-	const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+	const [selectedProjectId, _setSelectedProjectId] = useState<string | null>(
 		null,
 	);
 	const [title, setTitle] = useState("");
@@ -75,6 +75,10 @@ export function NewWorkspaceModal() {
 	const [branchNameEdited, setBranchNameEdited] = useState(false);
 	const [mode, setMode] = useState<Mode>("new");
 	const [baseBranch, setBaseBranch] = useState<string | null>(null);
+	const selectProject = (projectId: string | null) => {
+		_setSelectedProjectId(projectId);
+		setBaseBranch(null);
+	};
 	const [baseBranchOpen, setBaseBranchOpen] = useState(false);
 	const [branchSearch, setBranchSearch] = useState("");
 	const [showAdvanced, setShowAdvanced] = useState(false);
@@ -129,16 +133,11 @@ export function NewWorkspaceModal() {
 
 	useEffect(() => {
 		if (isOpen && !selectedProjectId && preSelectedProjectId) {
-			setSelectedProjectId(preSelectedProjectId);
+			selectProject(preSelectedProjectId);
 		}
 	}, [isOpen, selectedProjectId, preSelectedProjectId]);
 
 	const effectiveBaseBranch = baseBranch ?? branchData?.defaultBranch ?? null;
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset when project changes
-	useEffect(() => {
-		setBaseBranch(null);
-	}, [selectedProjectId]);
 
 	const branchSlug = branchNameEdited
 		? sanitizeBranchName(branchName)
@@ -152,7 +151,7 @@ export function NewWorkspaceModal() {
 			: branchSlug;
 
 	const resetForm = () => {
-		setSelectedProjectId(null);
+		_setSelectedProjectId(null);
 		setTitle("");
 		setBranchName("");
 		setBranchNameEdited(false);
@@ -221,7 +220,7 @@ export function NewWorkspaceModal() {
 				}
 
 				if (successes.length > 0) {
-					setSelectedProjectId(successes[0].project.id);
+					selectProject(successes[0].project.id);
 				}
 			}
 		} catch (error) {
@@ -300,7 +299,7 @@ export function NewWorkspaceModal() {
 								.map((project) => (
 									<DropdownMenuItem
 										key={project.id}
-										onClick={() => setSelectedProjectId(project.id)}
+										onClick={() => selectProject(project.id)}
 									>
 										{project.name}
 										{project.id === selectedProjectId && (

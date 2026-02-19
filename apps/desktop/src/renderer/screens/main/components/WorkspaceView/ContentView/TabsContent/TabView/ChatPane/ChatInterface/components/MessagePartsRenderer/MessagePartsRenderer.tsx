@@ -42,7 +42,10 @@ export function MessagePartsRenderer({
 
 			if (part.type === "text") {
 				nodes.push(
-					<MessageResponse key={i} isAnimating={isLastAssistant && isStreaming}>
+					<MessageResponse
+						key={`text-${i}`}
+						isAnimating={isLastAssistant && isStreaming}
+					>
 						{part.text}
 					</MessageResponse>,
 				);
