@@ -1,0 +1,42 @@
+{
+	"name": "@superset/chat-service",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./client": {
+			"types": "./src/client/index.ts",
+			"default": "./src/client/index.ts"
+		},
+		"./router": {
+			"types": "./src/router/index.ts",
+			"default": "./src/router/index.ts"
+		}
+	},
+	"dependencies": {
+		"@electric-sql/client": "1.5.2",
+		"@superset/agent": "workspace:*",
+		"@superset/db": "workspace:*",
+		"@superset/durable-session": "workspace:*",
+		"@trpc/server": "^11.7.1",
+		"ai": "^6.0.0",
+		"fast-glob": "^3.3.3",
+		"fuse.js": "^7.1.0",
+		"zod": "^4.3.5"
+	},
+	"peerDependencies": {
+		"@trpc/react-query": "^11.7.1",
+		"drizzle-orm": "0.45.1",
+		"react": "^18.0.0 || ^19.0.0"
+	},
+	"devDependencies": {
+		"@superset/typescript": "workspace:*",
+		"@types/node": "^24.9.1",
+		"@types/react": "~19.2.2",
+		"typescript": "^5.9.3"
+	}
+}

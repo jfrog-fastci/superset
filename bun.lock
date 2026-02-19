@@ -129,6 +129,7 @@
         "@streamdown/mermaid": "^1.0.2",
         "@superset/agent": "workspace:*",
         "@superset/auth": "workspace:*",
+        "@superset/chat-service": "workspace:*",
         "@superset/db": "workspace:*",
         "@superset/desktop-mcp": "workspace:*",
         "@superset/durable-session": "workspace:*",
@@ -558,6 +559,32 @@
         "@superset/typescript": "workspace:*",
         "@types/node": "^24.9.1",
         "typescript": "^5.9.3",
+      },
+    },
+    "packages/chat-service": {
+      "name": "@superset/chat-service",
+      "version": "0.0.1",
+      "dependencies": {
+        "@electric-sql/client": "1.5.2",
+        "@superset/agent": "workspace:*",
+        "@superset/db": "workspace:*",
+        "@superset/durable-session": "workspace:*",
+        "@trpc/server": "^11.7.1",
+        "ai": "^6.0.0",
+        "fast-glob": "^3.3.3",
+        "fuse.js": "^7.1.0",
+        "zod": "^4.3.5",
+      },
+      "devDependencies": {
+        "@superset/typescript": "workspace:*",
+        "@types/node": "^24.9.1",
+        "@types/react": "~19.2.2",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "@trpc/react-query": "^11.7.1",
+        "drizzle-orm": "0.45.1",
+        "react": "^18.0.0 || ^19.0.0",
       },
     },
     "packages/db": {
@@ -1978,6 +2005,8 @@
     "@superset/api": ["@superset/api@workspace:apps/api"],
 
     "@superset/auth": ["@superset/auth@workspace:packages/auth"],
+
+    "@superset/chat-service": ["@superset/chat-service@workspace:packages/chat-service"],
 
     "@superset/db": ["@superset/db@workspace:packages/db"],
 

@@ -1,6 +1,5 @@
 import { SessionHost } from "@superset/durable-session/host";
 import type { UIMessage } from "ai";
-import { env } from "main/env.main";
 import { getAvailableModels } from "./models";
 import {
 	resumeAgent,
@@ -20,12 +19,16 @@ export class StreamWatcher {
 	private host: SessionHost;
 	private readonly sessionId: string;
 
-	constructor(options: { sessionId: string; authToken: string }) {
+	constructor(options: {
+		sessionId: string;
+		authToken: string;
+		apiUrl: string;
+	}) {
 		this.sessionId = options.sessionId;
 
 		this.host = new SessionHost({
 			sessionId: options.sessionId,
-			baseUrl: `${env.NEXT_PUBLIC_API_URL}/api/chat`,
+			baseUrl: `${options.apiUrl}/api/chat`,
 			headers: { Authorization: `Bearer ${options.authToken}` },
 		});
 
@@ -44,6 +47,7 @@ export class StreamWatcher {
 				permissionMode: this.host.config.permissionMode,
 				thinkingEnabled: this.host.config.thinkingEnabled,
 				authToken: options.authToken,
+				apiUrl: options.apiUrl,
 			});
 		});
 

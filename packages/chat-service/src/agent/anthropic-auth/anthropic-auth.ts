@@ -9,7 +9,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 interface ClaudeCredentials {
 	apiKey: string;
@@ -22,7 +22,6 @@ interface ClaudeConfigFile {
 	api_key?: string;
 	oauthAccessToken?: string;
 	oauth_access_token?: string;
-	// Claude Code CLI format
 	claudeAiOauth?: {
 		accessToken?: string;
 		refreshToken?: string;
@@ -30,14 +29,10 @@ interface ClaudeConfigFile {
 	};
 }
 
-/**
- * Get Claude credentials from config file.
- */
 export function getCredentialsFromConfig(): ClaudeCredentials | null {
 	const home = homedir();
-	// Check Claude Code CLI credentials first (most common case)
 	const configPaths = [
-		join(home, ".claude", ".credentials.json"), // Claude Code CLI
+		join(home, ".claude", ".credentials.json"),
 		join(home, ".claude.json"),
 		join(home, ".config", "claude", "credentials.json"),
 		join(home, ".config", "claude", "config.json"),
@@ -49,7 +44,6 @@ export function getCredentialsFromConfig(): ClaudeCredentials | null {
 				const content = readFileSync(configPath, "utf-8");
 				const config: ClaudeConfigFile = JSON.parse(content);
 
-				// Check for Claude Code CLI OAuth format first
 				if (config.claudeAiOauth?.accessToken) {
 					console.log(
 						`[claude/auth] Found OAuth credentials in: ${configPath}`,
@@ -61,7 +55,6 @@ export function getCredentialsFromConfig(): ClaudeCredentials | null {
 					};
 				}
 
-				// Fall back to other formats
 				const apiKey = config.apiKey || config.api_key;
 				const oauthAccessToken =
 					config.oauthAccessToken || config.oauth_access_token;
@@ -93,16 +86,12 @@ export function getCredentialsFromConfig(): ClaudeCredentials | null {
 	return null;
 }
 
-/**
- * Get Claude credentials from macOS Keychain.
- */
 export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 	if (platform() !== "darwin") {
 		return null;
 	}
 
 	try {
-		// Claude CLI stores credentials in the keychain with this service/account
 		const result = execSync(
 			'security find-generic-password -s "claude-cli" -a "api-key" -w 2>/dev/null',
 			{ encoding: "utf-8" },
@@ -113,10 +102,9 @@ export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 			return { apiKey: result, source: "keychain", kind: "apiKey" };
 		}
 	} catch {
-		// Not found in keychain, this is fine
+		// Not found in keychain
 	}
 
-	// Try alternate keychain entry format
 	try {
 		const result = execSync(
 			'security find-generic-password -s "anthropic-api-key" -w 2>/dev/null',
@@ -130,8 +118,53 @@ export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 			return { apiKey: result, source: "keychain", kind: "apiKey" };
 		}
 	} catch {
-		// Not found in keychain, this is fine
+		// Not found in keychain
 	}
 
 	return null;
+}
+
+export function getExistingClaudeCredentials(): ClaudeCredentials | null {
+	const configCredentials = getCredentialsFromConfig();
+	if (configCredentials) return configCredentials;
+
+	const keychainCredentials = getCredentialsFromKeychain();
+	if (keychainCredentials) return keychainCredentials;
+
+	console.warn("[claude/auth] No Claude credentials found");
+	return null;
+}
+
+const STRIPPED_ENV_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+
+export function buildClaudeEnv(): Record<string, string> {
+	const env: Record<string, string> = {
+		...process.env,
+	} as Record<string, string>;
+
+	for (const key of STRIPPED_ENV_KEYS) {
+		delete env[key];
+	}
+
+	if (platform() !== "win32") {
+		const pathAdditions = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"];
+		const currentPath = env.PATH || "";
+		const pathParts = currentPath.split(delimiter);
+
+		for (const addition of pathAdditions) {
+			if (!pathParts.includes(addition)) {
+				pathParts.push(addition);
+			}
+		}
+
+		env.PATH = pathParts.join(delimiter);
+	}
+
+	env.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";
+
+	return env;
+}
+
+export function hasClaudeCredentials(): boolean {
+	return getExistingClaudeCredentials() !== null;
 }

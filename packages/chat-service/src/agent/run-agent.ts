@@ -3,9 +3,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { RequestContext, superagent, toAISdkStream } from "@superset/agent";
+import { db } from "@superset/db/client";
+import { tasks } from "@superset/db/schema";
 import type { SessionHost } from "@superset/durable-session/host";
 import type { UIMessage, UIMessageChunk } from "ai";
-import { env } from "main/env.main";
+import { and, inArray, isNull } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Shared session state
@@ -37,6 +39,7 @@ export interface RunAgentOptions {
 	permissionMode?: string;
 	thinkingEnabled?: boolean;
 	authToken?: string;
+	apiUrl?: string;
 }
 
 export async function runAgent(options: RunAgentOptions): Promise<void> {
@@ -50,6 +53,7 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 		permissionMode,
 		thinkingEnabled,
 		authToken,
+		apiUrl,
 	} = options;
 
 	// Abort any existing agent for this session
@@ -62,7 +66,7 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 	const requestEntries: [string, string][] = [
 		["modelId", modelId],
 		["cwd", cwd],
-		["apiUrl", env.NEXT_PUBLIC_API_URL],
+		...(apiUrl ? ([["apiUrl", apiUrl]] as [string, string][]) : []),
 		...(authToken ? ([["authToken", authToken]] as [string, string][]) : []),
 		...(thinkingEnabled
 			? ([["thinkingEnabled", "true"]] as [string, string][])
@@ -78,10 +82,12 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 
 	try {
 		const projectContext = await gatherProjectContext(cwd);
-		const mentions = parseFileMentions(text, cwd);
-		const fileMentionContext = buildFileMentionContext(mentions);
+		const fileMentions = parseFileMentions(text, cwd);
+		const fileMentionContext = buildFileMentionContext(fileMentions);
+		const taskSlugs = parseTaskMentions(text);
+		const taskMentionContext = await buildTaskMentionContext(taskSlugs);
 		const contextInstructions =
-			projectContext + fileMentionContext || undefined;
+			projectContext + fileMentionContext + taskMentionContext || undefined;
 
 		const requireToolApproval =
 			permissionMode === "default" || permissionMode === "acceptEdits";
@@ -230,6 +236,45 @@ export async function resumeAgent(options: ResumeAgentOptions): Promise<void> {
 		if (sessionAbortControllers.get(sessionId) === abortController) {
 			sessionAbortControllers.delete(sessionId);
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Task mention parsing
+// ---------------------------------------------------------------------------
+
+const TASK_MENTION_REGEX = /@task:([\w-]+)/g;
+
+export function parseTaskMentions(text: string): string[] {
+	return [
+		...new Set(
+			[...text.matchAll(TASK_MENTION_REGEX)]
+				.map((m) => m[1])
+				.filter((s): s is string => s !== undefined),
+		),
+	];
+}
+
+async function buildTaskMentionContext(slugs: string[]): Promise<string> {
+	if (slugs.length === 0) return "";
+
+	try {
+		const rows = await db
+			.select()
+			.from(tasks)
+			.where(and(inArray(tasks.slug, slugs), isNull(tasks.deletedAt)));
+
+		if (rows.length === 0) return "";
+
+		const parts = rows.map(
+			(t) =>
+				`<task slug="${t.slug}" title="${t.title}" status="${t.statusId}">${t.description ?? ""}</task>`,
+		);
+
+		return `\n\nThe user referenced the following tasks. Their details are provided below:\n\n${parts.join("\n\n")}`;
+	} catch (error) {
+		console.warn("[run-agent] Failed to fetch task mentions:", error);
+		return "";
 	}
 }
 
@@ -398,7 +443,12 @@ function parseFileMentions(text: string, cwd: string): FileMention[] {
 
 	let match: RegExpExecArray | null = mentionRegex.exec(text);
 	while (match !== null) {
-		const relPath = match[1];
+		const relPath = match[1] as string;
+		// Skip @task: mentions — handled separately
+		if (relPath.startsWith("task:")) {
+			match = mentionRegex.exec(text);
+			continue;
+		}
 		if (!seen.has(relPath)) {
 			seen.add(relPath);
 

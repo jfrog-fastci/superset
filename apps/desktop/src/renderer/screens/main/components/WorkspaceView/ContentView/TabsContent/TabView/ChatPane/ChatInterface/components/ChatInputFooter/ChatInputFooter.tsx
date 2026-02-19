@@ -18,16 +18,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniPaperClip } from "react-icons/hi2";
 import type { ModelOption, PermissionMode } from "../../types";
 import {
-	FileMentionAnchor,
-	FileMentionProvider,
-	FileMentionTrigger,
-} from "../FileMentionPopover";
+	MentionAnchor,
+	MentionProvider,
+	MentionTrigger,
+} from "../MentionPopover";
 import { ModelPicker } from "../ModelPicker";
 import { PermissionModePicker } from "../PermissionModePicker";
 import { SlashCommandInput } from "../SlashCommandInput";
 
 interface ChatInputFooterProps {
 	cwd: string;
+	organizationId: string | null;
 	error: string | null;
 	isStreaming: boolean;
 	availableModels: ModelOption[];
@@ -91,6 +92,7 @@ function PaperclipButton() {
 
 export function ChatInputFooter({
 	cwd,
+	organizationId,
 	error,
 	isStreaming,
 	availableModels,
@@ -117,12 +119,12 @@ export function ChatInputFooter({
 						{error}
 					</div>
 				)}
-				<FileMentionProvider cwd={cwd}>
+				<MentionProvider cwd={cwd} organizationId={organizationId}>
 					<SlashCommandInput
 						onCommandSend={onSlashCommandSend}
 						commands={slashCommands}
 					>
-						<FileMentionAnchor>
+						<MentionAnchor>
 							<PromptInput
 								onSubmit={onSend}
 								multiple
@@ -146,11 +148,11 @@ export function ChatInputFooter({
 								<PromptInputAttachments>
 									{(file) => <PromptInputAttachment data={file} />}
 								</PromptInputAttachments>
-								<PromptInputTextarea placeholder="Ask anything..." />
+								<PromptInputTextarea placeholder="Ask to make changes, @mention files, run /commands" />
 								<PromptInputFooter>
 									<PromptInputTools>
 										<PaperclipButton />
-										<FileMentionTrigger />
+										<MentionTrigger />
 										<ThinkingToggle
 											enabled={thinkingEnabled}
 											onToggle={setThinkingEnabled}
@@ -173,9 +175,9 @@ export function ChatInputFooter({
 									/>
 								</PromptInputFooter>
 							</PromptInput>
-						</FileMentionAnchor>
+						</MentionAnchor>
 					</SlashCommandInput>
-				</FileMentionProvider>
+				</MentionProvider>
 			</div>
 		</div>
 	);

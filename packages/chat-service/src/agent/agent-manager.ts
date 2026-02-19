@@ -10,17 +10,24 @@
 
 import { Shape, ShapeStream } from "@electric-sql/client";
 import { setAnthropicAuthToken } from "@superset/agent";
-import { env } from "main/env.main";
 import {
 	getCredentialsFromConfig,
 	getCredentialsFromKeychain,
-} from "./utils/anthropic/auth";
+} from "./anthropic-auth";
 import {
 	sessionAbortControllers,
 	sessionContext,
 	sessionRunIds,
-} from "./utils/run-agent";
-import { StreamWatcher } from "./utils/stream-watcher";
+} from "./run-agent";
+import { StreamWatcher } from "./stream-watcher";
+
+export interface AgentManagerConfig {
+	deviceId: string;
+	organizationId: string;
+	authToken: string;
+	electricUrl: string;
+	apiUrl: string;
+}
 
 export class AgentManager {
 	private watchers = new Map<string, StreamWatcher>();
@@ -30,23 +37,18 @@ export class AgentManager {
 	private deviceId: string;
 	private organizationId: string;
 	private authToken: string;
+	private electricUrl: string;
+	private apiUrl: string;
 
-	constructor(options: {
-		deviceId: string;
-		organizationId: string;
-		authToken: string;
-	}) {
-		this.deviceId = options.deviceId;
-		this.organizationId = options.organizationId;
-		this.authToken = options.authToken;
+	constructor(config: AgentManagerConfig) {
+		this.deviceId = config.deviceId;
+		this.organizationId = config.organizationId;
+		this.authToken = config.authToken;
+		this.electricUrl = config.electricUrl;
+		this.apiUrl = config.apiUrl;
 	}
 
 	async start(): Promise<void> {
-		// In development, localhost uses self-signed certs that Node.js rejects
-		if (env.NODE_ENV === "development") {
-			process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-		}
-
 		// Initialize Claude credentials
 		const cliCredentials =
 			getCredentialsFromConfig() ?? getCredentialsFromKeychain();
@@ -61,9 +63,8 @@ export class AgentManager {
 			);
 		}
 
-		const electricUrl = env.NEXT_PUBLIC_ELECTRIC_URL;
-		if (!electricUrl) {
-			console.error("[agent-manager] No NEXT_PUBLIC_ELECTRIC_URL configured");
+		if (!this.electricUrl) {
+			console.error("[agent-manager] No electricUrl configured");
 			return;
 		}
 
@@ -71,7 +72,7 @@ export class AgentManager {
 			`[agent-manager] Starting for org=${this.organizationId} device=${this.deviceId}`,
 		);
 
-		const shapeUrl = `${electricUrl}/v1/shape`;
+		const shapeUrl = `${this.electricUrl}/v1/shape`;
 		const shapeParams = {
 			table: "session_hosts",
 			organizationId: this.organizationId,
@@ -130,10 +131,21 @@ export class AgentManager {
 		this.logActiveSessions();
 	}
 
+	hasWatcher(sessionId: string): boolean {
+		return this.watchers.has(sessionId);
+	}
+
+	ensureWatcher(sessionId: string): void {
+		if (!this.watchers.has(sessionId)) {
+			this.startWatcher(sessionId);
+		}
+	}
+
 	private startWatcher(sessionId: string): void {
 		const watcher = new StreamWatcher({
 			sessionId,
 			authToken: this.authToken,
+			apiUrl: this.apiUrl,
 		});
 
 		watcher.start();
@@ -171,7 +183,6 @@ export class AgentManager {
 		this.logActiveSessions();
 	}
 
-	/** Restart with a new org (e.g. on org switch). */
 	async restart(options: {
 		organizationId: string;
 		deviceId?: string;

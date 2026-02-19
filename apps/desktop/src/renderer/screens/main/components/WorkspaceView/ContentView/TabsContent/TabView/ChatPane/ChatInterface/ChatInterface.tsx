@@ -8,6 +8,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "renderer/env.renderer";
 import { getAuthToken } from "renderer/lib/auth-client";
+import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { ChatInputFooter } from "./components/ChatInputFooter";
 import { MessageList } from "./components/MessageList";
@@ -25,6 +26,7 @@ async function createSession(
 	sessionId: string,
 	organizationId: string,
 	deviceId: string | null,
+	workspaceId?: string,
 ): Promise<void> {
 	const token = getAuthToken();
 	await fetch(`${apiUrl}/api/chat/${sessionId}`, {
@@ -36,6 +38,7 @@ async function createSession(
 		body: JSON.stringify({
 			organizationId,
 			...(deviceId ? { deviceId } : {}),
+			...(workspaceId ? { workspaceId } : {}),
 		}),
 	});
 }
@@ -132,7 +135,7 @@ function EmptyChatInterface({
 			setSentMessage({ text, files });
 
 			const newSessionId = crypto.randomUUID();
-			createSession(newSessionId, organizationId, deviceId)
+			createSession(newSessionId, organizationId, deviceId, workspaceId)
 				.then(async () => {
 					// Config is fire-and-forget
 					fetch(`${apiUrl}/api/chat/${newSessionId}/stream/config`, {
@@ -178,6 +181,7 @@ function EmptyChatInterface({
 		[
 			organizationId,
 			deviceId,
+			workspaceId,
 			paneId,
 			switchChatSession,
 			onMessageSent,
@@ -214,6 +218,7 @@ function EmptyChatInterface({
 				/>
 				<ChatInputFooter
 					cwd={cwd}
+					organizationId={organizationId}
 					error={error}
 					isStreaming={!!sentMessage}
 					availableModels={[]}
@@ -241,6 +246,7 @@ function EmptyChatInterface({
 
 function ActiveChatInterface({
 	sessionId,
+	organizationId,
 	workspaceId,
 	cwd,
 	pendingMessage,
@@ -357,11 +363,16 @@ function ActiveChatInterface({
 		metadata.updateConfig,
 	]);
 
+	const activateMutation =
+		electronTrpc.chatService.session.activate.useMutation();
+
 	const handleSend = useCallback(
 		async (message: PromptInputMessage) => {
 			const text = message.text.trim();
 			const files = message.files ?? [];
 			if (!text && files.length === 0) return;
+
+			activateMutation.mutate({ sessionId });
 
 			// Upload files immediately before sending the message
 			let uploadedFiles: FileUIPart[] | undefined;
@@ -374,7 +385,7 @@ function ActiveChatInterface({
 
 			sendMessage(text, uploadedFiles);
 		},
-		[sendMessage, sessionId],
+		[sendMessage, activateMutation, sessionId],
 	);
 
 	const handleStop = useCallback(
@@ -402,6 +413,7 @@ function ActiveChatInterface({
 				/>
 				<ChatInputFooter
 					cwd={cwd}
+					organizationId={organizationId}
 					error={error}
 					isStreaming={isStreaming || !!pendingMessage}
 					availableModels={metadata.config.availableModels ?? []}
