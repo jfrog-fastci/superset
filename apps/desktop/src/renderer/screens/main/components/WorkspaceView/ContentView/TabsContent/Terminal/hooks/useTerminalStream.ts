@@ -12,7 +12,6 @@ export interface UseTerminalStreamOptions {
 	isExitedRef: React.MutableRefObject<boolean>;
 	wasKilledByUserRef: React.MutableRefObject<boolean>;
 	pendingEventsRef: React.MutableRefObject<TerminalStreamEvent[]>;
-	lastResizeTimeRef: React.MutableRefObject<number>;
 	setExitStatus: (status: "killed" | "exited" | null) => void;
 	setConnectionError: (error: string | null) => void;
 	updateModesFromData: (data: string) => void;
@@ -39,7 +38,6 @@ export function useTerminalStream({
 	isExitedRef,
 	wasKilledByUserRef,
 	pendingEventsRef,
-	lastResizeTimeRef,
 	setExitStatus,
 	setConnectionError,
 	updateModesFromData,
@@ -47,9 +45,6 @@ export function useTerminalStream({
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const firstStreamDataReceivedRef = useRef(false);
-	// Dwell guard: tracks when "permission" status was first seen so we
-	// don't clear it before the prompt finishes rendering (~2 s).
-	const permissionSetAtRef = useRef(0);
 
 	// Refs to use latest values in callbacks
 	const updateModesRef = useRef(updateModesFromData);
@@ -152,26 +147,6 @@ export function useTerminalStream({
 					);
 				}
 
-				// Clear "permission" → "working" when terminal output resumes,
-				// but guard against false positives:
-				//  1. Resize: PTY redraws after tab switch produce spurious data
-				//  2. Dwell: PermissionRequest hook fires before the CLI renders
-				//     the prompt, so prompt text arrives as data immediately
-				const currentPane = useTabsStore.getState().panes[paneId];
-				if (currentPane?.status === "permission") {
-					const now = Date.now();
-					if (permissionSetAtRef.current === 0) {
-						permissionSetAtRef.current = now;
-					}
-					const timeSincePermission = now - permissionSetAtRef.current;
-					const timeSinceResize = now - lastResizeTimeRef.current;
-					if (timeSincePermission > 2000 && timeSinceResize > 1500) {
-						setPaneStatus(paneId, "working");
-					}
-				} else {
-					permissionSetAtRef.current = 0;
-				}
-
 				updateModesRef.current(event.data);
 				xterm.write(event.data);
 				updateCwdRef.current(event.data);
@@ -193,8 +168,6 @@ export function useTerminalStream({
 			handleTerminalExit,
 			handleStreamError,
 			setConnectionError,
-			lastResizeTimeRef.current,
-			setPaneStatus,
 		],
 	);
 
