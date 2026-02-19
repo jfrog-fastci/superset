@@ -50,6 +50,10 @@ export function useTerminalStream({
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const firstStreamDataReceivedRef = useRef(false);
+	// Tracks when we first observe "permission" status during a data event,
+	// so we can let the permission prompt finish rendering before allowing
+	// terminal output to clear it.
+	const permissionSetAtRef = useRef(0);
 
 	// Refs to use latest values in callbacks
 	const updateModesRef = useRef(updateModesFromData);
@@ -154,14 +158,26 @@ export function useTerminalStream({
 
 				// When terminal produces output while in "permission" state,
 				// the agent has resumed (user approved/denied the permission).
-				// Guard: ignore data arriving shortly after a resize to avoid
-				// false positives from terminal redraws on tab navigation.
+				// Guards against false positives:
+				//  1. Resize guard — ignore data from PTY redraws after tab switch
+				//  2. Dwell guard — PermissionRequest hook fires synchronously
+				//     *before* the CLI renders the permission prompt, so the
+				//     prompt text itself arrives as terminal data right after
+				//     status flips to "permission". We require the status to
+				//     have been "permission" for ≥2 s before clearing it.
 				const currentPane = useTabsStore.getState().panes[paneId];
 				if (currentPane?.status === "permission") {
-					const timeSinceResize = Date.now() - lastResizeTimeRef.current;
-					if (timeSinceResize > 1500) {
+					const now = Date.now();
+					if (permissionSetAtRef.current === 0) {
+						permissionSetAtRef.current = now;
+					}
+					const timeSincePermission = now - permissionSetAtRef.current;
+					const timeSinceResize = now - lastResizeTimeRef.current;
+					if (timeSincePermission > 2000 && timeSinceResize > 1500) {
 						setPaneStatus(paneId, "working");
 					}
+				} else {
+					permissionSetAtRef.current = 0;
 				}
 
 				updateModesRef.current(event.data);
