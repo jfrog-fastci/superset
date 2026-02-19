@@ -27,8 +27,10 @@ fi
 # Parse failures should not trigger completion notifications.
 # The server will ignore requests with missing eventType (forward compatibility).
 
-# Map UserPromptSubmit to Start for simpler handling
+# Map to Start for simpler handling (agent is working)
 [ "$EVENT_TYPE" = "UserPromptSubmit" ] && EVENT_TYPE="Start"
+[ "$EVENT_TYPE" = "PostToolUse" ] && EVENT_TYPE="Start"
+[ "$EVENT_TYPE" = "PostToolUseFailure" ] && EVENT_TYPE="Start"
 
 # If no event type was found, skip the notification
 # This prevents parse failures from causing false completion notifications

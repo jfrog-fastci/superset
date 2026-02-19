@@ -67,6 +67,14 @@ async function ensureScriptFile(params: {
 		return;
 	}
 
+	// Marker present but content changed (e.g., new hooks added) — update in place
+	if (existing !== content) {
+		await fs.writeFile(filePath, content, { mode });
+		await fs.chmod(filePath, mode);
+		console.log(`[agent-setup] Updated ${logLabel}`);
+		return;
+	}
+
 	// Only check/fix executability for files that should be executable (0o755)
 	const shouldBeExecutable = (mode & 0o111) !== 0;
 	if (shouldBeExecutable && !(await isExecutable(filePath))) {
@@ -77,11 +85,11 @@ async function ensureScriptFile(params: {
 async function ensureClaudeSettings(): Promise<void> {
 	const settingsPath = getClaudeSettingsPath();
 	const notifyPath = getNotifyScriptPath();
+	const expected = getClaudeSettingsContent(notifyPath);
 	const existing = await readFileIfExists(settingsPath);
 
-	if (!existing || !existing.includes('"hooks"')) {
-		const content = getClaudeSettingsContent(notifyPath);
-		await fs.writeFile(settingsPath, content, { mode: 0o644 });
+	if (existing !== expected) {
+		await fs.writeFile(settingsPath, expected, { mode: 0o644 });
 		console.log("[agent-setup] Rewrote Claude settings");
 	}
 }

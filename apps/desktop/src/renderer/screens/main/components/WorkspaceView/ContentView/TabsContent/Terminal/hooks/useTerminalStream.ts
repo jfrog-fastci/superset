@@ -12,6 +12,7 @@ export interface UseTerminalStreamOptions {
 	isExitedRef: React.MutableRefObject<boolean>;
 	wasKilledByUserRef: React.MutableRefObject<boolean>;
 	pendingEventsRef: React.MutableRefObject<TerminalStreamEvent[]>;
+	lastResizeTimeRef: React.MutableRefObject<number>;
 	setExitStatus: (status: "killed" | "exited" | null) => void;
 	setConnectionError: (error: string | null) => void;
 	updateModesFromData: (data: string) => void;
@@ -41,6 +42,7 @@ export function useTerminalStream({
 	isExitedRef,
 	wasKilledByUserRef,
 	pendingEventsRef,
+	lastResizeTimeRef,
 	setExitStatus,
 	setConnectionError,
 	updateModesFromData,
@@ -149,6 +151,19 @@ export function useTerminalStream({
 						`[Terminal] First stream data received: ${paneId}, ${event.data.length} bytes`,
 					);
 				}
+
+				// When terminal produces output while in "permission" state,
+				// the agent has resumed (user approved/denied the permission).
+				// Guard: ignore data arriving shortly after a resize to avoid
+				// false positives from terminal redraws on tab navigation.
+				const currentPane = useTabsStore.getState().panes[paneId];
+				if (currentPane?.status === "permission") {
+					const timeSinceResize = Date.now() - lastResizeTimeRef.current;
+					if (timeSinceResize > 1500) {
+						setPaneStatus(paneId, "working");
+					}
+				}
+
 				updateModesRef.current(event.data);
 				xterm.write(event.data);
 				updateCwdRef.current(event.data);
@@ -170,6 +185,8 @@ export function useTerminalStream({
 			handleTerminalExit,
 			handleStreamError,
 			setConnectionError,
+			lastResizeTimeRef.current,
+			setPaneStatus,
 		],
 	);
 

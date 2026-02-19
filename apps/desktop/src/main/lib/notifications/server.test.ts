@@ -19,6 +19,14 @@ describe("notifications/server", () => {
 			expect(mapEventType("agent-turn-complete")).toBe("Stop");
 		});
 
+		it("should map 'PostToolUse' to 'Start'", () => {
+			expect(mapEventType("PostToolUse")).toBe("Start");
+		});
+
+		it("should map 'PostToolUseFailure' to 'Start'", () => {
+			expect(mapEventType("PostToolUseFailure")).toBe("Start");
+		});
+
 		it("should map 'PermissionRequest' to 'PermissionRequest'", () => {
 			expect(mapEventType("PermissionRequest")).toBe("PermissionRequest");
 		});

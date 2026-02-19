@@ -11,7 +11,12 @@ export function mapEventType(
 	if (!eventType) {
 		return null;
 	}
-	if (eventType === "Start" || eventType === "UserPromptSubmit") {
+	if (
+		eventType === "Start" ||
+		eventType === "UserPromptSubmit" ||
+		eventType === "PostToolUse" ||
+		eventType === "PostToolUseFailure"
+	) {
 		return "Start";
 	}
 	if (eventType === "PermissionRequest") {

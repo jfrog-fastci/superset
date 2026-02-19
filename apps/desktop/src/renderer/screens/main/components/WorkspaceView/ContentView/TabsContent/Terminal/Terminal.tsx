@@ -100,6 +100,17 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 		},
 	} = useTerminalConnection({ workspaceId });
 
+	// Track resize timing to suppress false permission→working transitions
+	// from terminal redraws on tab navigation (initialized to now for mount)
+	const lastResizeTimeRef = useRef(Date.now());
+	const resizeWithTrackingRef = useRef(resizeRef.current);
+	resizeWithTrackingRef.current = (
+		args: Parameters<(typeof resizeRef)["current"]>[0],
+	) => {
+		lastResizeTimeRef.current = Date.now();
+		resizeRef.current(args);
+	};
+
 	// Terminal CWD management
 	const { updateCwdFromData } = useTerminalCwd({
 		paneId,
@@ -234,6 +245,7 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 			isExitedRef,
 			wasKilledByUserRef,
 			pendingEventsRef,
+			lastResizeTimeRef,
 			setExitStatus,
 			setConnectionError,
 			updateModesFromData,
@@ -299,7 +311,7 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 		setRestoredCwd,
 		createOrAttachRef,
 		writeRef,
-		resizeRef,
+		resizeRef: resizeWithTrackingRef,
 		detachRef,
 		clearScrollbackRef,
 		isStreamReadyRef,
