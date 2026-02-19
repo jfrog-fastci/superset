@@ -32,9 +32,6 @@ export interface UseTerminalStreamReturn {
 	handleStreamData: (event: TerminalStreamEvent) => void;
 }
 
-/**
- * Hook to handle terminal stream events (data, exit, disconnect, error).
- */
 export function useTerminalStream({
 	paneId,
 	xtermRef,
@@ -50,9 +47,8 @@ export function useTerminalStream({
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const firstStreamDataReceivedRef = useRef(false);
-	// Tracks when we first observe "permission" status during a data event,
-	// so we can let the permission prompt finish rendering before allowing
-	// terminal output to clear it.
+	// Dwell guard: tracks when "permission" status was first seen so we
+	// don't clear it before the prompt finishes rendering (~2 s).
 	const permissionSetAtRef = useRef(0);
 
 	// Refs to use latest values in callbacks
@@ -156,15 +152,11 @@ export function useTerminalStream({
 					);
 				}
 
-				// When terminal produces output while in "permission" state,
-				// the agent has resumed (user approved/denied the permission).
-				// Guards against false positives:
-				//  1. Resize guard — ignore data from PTY redraws after tab switch
-				//  2. Dwell guard — PermissionRequest hook fires synchronously
-				//     *before* the CLI renders the permission prompt, so the
-				//     prompt text itself arrives as terminal data right after
-				//     status flips to "permission". We require the status to
-				//     have been "permission" for ≥2 s before clearing it.
+				// Clear "permission" → "working" when terminal output resumes,
+				// but guard against false positives:
+				//  1. Resize: PTY redraws after tab switch produce spurious data
+				//  2. Dwell: PermissionRequest hook fires before the CLI renders
+				//     the prompt, so prompt text arrives as data immediately
 				const currentPane = useTabsStore.getState().panes[paneId];
 				if (currentPane?.status === "permission") {
 					const now = Date.now();

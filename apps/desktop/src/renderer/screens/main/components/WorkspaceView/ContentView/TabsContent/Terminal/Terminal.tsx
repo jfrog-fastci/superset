@@ -101,7 +101,7 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	} = useTerminalConnection({ workspaceId });
 
 	// Track resize timing to suppress false permission→working transitions
-	// from terminal redraws on tab navigation (initialized to now for mount)
+	// from terminal redraws on tab navigation
 	const lastResizeTimeRef = useRef(Date.now());
 	const resizeWithTrackingRef = useRef(resizeRef.current);
 	resizeWithTrackingRef.current = (

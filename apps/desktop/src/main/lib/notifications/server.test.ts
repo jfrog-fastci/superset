@@ -38,7 +38,6 @@ describe("notifications/server", () => {
 		});
 
 		it("should return null for undefined eventType (not default to Stop)", () => {
-			// This is critical: missing eventType should NOT trigger a completion notification
 			expect(mapEventType(undefined)).toBeNull();
 		});
 
