@@ -1,3 +1,4 @@
+import type { CommentsByFile } from "renderer/screens/main/hooks";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import type { ChangesViewMode } from "../../types";
 import { FileListGrouped } from "./FileListGrouped";
@@ -19,6 +20,7 @@ interface FileListProps {
 	commitHash?: string;
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentsByFile?: CommentsByFile;
 }
 
 export function FileList({
@@ -37,6 +39,7 @@ export function FileList({
 	commitHash,
 	isExpandedView,
 	projectId,
+	commentsByFile,
 }: FileListProps) {
 	if (files.length === 0) {
 		return null;
@@ -59,6 +62,7 @@ export function FileList({
 				commitHash={commitHash}
 				isExpandedView={isExpandedView}
 				projectId={projectId}
+				commentsByFile={commentsByFile}
 			/>
 		);
 	}
@@ -79,6 +83,7 @@ export function FileList({
 			commitHash={commitHash}
 			isExpandedView={isExpandedView}
 			projectId={projectId}
+			commentsByFile={commentsByFile}
 		/>
 	);
 }

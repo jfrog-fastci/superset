@@ -1,17 +1,20 @@
-import type { DiffLineAnnotation } from "@pierre/diffs/react";
 import type { PRCommentThread as PRCommentThreadType } from "@superset/local-db";
 import { formatDistanceToNow } from "date-fns";
 import { LuExternalLink } from "react-icons/lu";
 
 interface PRCommentThreadProps {
-	annotation: DiffLineAnnotation<PRCommentThreadType>;
+	thread: PRCommentThreadType;
+	className?: string;
 }
 
-export function PRCommentThread({ annotation }: PRCommentThreadProps) {
-	const thread = annotation.metadata;
-
+export function PRCommentThread({ thread, className }: PRCommentThreadProps) {
 	return (
-		<div className="border border-blue-500/30 bg-blue-500/5 rounded-md mx-2 my-1 overflow-hidden">
+		<div
+			className={
+				className ??
+				"border border-blue-500/30 bg-blue-500/5 rounded-md mx-2 my-1 overflow-hidden"
+			}
+		>
 			{thread.comments.map((comment) => (
 				<div
 					key={comment.id}
@@ -30,7 +33,7 @@ export function PRCommentThread({ annotation }: PRCommentThreadProps) {
 							href={comment.htmlUrl}
 							target="_blank"
 							rel="noopener noreferrer"
-							className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+							className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-auto"
 						>
 							{formatDistanceToNow(new Date(comment.createdAt), {
 								addSuffix: true,

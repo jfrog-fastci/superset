@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { CommentsByFile } from "renderer/screens/main/hooks";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { FileItem } from "../FileItem";
 import { FolderRow } from "../FolderRow";
@@ -43,6 +44,7 @@ interface FileListTreeProps {
 	commitHash?: string;
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentsByFile?: CommentsByFile;
 }
 
 function buildFileTree(files: ChangedFile[]): FileTreeNode[] {
@@ -113,6 +115,7 @@ interface TreeNodeComponentProps {
 	commitHash?: string;
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentsByFile?: CommentsByFile;
 }
 
 function TreeNodeComponent({
@@ -131,6 +134,7 @@ function TreeNodeComponent({
 	commitHash,
 	isExpandedView,
 	projectId,
+	commentsByFile,
 }: TreeNodeComponentProps) {
 	const [isExpanded, setIsExpanded] = useState(true);
 	const hasChildren = node.children && node.children.length > 0;
@@ -195,6 +199,7 @@ function TreeNodeComponent({
 						commitHash={commitHash}
 						isExpandedView={isExpandedView}
 						projectId={projectId}
+						commentsByFile={commentsByFile}
 					/>
 				))}
 			</FolderRow>
@@ -219,6 +224,7 @@ function TreeNodeComponent({
 				category={category}
 				commitHash={commitHash}
 				isExpandedView={isExpandedView}
+				commentCount={commentsByFile?.get(file.path)?.length}
 			/>
 		);
 	}
@@ -241,6 +247,7 @@ export function FileListTree({
 	commitHash,
 	isExpandedView,
 	projectId,
+	commentsByFile,
 }: FileListTreeProps) {
 	const tree = buildFileTree(files);
 
@@ -263,6 +270,7 @@ export function FileListTree({
 					commitHash={commitHash}
 					isExpandedView={isExpandedView}
 					projectId={projectId}
+					commentsByFile={commentsByFile}
 				/>
 			))}
 		</div>

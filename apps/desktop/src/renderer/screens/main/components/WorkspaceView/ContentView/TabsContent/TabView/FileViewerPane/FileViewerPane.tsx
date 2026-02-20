@@ -1,6 +1,8 @@
+import { useParams } from "@tanstack/react-router";
 import type * as Monaco from "monaco-editor";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MosaicBranch } from "react-mosaic-component";
+import { usePRComments } from "renderer/screens/main/hooks";
 import { useChangesStore } from "renderer/stores/changes";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import type { Tab } from "renderer/stores/tabs/types";
@@ -65,6 +67,9 @@ export function FileViewerPane({
 		toggleHideUnchangedRegions,
 	} = useChangesStore();
 
+	const { workspaceId } = useParams({ strict: false });
+	const { commentsByFile } = usePRComments({ workspaceId });
+
 	const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 	const [isDirty, setIsDirty] = useState(false);
 	const originalContentRef = useRef<string>("");
@@ -82,6 +87,8 @@ export function FileViewerPane({
 	const oldPath = fileViewer?.oldPath;
 	const initialLine = fileViewer?.initialLine;
 	const initialColumn = fileViewer?.initialColumn;
+
+	const commentThreads = filePath ? commentsByFile.get(filePath) : undefined;
 
 	const pinPane = useTabsStore((s) => s.pinPane);
 
@@ -315,6 +322,7 @@ export function FileViewerPane({
 					onEditorChange={handleEditorChange}
 					onDiffChange={canEditDiff ? handleDiffChange : undefined}
 					setIsDirty={setIsDirty}
+					commentThreads={commentThreads}
 					// Context menu props
 					onSplitHorizontal={() => splitPaneHorizontal(tabId, paneId, path)}
 					onSplitVertical={() => splitPaneVertical(tabId, paneId, path)}

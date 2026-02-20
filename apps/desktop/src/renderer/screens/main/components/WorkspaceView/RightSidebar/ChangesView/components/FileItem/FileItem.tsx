@@ -22,6 +22,7 @@ import {
 	LuClipboard,
 	LuExternalLink,
 	LuFolderOpen,
+	LuMessageSquare,
 	LuMinus,
 	LuPlus,
 	LuTrash2,
@@ -48,6 +49,7 @@ interface FileItemProps {
 	/** Expanded view uses scroll-sync highlighting; collapsed view uses selection highlighting */
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentCount?: number;
 }
 
 function LevelIndicators({ level }: { level: number }) {
@@ -82,6 +84,7 @@ export function FileItem({
 	commitHash,
 	isExpandedView = false,
 	projectId,
+	commentCount,
 }: FileItemProps) {
 	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 	const { activeFileKey } = useScrollContext();
@@ -213,6 +216,13 @@ export function FileItem({
 					)}
 				</span>
 			</button>
+
+			{commentCount != null && commentCount > 0 && (
+				<span className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 shrink-0 pr-1">
+					<LuMessageSquare className="size-2.5" />
+					{commentCount}
+				</span>
+			)}
 
 			{hasAction && (
 				<div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { CommentsByFile } from "renderer/screens/main/hooks";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { FileItem } from "../FileItem";
 import { FolderRow } from "../FolderRow";
@@ -18,6 +19,7 @@ interface FileListGroupedProps {
 	commitHash?: string;
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentsByFile?: CommentsByFile;
 }
 
 interface FolderGroup {
@@ -73,6 +75,7 @@ interface FolderGroupItemProps {
 	commitHash?: string;
 	isExpandedView?: boolean;
 	projectId?: string;
+	commentsByFile?: CommentsByFile;
 }
 
 function FolderGroupItem({
@@ -89,6 +92,7 @@ function FolderGroupItem({
 	commitHash,
 	isExpandedView,
 	projectId,
+	commentsByFile,
 }: FolderGroupItemProps) {
 	const [isExpanded, setIsExpanded] = useState(true);
 	const displayName = group.folderPath || "Root Path";
@@ -145,6 +149,7 @@ function FolderGroupItem({
 					category={category}
 					commitHash={commitHash}
 					isExpandedView={isExpandedView}
+					commentCount={commentsByFile?.get(file.path)?.length}
 				/>
 			))}
 		</FolderRow>
@@ -165,6 +170,7 @@ export function FileListGrouped({
 	commitHash,
 	isExpandedView,
 	projectId,
+	commentsByFile,
 }: FileListGroupedProps) {
 	const groups = groupFilesByFolder(files);
 
@@ -186,6 +192,7 @@ export function FileListGrouped({
 					commitHash={commitHash}
 					isExpandedView={isExpandedView}
 					projectId={projectId}
+					commentsByFile={commentsByFile}
 				/>
 			))}
 		</div>

@@ -1,4 +1,5 @@
 import Editor, { type OnMount } from "@monaco-editor/react";
+import type { PRCommentThread } from "@superset/local-db";
 import type * as Monaco from "monaco-editor";
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import { LuLoader } from "react-icons/lu";
@@ -15,6 +16,7 @@ import { detectLanguage } from "shared/detect-language";
 import { isImageFile } from "shared/file-types";
 import type { FileViewerMode } from "shared/tabs-types";
 import { DiffViewer } from "../../../../../../ChangesContent/components/DiffViewer";
+import { LightDiffViewer } from "../../../../../../ChangesContent/components/LightDiffViewer";
 import { registerCopyPathLineAction } from "../../../../../components/EditorContextMenu";
 import { FileEditorContextMenu } from "../FileEditorContextMenu";
 
@@ -81,6 +83,7 @@ interface FileViewerContentProps {
 	onEditorChange: (value: string | undefined) => void;
 	onDiffChange?: (content: string) => void;
 	setIsDirty: (dirty: boolean) => void;
+	commentThreads?: PRCommentThread[];
 	// Context menu props
 	onSplitHorizontal: () => void;
 	onSplitVertical: () => void;
@@ -113,6 +116,7 @@ export function FileViewerContent({
 	onEditorChange,
 	onDiffChange,
 	setIsDirty,
+	commentThreads,
 	// Context menu props
 	onSplitHorizontal,
 	onSplitVertical,
@@ -208,29 +212,41 @@ export function FileViewerContent({
 				</div>
 			);
 		}
+		if (isDiffEditable) {
+			return (
+				<DiffViewer
+					key={filePath}
+					contents={{
+						original: diffData.original,
+						modified: diffData.modified,
+						language: diffData.language,
+					}}
+					viewMode={diffViewMode}
+					hideUnchangedRegions={hideUnchangedRegions}
+					filePath={filePath}
+					editable
+					onSave={onSaveDiff}
+					onChange={onDiffChange}
+					contextMenuProps={{
+						onSplitHorizontal,
+						onSplitVertical,
+						onClosePane,
+						currentTabId,
+						availableTabs,
+						onMoveToTab,
+						onMoveToNewTab,
+					}}
+				/>
+			);
+		}
 		return (
-			<DiffViewer
+			<LightDiffViewer
 				key={filePath}
-				contents={{
-					original: diffData.original,
-					modified: diffData.modified,
-					language: diffData.language,
-				}}
+				contents={diffData}
 				viewMode={diffViewMode}
 				hideUnchangedRegions={hideUnchangedRegions}
 				filePath={filePath}
-				editable={isDiffEditable}
-				onSave={isDiffEditable ? onSaveDiff : undefined}
-				onChange={isDiffEditable ? onDiffChange : undefined}
-				contextMenuProps={{
-					onSplitHorizontal,
-					onSplitVertical,
-					onClosePane,
-					currentTabId,
-					availableTabs,
-					onMoveToTab,
-					onMoveToNewTab,
-				}}
+				commentThreads={commentThreads}
 			/>
 		);
 	}

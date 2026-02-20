@@ -65,7 +65,7 @@ export function LightDiffViewer({
 
 	const renderAnnotation = useCallback(
 		(annotation: DiffLineAnnotation<PRCommentThread>) => {
-			return <PRCommentThreadComponent annotation={annotation} />;
+			return <PRCommentThreadComponent thread={annotation.metadata} />;
 		},
 		[],
 	);
