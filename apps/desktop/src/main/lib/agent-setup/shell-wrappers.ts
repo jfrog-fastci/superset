@@ -7,7 +7,7 @@ const ZSH_RC = path.join(ZSH_DIR, ".zshrc");
 const BASH_RCFILE = path.join(BASH_DIR, "rcfile");
 
 /** Agent binaries that get wrapper shims to guarantee resolution. */
-const SHIMMED_BINARIES = ["claude", "codex", "opencode", "gemini"];
+const SHIMMED_BINARIES = ["claude", "codex", "opencode", "gemini", "copilot"];
 
 /**
  * Shell function shims that override PATH-based lookup.
