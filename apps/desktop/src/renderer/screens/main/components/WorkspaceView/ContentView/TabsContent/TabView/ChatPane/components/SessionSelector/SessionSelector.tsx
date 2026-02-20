@@ -1,3 +1,4 @@
+import { alert } from "@superset/ui/atoms/Alert";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -6,7 +7,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
-import { alert } from "@superset/ui/atoms/Alert";
 import { toast } from "@superset/ui/sonner";
 import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -92,12 +92,13 @@ export function SessionSelector({
 												title: "Delete Chat Session",
 												description: `Are you sure you want to delete "${session.title || "New Chat"}"? This action cannot be undone.`,
 												confirmText: "Delete",
-												onConfirm: () =>
+												onConfirm: () => {
 													toast.promise(onDeleteSession(session.id), {
 														loading: "Deleting session...",
 														success: "Session deleted",
 														error: "Failed to delete session",
-													}),
+													});
+												},
 											});
 										}}
 									>

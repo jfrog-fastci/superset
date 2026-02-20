@@ -183,7 +183,14 @@ export function ChatInterface({
 				setTabAutoTitle(tabId, title);
 			})
 			.catch(console.error);
-	}, [chat.isLoading, chat.messages, sessionId, sessionTitle, tabId, setTabAutoTitle]);
+	}, [
+		chat.isLoading,
+		chat.messages,
+		sessionId,
+		sessionTitle,
+		tabId,
+		setTabAutoTitle,
+	]);
 
 	// --- Display messages: show synthetic pending while useChat preloads ---
 	const displayMessages =

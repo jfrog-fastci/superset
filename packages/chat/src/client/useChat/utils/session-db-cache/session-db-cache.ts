@@ -13,7 +13,7 @@ interface CacheEntry {
 	preloadPromise: Promise<void>;
 	preloaded: boolean;
 	cleanupTimer: ReturnType<typeof setTimeout> | null;
-	keepAlive: { unsubscribe: () => void };
+	keepAlive: { unsubscribe: () => void }[];
 }
 
 const cache = new Map<string, CacheEntry>();
@@ -28,7 +28,7 @@ function touchEntry(key: string, entry: CacheEntry): void {
 		clearTimeout(entry.cleanupTimer);
 	}
 	entry.cleanupTimer = setTimeout(() => {
-		entry.keepAlive.unsubscribe();
+		for (const sub of entry.keepAlive) sub.unsubscribe();
 		entry.db.close();
 		cache.delete(key);
 	}, CLEANUP_DELAY_MS);
@@ -62,9 +62,10 @@ export function getSessionDB(config: SessionDBConfig): {
 	const messagesCollection = createMessagesCollection({
 		chunksCollection: db.collections.chunks,
 	});
-	// Keep-alive subscription prevents TanStack DB from GC-ing collection
-	// data (gcTime: 0) while the entry is cached.
-	const keepAlive = db.collections.chunks.subscribeChanges(() => {});
+	const keepAlive = [
+		db.collections.chunks.subscribeChanges(() => {}),
+		messagesCollection.subscribeChanges(() => {}),
+	];
 
 	const entry: CacheEntry = {
 		db,
