@@ -6,6 +6,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
+import { alert } from "@superset/ui/atoms/Alert";
+import { toast } from "@superset/ui/sonner";
 import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useState } from "react";
@@ -22,7 +24,7 @@ interface SessionSelectorProps {
 	workspaceId: string;
 	onSelectSession: (sessionId: string) => void;
 	onNewChat: () => void;
-	onDeleteSession: (sessionId: string) => void;
+	onDeleteSession: (sessionId: string) => Promise<void>;
 }
 
 export function SessionSelector({
@@ -38,10 +40,9 @@ export function SessionSelector({
 	const { data: sessions } = useLiveQuery(
 		(q) =>
 			q
-				.from({ cs: collections.chatSessions })
-				.where(({ cs }) => eq(cs.workspaceId, workspaceId))
-				.orderBy(({ cs }) => cs.lastActiveAt, "desc")
-				.select(({ cs }) => cs),
+				.from({ chatSessions: collections.chatSessions })
+				.where(({ chatSessions }) => eq(chatSessions.workspaceId, workspaceId))
+				.orderBy(({ chatSessions }) => chatSessions.lastActiveAt, "desc"),
 		[collections, workspaceId],
 	);
 
@@ -86,7 +87,17 @@ export function SessionSelector({
 										className="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteSession(session.id);
+											alert.destructive({
+												title: "Delete Chat Session",
+												description: `Are you sure you want to delete "${session.title || "New Chat"}"? This action cannot be undone.`,
+												confirmText: "Delete",
+												onConfirm: () =>
+													toast.promise(onDeleteSession(session.id), {
+														loading: "Deleting session...",
+														success: "Session deleted",
+														error: "Failed to delete session",
+													}),
+											});
 										}}
 									>
 										<HiMiniTrash className="size-3" />

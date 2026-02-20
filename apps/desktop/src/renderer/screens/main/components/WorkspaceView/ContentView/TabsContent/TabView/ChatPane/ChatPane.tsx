@@ -124,12 +124,12 @@ export function ChatPane({
 	}, [paneId, switchChatSession]);
 
 	const handleDeleteSession = useCallback(
-		(sessionIdToDelete: string) => {
+		async (sessionIdToDelete: string) => {
 			const token = getAuthToken();
-			fetch(`${apiUrl}/api/chat/${sessionIdToDelete}/stream`, {
+			await fetch(`${apiUrl}/api/chat/${sessionIdToDelete}/stream`, {
 				method: "DELETE",
 				headers: token ? { Authorization: `Bearer ${token}` } : {},
-			}).catch(console.error);
+			});
 
 			if (sessionIdToDelete === sessionId) {
 				switchChatSession(paneId, null);
