@@ -114,7 +114,7 @@ export function ChatInterface({
 	const { data: slashCommands = [] } =
 		chatServiceTrpc.workspace.getSlashCommands.useQuery({ cwd });
 
-	const messageMetadata = useMemo(
+	const baseMessageMetadata = useMemo(
 		() => ({
 			model: activeModel?.id,
 			permissionMode,
@@ -143,9 +143,17 @@ export function ChatInterface({
 		workspaceId,
 		paneId,
 		cwd,
-		messageMetadata,
+		messageMetadata: baseMessageMetadata,
 		switchChatSession,
 	});
+
+	const buildMessageMetadata = useCallback(
+		(linkedTaskIds?: string[]) => ({
+			...baseMessageMetadata,
+			...(linkedTaskIds && linkedTaskIds.length > 0 ? { linkedTaskIds } : {}),
+		}),
+		[baseMessageMetadata],
+	);
 
 	const captureInterruptedMessage = useCallback(() => {
 		if (!chat.isLoading) return;
@@ -178,7 +186,7 @@ export function ChatInterface({
 	});
 
 	const handleSend = useCallback(
-		async (message: PromptInputMessage) => {
+		async (message: PromptInputMessage, linkedTaskIds?: string[]) => {
 			let text = message.text.trim();
 			const files = message.files ?? [];
 
@@ -192,9 +200,17 @@ export function ChatInterface({
 
 			setInterruptedMessage(null);
 			clearRuntimeError();
-			sendThroughController({ text, files });
+			sendThroughController(
+				{ text, files },
+				buildMessageMetadata(linkedTaskIds),
+			);
 		},
-		[clearRuntimeError, resolveSlashCommandInput, sendThroughController],
+		[
+			buildMessageMetadata,
+			clearRuntimeError,
+			resolveSlashCommandInput,
+			sendThroughController,
+		],
 	);
 
 	useEffect(() => {
@@ -246,6 +262,7 @@ export function ChatInterface({
 					...pending.files,
 				],
 				createdAt: pending.createdAt,
+				...(pending.metadata ? { metadata: pending.metadata } : {}),
 			}));
 		const merged = [...chat.messages, ...optimisticMessages];
 		if (!interruptedMessage) return merged;

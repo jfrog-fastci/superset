@@ -3,6 +3,7 @@ import { DurableStream, IdempotentProducer } from "@durable-streams/client";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { type ChunkRow, sessionStateSchema } from "../../../../../schema";
 import { createSessionDB, type SessionDB } from "../../../../../session-db";
+import type { MessageMetadata } from "../../../../../types";
 import type { GetHeaders } from "../../../../lib/auth/auth";
 
 // ---------------------------------------------------------------------------
@@ -15,12 +16,6 @@ export interface SessionHostOptions {
 	baseUrl: string;
 	getHeaders: GetHeaders;
 	signal?: AbortSignal;
-}
-
-export interface MessageMetadata {
-	model?: string;
-	permissionMode?: string;
-	thinkingEnabled?: boolean;
 }
 
 export interface SessionHostEventMap {
@@ -48,6 +43,8 @@ export interface SessionHostEventMap {
 	disconnected: [data: { reason?: string }];
 	error: [error: Error];
 }
+
+export type { MessageMetadata };
 
 // ---------------------------------------------------------------------------
 // SessionHost

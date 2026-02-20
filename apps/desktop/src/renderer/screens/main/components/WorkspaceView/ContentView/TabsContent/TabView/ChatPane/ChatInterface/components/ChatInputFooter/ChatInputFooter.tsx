@@ -5,8 +5,8 @@ import {
 	type PromptInputMessage,
 	PromptInputTextarea,
 	usePromptInputAttachments,
-	usePromptInputController,
 } from "@superset/ui/ai-elements/prompt-input";
+import { useNavigate } from "@tanstack/react-router";
 import type { ChatStatus } from "ai";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +20,7 @@ import type { ModelOption, PermissionMode } from "../../types";
 import { IssueLinkCommand } from "../IssueLinkCommand";
 import { MentionAnchor, MentionProvider } from "../MentionPopover";
 import { SlashCommandInput } from "../SlashCommandInput";
+import { TaskChip, type TaskChipData } from "../TaskChip";
 import { ChatComposerControls } from "./components/ChatComposerControls";
 import { ChatInputDropZone } from "./components/ChatInputDropZone";
 import { FileDropOverlay } from "./components/FileDropOverlay";
@@ -42,7 +43,7 @@ interface ChatInputFooterProps {
 	slashCommands: SlashCommand[];
 	onSubmitStart?: () => void;
 	onSubmitEnd?: () => void;
-	onSend: (message: PromptInputMessage) => void;
+	onSend: (message: PromptInputMessage, linkedTaskIds?: string[]) => void;
 	onStop: (e: React.MouseEvent) => void;
 	onSlashCommandSend: (command: SlashCommand) => void;
 }
@@ -86,26 +87,17 @@ function ChatShortcuts({
 function IssueLinkInserter({
 	issueLinkOpen,
 	setIssueLinkOpen,
+	onSelectTask,
 }: {
 	issueLinkOpen: boolean;
 	setIssueLinkOpen: React.Dispatch<React.SetStateAction<boolean>>;
+	onSelectTask: (task: TaskChipData) => void;
 }) {
-	const { textInput } = usePromptInputController();
-
-	const handleSelectTask = useCallback(
-		(slug: string) => {
-			const current = textInput.value;
-			const needsSpace = current.length > 0 && !current.endsWith(" ");
-			textInput.setInput(`${current}${needsSpace ? " " : ""}@task:${slug} `);
-		},
-		[textInput],
-	);
-
 	return (
 		<IssueLinkCommand
 			open={issueLinkOpen}
 			onOpenChange={setIssueLinkOpen}
-			onSelect={handleSelectTask}
+			onSelect={onSelectTask}
 		/>
 	);
 }
@@ -132,6 +124,42 @@ export function ChatInputFooter({
 	onSlashCommandSend,
 }: ChatInputFooterProps) {
 	const [issueLinkOpen, setIssueLinkOpen] = useState(false);
+	const [linkedTasks, setLinkedTasks] = useState<TaskChipData[]>([]);
+	const navigate = useNavigate();
+
+	const handleSelectTask = useCallback((task: TaskChipData) => {
+		setLinkedTasks((current) => {
+			if (current.some((existing) => existing.taskId === task.taskId)) {
+				return current;
+			}
+			return [...current, task];
+		});
+	}, []);
+
+	const handleRemoveTask = useCallback((taskId: string) => {
+		setLinkedTasks((current) =>
+			current.filter((task) => task.taskId !== taskId),
+		);
+	}, []);
+
+	const handleTaskChipSelect = useCallback(
+		(taskId: string) => {
+			navigate({
+				to: "/tasks/$taskId",
+				params: { taskId },
+			});
+		},
+		[navigate],
+	);
+
+	const handleSubmit = useCallback(
+		(message: PromptInputMessage) => {
+			const linkedTaskIds = linkedTasks.map((task) => task.taskId);
+			onSend(message, linkedTaskIds.length > 0 ? linkedTaskIds : undefined);
+			setLinkedTasks([]);
+		},
+		[linkedTasks, onSend],
+	);
 
 	return (
 		<ChatInputDropZone className="bg-background px-4 py-3">
@@ -159,7 +187,7 @@ export function ChatInputFooter({
 										className="[&>[data-slot=input-group]]:rounded-[13px] [&>[data-slot=input-group]]:border-[0.5px] [&>[data-slot=input-group]]:shadow-none [&>[data-slot=input-group]]:bg-foreground/[0.02]"
 										onSubmitStart={onSubmitStart}
 										onSubmitEnd={onSubmitEnd}
-										onSubmit={onSend}
+										onSubmit={handleSubmit}
 										multiple
 										maxFiles={5}
 										maxFileSize={10 * 1024 * 1024}
@@ -169,11 +197,24 @@ export function ChatInputFooter({
 										<IssueLinkInserter
 											issueLinkOpen={issueLinkOpen}
 											setIssueLinkOpen={setIssueLinkOpen}
+											onSelectTask={handleSelectTask}
 										/>
 										<FileDropOverlay visible={dragType === "files"} />
 										<PromptInputAttachments>
 											{(file) => <PromptInputAttachment data={file} />}
 										</PromptInputAttachments>
+										{linkedTasks.length > 0 ? (
+											<div className="mx-3 mt-2 flex flex-wrap gap-2 rounded-md border border-border bg-background p-2">
+												{linkedTasks.map((task) => (
+													<TaskChip
+														key={task.taskId}
+														task={task}
+														onSelect={handleTaskChipSelect}
+														onRemove={handleRemoveTask}
+													/>
+												))}
+											</div>
+										) : null}
 										<SlashCommandPreview
 											cwd={cwd}
 											slashCommands={slashCommands}

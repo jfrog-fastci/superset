@@ -6,17 +6,21 @@ import {
 } from "@superset/ui/ai-elements/conversation";
 import { Message, MessageContent } from "@superset/ui/ai-elements/message";
 import { ShimmerLabel } from "@superset/ui/ai-elements/shimmer-label";
+import { useLiveQuery } from "@tanstack/react-db";
+import { useNavigate } from "@tanstack/react-router";
 import type { ChatStatus, UIMessage } from "ai";
 import { FileIcon, FileTextIcon, ImageIcon } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
+import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import type { InterruptedMessagePreview } from "../../types";
 import { MessagePartsRenderer } from "../MessagePartsRenderer";
+import { TaskChip, type TaskChipData } from "../TaskChip";
 import { MessageScrollbackRail } from "./components/MessageScrollbackRail";
 
 interface MessageListProps {
-	messages: UIMessage[];
+	messages: Array<UIMessage & { metadata?: { linkedTaskIds?: string[] } }>;
 	interruptedMessage?: InterruptedMessagePreview | null;
 	isStreaming: boolean;
 	submitStatus?: ChatStatus;
@@ -58,6 +62,27 @@ export function MessageList({
 	const addFileViewerPane = useTabsStore((s) => s.addFileViewerPane);
 	const isThinking =
 		submitStatus === "submitted" || submitStatus === "streaming";
+	const collections = useCollections();
+	const navigate = useNavigate();
+
+	const { data: taskRows } = useLiveQuery(
+		(q) =>
+			q.from({ t: collections.tasks }).select(({ t }) => ({
+				taskId: t.id,
+				slug: t.slug,
+				title: t.title,
+				externalUrl: t.externalUrl,
+			})),
+		[collections.tasks],
+	);
+
+	const taskMap = useMemo(
+		() =>
+			new Map<string, TaskChipData>(
+				(taskRows ?? []).map((task) => [task.taskId, task]),
+			),
+		[taskRows],
+	);
 
 	const handleImageClick = useCallback(
 		(url: string) => {
@@ -65,6 +90,16 @@ export function MessageList({
 			addFileViewerPane(workspaceId, { filePath: url, isPinned: true });
 		},
 		[workspaceId, addFileViewerPane],
+	);
+
+	const handleTaskChipSelect = useCallback(
+		(taskId: string) => {
+			navigate({
+				to: "/tasks/$taskId",
+				params: { taskId },
+			});
+		},
+		[navigate],
 	);
 
 	return (
@@ -84,6 +119,18 @@ export function MessageList({
 							isLastAssistant && (isStreaming || submitStatus === "submitted");
 
 						if (msg.role === "user") {
+							const linkedTaskIds = msg.metadata?.linkedTaskIds ?? [];
+							const linkedTasks = linkedTaskIds
+								.map((taskId) => {
+									return (
+										taskMap.get(taskId) ?? {
+											taskId,
+											slug: taskId.slice(0, 8),
+											title: "Linked task",
+										}
+									);
+								})
+								.filter((task) => task.taskId.length > 0);
 							const textContent = msg.parts
 								.filter((p) => p.type === "text")
 								.map((p) => p.text)
@@ -103,6 +150,17 @@ export function MessageList({
 									data-chat-user-message="true"
 									data-message-id={msg.id}
 								>
+									{linkedTasks.length > 0 ? (
+										<div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+											{linkedTasks.map((task) => (
+												<TaskChip
+													key={`${msg.id}-task-${task.taskId}`}
+													task={task}
+													onSelect={handleTaskChipSelect}
+												/>
+											))}
+										</div>
+									) : null}
 									{imageParts.length > 0 && (
 										<div className="flex max-w-[85%] flex-wrap gap-2">
 											{imageParts.map((p) =>

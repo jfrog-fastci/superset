@@ -4,6 +4,14 @@ import { chatSessions } from "@superset/db/schema";
 import { eq } from "drizzle-orm";
 import { appendToStream, ensureStream, requireAuth } from "../../../lib";
 
+function sanitizeLinkedTaskIds(ids?: string[]): string[] | undefined {
+	if (!ids || ids.length === 0) return undefined;
+	const uuidPattern =
+		/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+	const unique = [...new Set(ids.filter((id) => uuidPattern.test(id)))];
+	return unique.length > 0 ? unique : undefined;
+}
+
 export async function POST(
 	request: Request,
 	{ params }: { params: Promise<{ sessionId: string }> },
@@ -23,6 +31,7 @@ export async function POST(
 			model?: string;
 			permissionMode?: string;
 			thinkingEnabled?: boolean;
+			linkedTaskIds?: string[];
 		};
 	};
 
@@ -55,6 +64,13 @@ export async function POST(
 		}
 	}
 
+	const metadata = body.metadata
+		? {
+				...body.metadata,
+				linkedTaskIds: sanitizeLinkedTaskIds(body.metadata.linkedTaskIds),
+			}
+		: undefined;
+
 	const message = {
 		id: messageId,
 		role: "user" as const,
@@ -73,7 +89,7 @@ export async function POST(
 			chunk: JSON.stringify({
 				type: "whole-message",
 				message,
-				...(body.metadata ? { metadata: body.metadata } : {}),
+				...(metadata ? { metadata } : {}),
 			}),
 			seq: 0,
 			createdAt: new Date().toISOString(),

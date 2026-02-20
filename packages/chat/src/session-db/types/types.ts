@@ -1,4 +1,5 @@
 import type { UIMessage, UIMessageChunk } from "ai";
+import type { MessageMetadata } from "../../types";
 
 /** Convenience alias — UIMessagePart is generic; this uses defaults. */
 export type AnyUIMessagePart = UIMessage["parts"][number];
@@ -10,6 +11,7 @@ export type AnyUIMessagePart = UIMessage["parts"][number];
 export interface WholeMessageChunk {
 	type: "whole-message";
 	message: UIMessage & { createdAt?: string | Date };
+	metadata?: MessageMetadata;
 }
 
 /**
@@ -43,4 +45,6 @@ export interface MessageRow {
 	createdAt: Date;
 	/** Timestamp of the most recent chunk (for staleness detection) */
 	lastChunkAt: Date;
+	/** Optional per-message metadata (model, permissions, linked tasks, etc.) */
+	metadata?: MessageMetadata;
 }

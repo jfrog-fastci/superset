@@ -1,49 +1,152 @@
+import { db } from "@superset/db/client";
 import {
-	createApiTrpcClient,
-	type GetHeaders,
-} from "../../../../../../lib/auth/auth";
+	chatSessions,
+	taskAssets,
+	taskComments,
+	tasks,
+} from "@superset/db/schema";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
-const TASK_MENTION_REGEX = /@task:([\w-]+)/g;
-
-export function parseTaskMentions(text: string): string[] {
-	return [
-		...new Set(
-			[...text.matchAll(TASK_MENTION_REGEX)]
-				.map((m) => m[1])
-				.filter((s): s is string => s !== undefined),
-		),
-	];
+interface BuildLinkedTaskContextOptions {
+	sessionId: string;
+	taskIds: string[];
 }
 
-export async function buildTaskMentionContext(
-	slugs: string[],
-	options: { apiUrl?: string; getHeaders?: GetHeaders },
+function escapeXml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&apos;");
+}
+
+export async function buildLinkedTaskContext(
+	options: BuildLinkedTaskContextOptions,
 ): Promise<string> {
-	if (slugs.length === 0) return "";
-	if (!options.apiUrl || !options.getHeaders) return "";
+	const uniqueTaskIds = [...new Set(options.taskIds)];
+	if (uniqueTaskIds.length === 0) return "";
 
 	try {
-		const client = createApiTrpcClient({
-			apiUrl: options.apiUrl,
-			getHeaders: options.getHeaders,
+		// Secondary safety gate: resolve org from session, then scope all task lookups.
+		const session = await db.query.chatSessions.findFirst({
+			where: eq(chatSessions.id, options.sessionId),
+			columns: { organizationId: true },
 		});
-		const tasksBySlug = await Promise.all(
-			slugs.map((slug) => client.task.bySlug.query(slug)),
-		);
-		const rows = tasksBySlug.filter(
-			(task): task is NonNullable<typeof task> => task !== null,
-		);
 
-		if (rows.length === 0) return "";
+		if (!session) return "";
 
-		const parts = rows.map(
-			(t) =>
-				`<task slug="${t.slug}" title="${t.title}" status="${t.statusId}">${t.description ?? ""}</task>`,
-		);
+		const linkedTasks = await db
+			.select({
+				id: tasks.id,
+				slug: tasks.slug,
+				title: tasks.title,
+				description: tasks.description,
+				priority: tasks.priority,
+				statusId: tasks.statusId,
+				externalUrl: tasks.externalUrl,
+			})
+			.from(tasks)
+			.where(
+				and(
+					eq(tasks.organizationId, session.organizationId),
+					inArray(tasks.id, uniqueTaskIds),
+					isNull(tasks.deletedAt),
+				),
+			);
 
-		return `\n\nThe user referenced the following tasks. Their details are provided below:\n\n${parts.join("\n\n")}`;
+		if (linkedTasks.length === 0) return "";
+
+		const linkedTaskIds = linkedTasks.map((task) => task.id);
+
+		const [assetRows, commentRows] = await Promise.all([
+			db
+				.select({
+					taskId: taskAssets.taskId,
+					blobUrl: taskAssets.blobUrl,
+					sourceUrl: taskAssets.sourceUrl,
+					sourceKind: taskAssets.sourceKind,
+					mimeType: taskAssets.mimeType,
+				})
+				.from(taskAssets)
+				.where(
+					and(
+						eq(taskAssets.organizationId, session.organizationId),
+						inArray(taskAssets.taskId, linkedTaskIds),
+					),
+				),
+			db
+				.select({
+					taskId: taskComments.taskId,
+					body: taskComments.body,
+					authorName: taskComments.authorName,
+					createdAt: taskComments.createdAt,
+					externalUrl: taskComments.externalUrl,
+				})
+				.from(taskComments)
+				.where(
+					and(
+						eq(taskComments.organizationId, session.organizationId),
+						inArray(taskComments.taskId, linkedTaskIds),
+						isNull(taskComments.deletedAt),
+					),
+				)
+				.orderBy(asc(taskComments.createdAt)),
+		]);
+
+		const assetsByTaskId = new Map<string, typeof assetRows>();
+		for (const asset of assetRows) {
+			const existing = assetsByTaskId.get(asset.taskId) ?? [];
+			existing.push(asset);
+			assetsByTaskId.set(asset.taskId, existing);
+		}
+
+		const commentsByTaskId = new Map<string, typeof commentRows>();
+		for (const comment of commentRows) {
+			const existing = commentsByTaskId.get(comment.taskId) ?? [];
+			existing.push(comment);
+			commentsByTaskId.set(comment.taskId, existing);
+		}
+
+		const taskBlocks = linkedTasks.map((task) => {
+			const taskAssetsForContext = assetsByTaskId.get(task.id) ?? [];
+			const taskCommentsForContext = (
+				commentsByTaskId.get(task.id) ?? []
+			).slice(-20);
+
+			const assetsBlock =
+				taskAssetsForContext.length > 0
+					? `<assets>\n${taskAssetsForContext
+							.map((asset) => {
+								return `<asset kind="${escapeXml(asset.sourceKind)}" blobUrl="${escapeXml(asset.blobUrl)}"${asset.mimeType ? ` mimeType="${escapeXml(asset.mimeType)}"` : ""} sourceUrl="${escapeXml(asset.sourceUrl)}" />`;
+							})
+							.join("\n")}\n</assets>`
+					: "";
+
+			const commentsBlock =
+				taskCommentsForContext.length > 0
+					? `<comments>\n${taskCommentsForContext
+							.map((comment) => {
+								const createdAt = comment.createdAt
+									? new Date(comment.createdAt).toISOString()
+									: "";
+								const authorName = comment.authorName ?? "Unknown";
+								const body = comment.body.slice(0, 2_000);
+								return `<comment author="${escapeXml(authorName)}"${createdAt ? ` createdAt="${escapeXml(createdAt)}"` : ""}${comment.externalUrl ? ` url="${escapeXml(comment.externalUrl)}"` : ""}>${escapeXml(body)}</comment>`;
+							})
+							.join("\n")}\n</comments>`
+					: "";
+
+			return `<task id="${escapeXml(task.id)}" slug="${escapeXml(task.slug)}" title="${escapeXml(task.title)}" priority="${escapeXml(task.priority)}" statusId="${escapeXml(task.statusId)}"${task.externalUrl ? ` externalUrl="${escapeXml(task.externalUrl)}"` : ""}>
+<description>${escapeXml(task.description ?? "")}</description>
+${assetsBlock}
+${commentsBlock}
+</task>`;
+		});
+
+		return `\n\nThe user linked the following tasks. Use this task context when planning and implementing changes:\n\n${taskBlocks.join("\n\n")}`;
 	} catch (error) {
-		console.warn("[run-agent] Failed to fetch task mentions:", error);
+		console.warn("[run-agent] Failed to build linked task context:", error);
 		return "";
 	}
 }

@@ -14,6 +14,7 @@ import type { FileUIPart, UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChunkRow } from "../../schema";
 import { messageRowToUIMessage } from "../../session-db/collections/messages/materialize";
+import type { MessageMetadata } from "../../types";
 import {
 	type UseChatMetadataReturn,
 	useChatMetadata,
@@ -27,21 +28,18 @@ export interface UseChatOptions {
 	getHeaders?: () => Record<string, string>;
 }
 
-export interface MessageMetadata {
-	model?: string;
-	permissionMode?: string;
-	thinkingEnabled?: boolean;
-}
-
 export interface SendMessageOptions {
 	messageId?: string;
 	txid?: string;
 	signal?: AbortSignal;
 }
-
 export interface UseChatReturn {
 	ready: boolean;
-	messages: (UIMessage & { actorId: string; createdAt: Date })[];
+	messages: (UIMessage & {
+		actorId: string;
+		createdAt: Date;
+		metadata?: MessageMetadata;
+	})[];
 	isLoading: boolean;
 	sendMessage: (
 		text: string,
@@ -61,6 +59,8 @@ export interface UseChatReturn {
 }
 
 const STALE_THRESHOLD_MS = 30_000;
+
+export type { MessageMetadata };
 
 export function useChat(options: UseChatOptions): UseChatReturn {
 	const { sessionId, proxyUrl, getHeaders } = options;

@@ -80,6 +80,7 @@ function materializeWholeMessage(
 		isComplete: true,
 		createdAt,
 		lastChunkAt: createdAt,
+		metadata: chunk.metadata,
 	};
 }
 
@@ -395,14 +396,21 @@ export function isAssistantMessage(row: MessageRow): boolean {
 /**
  * Convert a MessageRow to an AI SDK UIMessage.
  */
-export function messageRowToUIMessage(
-	row: MessageRow,
-): UIMessage & { actorId: string; createdAt: Date } {
+export function messageRowToUIMessage(row: MessageRow): UIMessage & {
+	actorId: string;
+	createdAt: Date;
+	metadata?: MessageRow["metadata"];
+} {
 	return {
 		id: row.id,
 		role: row.role as "user" | "assistant",
 		parts: row.parts,
 		createdAt: row.createdAt,
 		actorId: row.actorId,
-	} as UIMessage & { actorId: string; createdAt: Date };
+		...(row.metadata ? { metadata: row.metadata } : {}),
+	} as UIMessage & {
+		actorId: string;
+		createdAt: Date;
+		metadata?: MessageRow["metadata"];
+	};
 }

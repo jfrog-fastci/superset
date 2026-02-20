@@ -63,6 +63,38 @@ function TaskDetailPage() {
 		return taskData[0];
 	}, [taskData]);
 
+	const { data: commentData } = useLiveQuery(
+		(q) =>
+			q
+				.from({ comments: collections.taskComments })
+				.select(({ comments }) => ({
+					id: comments.id,
+					taskId: comments.taskId,
+					body: comments.body,
+					authorName: comments.authorName,
+					authorAvatarUrl: comments.authorAvatarUrl,
+					externalUrl: comments.externalUrl,
+					createdAt: comments.createdAt,
+					deletedAt: comments.deletedAt,
+				}))
+				.where(({ comments }) => eq(comments.taskId, task?.id ?? taskId)),
+		[collections.taskComments, task?.id, taskId],
+	);
+
+	const taskComments = useMemo(() => {
+		return (commentData ?? [])
+			.filter((comment) => !comment.deletedAt)
+			.map((comment) => ({
+				id: comment.id,
+				body: comment.body,
+				authorName: comment.authorName,
+				authorAvatarUrl: comment.authorAvatarUrl,
+				externalUrl: comment.externalUrl,
+				createdAt: new Date(comment.createdAt),
+			}))
+			.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+	}, [commentData]);
+
 	const handleBack = () => {
 		navigate({ to: "/tasks", search: backSearch });
 	};
@@ -132,10 +164,11 @@ function TaskDetailPage() {
 							createdAt={new Date(task.createdAt)}
 							creatorName={task.assignee?.name ?? "Someone"}
 							creatorAvatarUrl={task.assignee?.image}
+							comments={taskComments}
 						/>
 
 						<div className="mt-6">
-							<CommentInput />
+							<CommentInput disabled={task.externalProvider === "linear"} />
 						</div>
 					</div>
 				</ScrollArea>

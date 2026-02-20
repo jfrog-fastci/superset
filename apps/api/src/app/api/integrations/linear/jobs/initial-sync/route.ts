@@ -11,6 +11,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import chunk from "lodash.chunk";
 import { z } from "zod";
 import { env } from "@/env";
+import { syncLinearIssueById } from "../../lib/issues/sync-linear-issue";
 import { syncWorkflowStates } from "./syncWorkflowStates";
 import { fetchAllIssues, mapIssueToTask } from "./utils";
 
@@ -156,5 +157,23 @@ async function performInitialSync(
 					syncError: null,
 				},
 			});
+	}
+
+	// Secondary pass: hydrate comments + mirrored assets and rewrite markdown URLs.
+	const issueIdBatches = chunk(
+		issues.map((issue) => issue.id),
+		20,
+	);
+	for (const issueBatch of issueIdBatches) {
+		await Promise.allSettled(
+			issueBatch.map((issueId) =>
+				syncLinearIssueById({
+					client,
+					organizationId,
+					creatorUserId,
+					issueId,
+				}),
+			),
+		);
 	}
 }

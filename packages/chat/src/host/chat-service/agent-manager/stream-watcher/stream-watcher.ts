@@ -47,6 +47,7 @@ export class StreamWatcher {
 				cwd: this.cwd,
 				permissionMode: metadata?.permissionMode ?? "bypassPermissions",
 				thinkingEnabled: metadata?.thinkingEnabled ?? false,
+				linkedTaskIds: metadata?.linkedTaskIds,
 				apiUrl: options.apiUrl,
 				getHeaders: options.getHeaders,
 			});

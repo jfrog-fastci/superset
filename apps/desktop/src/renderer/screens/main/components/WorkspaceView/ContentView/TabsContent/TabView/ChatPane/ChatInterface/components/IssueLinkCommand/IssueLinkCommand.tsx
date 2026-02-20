@@ -14,13 +14,14 @@ import {
 	type StatusType,
 } from "renderer/routes/_authenticated/_dashboard/tasks/components/TasksView/components/shared/StatusIcon";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
+import type { TaskChipData } from "../TaskChip";
 
 const MAX_RESULTS = 20;
 
 interface IssueLinkCommandProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onSelect: (slug: string) => void;
+	onSelect: (task: TaskChipData) => void;
 }
 
 export function IssueLinkCommand({
@@ -37,6 +38,7 @@ export function IssueLinkCommand({
 				id: t.id,
 				slug: t.slug,
 				title: t.title,
+				externalUrl: t.externalUrl,
 				statusId: t.statusId,
 				priority: t.priority,
 				updatedAt: t.updatedAt,
@@ -98,8 +100,8 @@ export function IssueLinkCommand({
 			.map((r) => r.item);
 	}, [allTasks, searchQuery, taskFuse]);
 
-	const handleSelect = (slug: string) => {
-		onSelect(slug);
+	const handleSelect = (task: TaskChipData) => {
+		onSelect(task);
 		onOpenChange(false);
 	};
 
@@ -135,7 +137,14 @@ export function IssueLinkCommand({
 								<CommandItem
 									key={task.id}
 									value={task.slug}
-									onSelect={() => handleSelect(task.slug)}
+									onSelect={() =>
+										handleSelect({
+											taskId: task.id,
+											slug: task.slug,
+											title: task.title,
+											externalUrl: task.externalUrl,
+										})
+									}
 									className="group"
 								>
 									{status ? (

@@ -16,11 +16,6 @@ export function parseFileMentions(text: string, cwd: string): FileMention[] {
 	let match: RegExpExecArray | null = mentionRegex.exec(text);
 	while (match !== null) {
 		const relPath = match[1] as string;
-		// Skip @task: mentions — handled separately
-		if (relPath.startsWith("task:")) {
-			match = mentionRegex.exec(text);
-			continue;
-		}
 		if (!seen.has(relPath)) {
 			seen.add(relPath);
 

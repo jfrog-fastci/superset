@@ -13,6 +13,7 @@ interface PendingUserMessage {
 	text: string;
 	files: FileUIPart[];
 	createdAt: Date;
+	metadata?: ChatMessageMetadata;
 }
 
 interface QueuedPendingMessage {
@@ -26,6 +27,7 @@ interface ChatMessageMetadata {
 	model?: string;
 	permissionMode?: string;
 	thinkingEnabled?: boolean;
+	linkedTaskIds?: string[];
 }
 
 interface UseChatSendControllerOptions {
@@ -43,7 +45,10 @@ interface UseChatSendControllerOptions {
 interface UseChatSendControllerReturn {
 	pendingMessages: PendingUserMessage[];
 	runtimeError: string | null;
-	handleSend: (message: PromptInputMessage) => void;
+	handleSend: (
+		message: PromptInputMessage,
+		metadataOverride?: ChatMessageMetadata,
+	) => void;
 	startFreshSession: () => Promise<{
 		created: boolean;
 		errorMessage?: string;
@@ -475,10 +480,13 @@ export function useChatSendController(
 	]);
 
 	const handleSend = useCallback(
-		(message: PromptInputMessage) => {
+		(message: PromptInputMessage, metadataOverride?: ChatMessageMetadata) => {
 			const text = message.text.trim();
 			const files = message.files ?? [];
-			const metadataSnapshot = { ...messageMetadata };
+			const metadataSnapshot = {
+				...messageMetadata,
+				...(metadataOverride ?? {}),
+			};
 			if (!text && files.length === 0) {
 				setIsPreparingSubmit(false);
 				return;
@@ -491,7 +499,13 @@ export function useChatSendController(
 			sendAbortControllersRef.current.set(messageId, abortController);
 			setPendingMessages((prev) => [
 				...prev,
-				{ id: messageId, text, files, createdAt: new Date() },
+				{
+					id: messageId,
+					text,
+					files,
+					createdAt: new Date(),
+					metadata: metadataSnapshot,
+				},
 			]);
 			setRuntimeError(null);
 

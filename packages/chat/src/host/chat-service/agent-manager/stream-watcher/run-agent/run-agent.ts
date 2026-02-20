@@ -12,10 +12,7 @@ import {
 	parseFileMentions,
 } from "./context/file-mentions";
 import { gatherProjectContext } from "./context/project-context";
-import {
-	buildTaskMentionContext,
-	parseTaskMentions,
-} from "./context/task-mentions";
+import { buildLinkedTaskContext } from "./context/task-mentions";
 
 // ---------------------------------------------------------------------------
 // runAgent — core agent execution
@@ -30,6 +27,7 @@ export interface RunAgentOptions {
 	cwd: string;
 	permissionMode?: string;
 	thinkingEnabled?: boolean;
+	linkedTaskIds?: string[];
 	apiUrl: string;
 	getHeaders: GetHeaders;
 }
@@ -44,6 +42,7 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 		cwd,
 		permissionMode,
 		thinkingEnabled,
+		linkedTaskIds,
 		apiUrl,
 		getHeaders,
 	} = options;
@@ -85,10 +84,9 @@ export async function runAgent(options: RunAgentOptions): Promise<void> {
 		const projectContext = await gatherProjectContext(cwd);
 		const fileMentions = parseFileMentions(text, cwd);
 		const fileMentionContext = buildFileMentionContext(fileMentions);
-		const taskSlugs = parseTaskMentions(text);
-		const taskMentionContext = await buildTaskMentionContext(taskSlugs, {
-			apiUrl,
-			getHeaders,
+		const taskMentionContext = await buildLinkedTaskContext({
+			sessionId,
+			taskIds: linkedTaskIds ?? [],
 		});
 		const contextInstructions =
 			projectContext + fileMentionContext + taskMentionContext || undefined;

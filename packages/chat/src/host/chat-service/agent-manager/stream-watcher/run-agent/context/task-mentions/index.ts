@@ -1,1 +1,1 @@
-export { buildTaskMentionContext, parseTaskMentions } from "./task-mentions";
+export { buildLinkedTaskContext } from "./task-mentions";
