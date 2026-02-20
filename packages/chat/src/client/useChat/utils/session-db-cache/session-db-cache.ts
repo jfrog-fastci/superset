@@ -83,6 +83,6 @@ export function getSessionDB(config: SessionDBConfig): {
 		db,
 		messagesCollection,
 		preloadPromise: entry.preloadPromise,
-		preloaded: false,
+		preloaded: entry.preloaded,
 	};
 }

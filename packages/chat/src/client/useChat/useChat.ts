@@ -79,6 +79,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 			setReady(false);
 			return;
 		}
+		if (session.preloaded) {
+			setReady(true);
+			return;
+		}
+		setReady(false);
 		let cancelled = false;
 		session.preloadPromise
 			.then(() => {
@@ -87,7 +92,6 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 			.catch((err) => console.error("[useChat] preload failed:", err));
 		return () => {
 			cancelled = true;
-			setReady(false);
 		};
 	}, [sessionId, session]);
 
