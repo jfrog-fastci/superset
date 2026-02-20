@@ -1,1 +1,1 @@
-export { acquireSessionDB, releaseSessionDB } from "./session-db-cache";
+export { getSessionDB } from "./session-db-cache";

@@ -19,7 +19,7 @@ import {
 	useChatMetadata,
 } from "./hooks/useChatMetadata";
 import { useCollectionData } from "./hooks/useCollectionData";
-import { acquireSessionDB, releaseSessionDB } from "./utils/session-db-cache";
+import { getSessionDB } from "./utils/session-db-cache";
 
 export interface UseChatOptions {
 	sessionId: string | null;
@@ -58,14 +58,12 @@ const STALE_THRESHOLD_MS = 30_000;
 export function useChat(options: UseChatOptions): UseChatReturn {
 	const { sessionId, proxyUrl, getHeaders } = options;
 
-	// --- SessionDB lifecycle (cached, ref-counted) ---
-	// When sessionId is null we skip acquiring a SessionDB entirely.
-	// messagesCollection is cached alongside the SessionDB so on remount
-	// the already-computed derived collection is reused (avoids empty state
-	// from creating a new live query against a pre-populated source).
+	// --- SessionDB lifecycle (cached, auto-cleanup) ---
+	// Session DBs are cached and automatically cleaned up after 1 hour of
+	// inactivity. No manual release needed — each access resets the timer.
 	const session = useMemo(() => {
 		if (!sessionId) return null;
-		return acquireSessionDB({
+		return getSessionDB({
 			sessionId,
 			baseUrl: `${proxyUrl}/api/chat`,
 			headers: getHeaders?.(),
@@ -90,7 +88,6 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 		return () => {
 			cancelled = true;
 			setReady(false);
-			releaseSessionDB(sessionId);
 		};
 	}, [sessionId, session]);
 

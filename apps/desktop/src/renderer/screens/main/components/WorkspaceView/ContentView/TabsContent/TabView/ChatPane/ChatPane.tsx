@@ -156,6 +156,7 @@ export function ChatPane({
 						<div className="flex min-w-0 items-center gap-2">
 							<SessionSelector
 								currentSessionId={sessionId}
+								workspaceId={workspaceId}
 								onSelectSession={handleSelectSession}
 								onNewChat={handleNewChat}
 								onDeleteSession={handleDeleteSession}

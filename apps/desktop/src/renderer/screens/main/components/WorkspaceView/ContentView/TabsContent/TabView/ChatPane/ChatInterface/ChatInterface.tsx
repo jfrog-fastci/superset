@@ -1,6 +1,7 @@
 import { chatServiceTrpc, useChat } from "@superset/chat/client";
 import type { PromptInputMessage } from "@superset/ui/ai-elements/prompt-input";
 import { PromptInputProvider } from "@superset/ui/ai-elements/prompt-input";
+import { useQuery } from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,15 +20,12 @@ function useAvailableModels(): {
 	models: ModelOption[];
 	defaultModel: ModelOption | null;
 } {
-	const [models, setModels] = useState<ModelOption[]>([]);
-	useEffect(() => {
-		apiTrpcClient.chat.getModels
-			.query()
-			.then((data) => {
-				if (data.models.length) setModels(data.models);
-			})
-			.catch(() => {});
-	}, []);
+	const { data } = useQuery({
+		queryKey: ["chat", "models"],
+		queryFn: () => apiTrpcClient.chat.getModels.query(),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+	const models = data?.models ?? [];
 	return { models, defaultModel: models[0] ?? null };
 }
 
@@ -92,8 +90,10 @@ export function ChatInterface({
 	workspaceId,
 	cwd,
 	paneId,
+	tabId,
 }: ChatInterfaceProps) {
 	const switchChatSession = useTabsStore((s) => s.switchChatSession);
+	const setTabAutoTitle = useTabsStore((s) => s.setTabAutoTitle);
 	const { models: availableModels, defaultModel } = useAvailableModels();
 
 	// --- Shared UI state (declared once) ---
@@ -157,6 +157,43 @@ export function ChatInterface({
 	useEffect(() => {
 		sentPendingRef.current = false;
 	}, [sessionId]);
+
+	// --- Auto-generate chat session title (once) ---
+	const titleGeneratedRef = useRef(false);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: sessionId resets tracking
+	useEffect(() => {
+		titleGeneratedRef.current = false;
+	}, [sessionId]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: fire-and-forget title generation after first assistant response
+	useEffect(() => {
+		if (chat.isLoading) return;
+		if (!sessionId) return;
+		if (titleGeneratedRef.current) return;
+
+		const hasAssistantMessage = chat.messages.some(
+			(m) => m.role === "assistant",
+		);
+		if (!hasAssistantMessage) return;
+
+		titleGeneratedRef.current = true;
+
+		const digest = chat.messages.slice(-20).map((m) => {
+			const text = m.parts
+				?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+				.map((p) => p.text.slice(0, 500))
+				.join(" ");
+			return { role: m.role, text: text ?? "" };
+		});
+
+		apiTrpcClient.chat.generateTitle
+			.mutate({ sessionId, messages: digest })
+			.then(({ title }) => {
+				setTabAutoTitle(tabId, title);
+			})
+			.catch(console.error);
+	}, [chat.isLoading]);
 
 	// --- Display messages: show synthetic pending while useChat preloads ---
 	const displayMessages =

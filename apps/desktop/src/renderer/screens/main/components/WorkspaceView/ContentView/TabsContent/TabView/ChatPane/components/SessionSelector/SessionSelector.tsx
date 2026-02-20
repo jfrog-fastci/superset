@@ -6,6 +6,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
+import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useState } from "react";
 import {
@@ -18,6 +19,7 @@ import { useCollections } from "renderer/routes/_authenticated/providers/Collect
 
 interface SessionSelectorProps {
 	currentSessionId: string | null;
+	workspaceId: string;
 	onSelectSession: (sessionId: string) => void;
 	onNewChat: () => void;
 	onDeleteSession: (sessionId: string) => void;
@@ -25,6 +27,7 @@ interface SessionSelectorProps {
 
 export function SessionSelector({
 	currentSessionId,
+	workspaceId,
 	onSelectSession,
 	onNewChat,
 	onDeleteSession,
@@ -36,9 +39,10 @@ export function SessionSelector({
 		(q) =>
 			q
 				.from({ cs: collections.chatSessions })
+				.where(({ cs }) => eq(cs.workspaceId, workspaceId))
 				.orderBy(({ cs }) => cs.lastActiveAt, "desc")
 				.select(({ cs }) => cs),
-		[collections],
+		[collections, workspaceId],
 	);
 
 	const current = sessions?.find((s) => s.id === currentSessionId);

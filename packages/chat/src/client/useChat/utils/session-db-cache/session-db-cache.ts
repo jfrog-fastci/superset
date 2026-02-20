@@ -10,16 +10,37 @@ import type { MessageRow } from "../../../../session-db/types";
 interface CacheEntry {
 	db: SessionDB;
 	messagesCollection: Collection<MessageRow>;
-	refCount: number;
 	preloadPromise: Promise<void>;
 	preloaded: boolean;
 	cleanupTimer: ReturnType<typeof setTimeout> | null;
+	keepAlive: { unsubscribe: () => void };
 }
 
 const cache = new Map<string, CacheEntry>();
 const CLEANUP_DELAY_MS = 60 * 60 * 1000; // 1 hour
 
-export function acquireSessionDB(config: SessionDBConfig): {
+/**
+ * Reset the inactivity timer for a cache entry.
+ * Each access pushes the cleanup window forward.
+ */
+function touchEntry(key: string, entry: CacheEntry): void {
+	if (entry.cleanupTimer) {
+		clearTimeout(entry.cleanupTimer);
+	}
+	entry.cleanupTimer = setTimeout(() => {
+		entry.keepAlive.unsubscribe();
+		entry.db.close();
+		cache.delete(key);
+	}, CLEANUP_DELAY_MS);
+}
+
+/**
+ * Get (or create) a cached SessionDB for the given session.
+ *
+ * No manual release is needed — the entry is automatically cleaned up
+ * after 1 hour of inactivity. Every call resets the inactivity timer.
+ */
+export function getSessionDB(config: SessionDBConfig): {
 	db: SessionDB;
 	messagesCollection: Collection<MessageRow>;
 	preloadPromise: Promise<void>;
@@ -28,11 +49,7 @@ export function acquireSessionDB(config: SessionDBConfig): {
 	const key = config.sessionId;
 	const existing = cache.get(key);
 	if (existing) {
-		existing.refCount++;
-		if (existing.cleanupTimer) {
-			clearTimeout(existing.cleanupTimer);
-			existing.cleanupTimer = null;
-		}
+		touchEntry(key, existing);
 		return {
 			db: existing.db,
 			messagesCollection: existing.messagesCollection,
@@ -45,17 +62,22 @@ export function acquireSessionDB(config: SessionDBConfig): {
 	const messagesCollection = createMessagesCollection({
 		chunksCollection: db.collections.chunks,
 	});
+	// Keep-alive subscription prevents TanStack DB from GC-ing collection
+	// data (gcTime: 0) while the entry is cached.
+	const keepAlive = db.collections.chunks.subscribeChanges(() => {});
+
 	const entry: CacheEntry = {
 		db,
 		messagesCollection,
-		refCount: 1,
 		preloadPromise: undefined as unknown as Promise<void>,
 		preloaded: false,
 		cleanupTimer: null,
+		keepAlive,
 	};
 	entry.preloadPromise = db.preload().then(() => {
 		entry.preloaded = true;
 	});
+	touchEntry(key, entry);
 	cache.set(key, entry);
 	return {
 		db,
@@ -63,16 +85,4 @@ export function acquireSessionDB(config: SessionDBConfig): {
 		preloadPromise: entry.preloadPromise,
 		preloaded: false,
 	};
-}
-
-export function releaseSessionDB(sessionId: string): void {
-	const entry = cache.get(sessionId);
-	if (!entry) return;
-	entry.refCount--;
-	if (entry.refCount <= 0) {
-		entry.cleanupTimer = setTimeout(() => {
-			entry.db.close();
-			cache.delete(sessionId);
-		}, CLEANUP_DELAY_MS);
-	}
 }
