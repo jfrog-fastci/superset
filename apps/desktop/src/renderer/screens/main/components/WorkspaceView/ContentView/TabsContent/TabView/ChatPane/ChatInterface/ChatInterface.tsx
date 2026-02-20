@@ -1,5 +1,4 @@
-import type { SlashCommand } from "@superset/chat";
-import { acquireSessionDB, useChat } from "@superset/chat/client";
+import { chatServiceTrpc, useChat } from "@superset/chat/client";
 import type { PromptInputMessage } from "@superset/ui/ai-elements/prompt-input";
 import { PromptInputProvider } from "@superset/ui/ai-elements/prompt-input";
 import type { FileUIPart } from "ai";
@@ -7,11 +6,11 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "renderer/env.renderer";
 import { getAuthToken } from "renderer/lib/auth-client";
-import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { ChatInputFooter } from "./components/ChatInputFooter";
 import { MessageList } from "./components/MessageList";
 import { DEFAULT_MODEL } from "./constants";
+import type { SlashCommand } from "./hooks/useSlashCommands";
 import type { ChatInterfaceProps, ModelOption, PermissionMode } from "./types";
 
 const apiUrl = env.NEXT_PUBLIC_API_URL;
@@ -159,13 +158,6 @@ function EmptyChatInterface({
 						);
 						uploadedFiles = results;
 					}
-
-					// Pre-warm cache AFTER session exists on server
-					acquireSessionDB({
-						sessionId: newSessionId,
-						baseUrl: `${apiUrl}/api/chat`,
-						headers: getAuthHeaders(),
-					});
 
 					onMessageSent(text, uploadedFiles);
 					switchChatSession(paneId, newSessionId);
@@ -363,10 +355,9 @@ function ActiveChatInterface({
 	]);
 
 	const { data: slashCommands = [] } =
-		electronTrpc.chatService.workspace.getSlashCommands.useQuery({ cwd });
+		chatServiceTrpc.workspace.getSlashCommands.useQuery({ cwd });
 
-	const activateMutation =
-		electronTrpc.chatService.session.activate.useMutation();
+	const activateMutation = chatServiceTrpc.session.activate.useMutation();
 
 	const handleSend = useCallback(
 		async (message: PromptInputMessage) => {

@@ -9,7 +9,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 
 interface ClaudeCredentials {
 	apiKey: string;
@@ -124,47 +124,3 @@ export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 	return null;
 }
 
-export function getExistingClaudeCredentials(): ClaudeCredentials | null {
-	const configCredentials = getCredentialsFromConfig();
-	if (configCredentials) return configCredentials;
-
-	const keychainCredentials = getCredentialsFromKeychain();
-	if (keychainCredentials) return keychainCredentials;
-
-	console.warn("[claude/auth] No Claude credentials found");
-	return null;
-}
-
-const STRIPPED_ENV_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
-
-export function buildClaudeEnv(): Record<string, string> {
-	const env: Record<string, string> = {
-		...process.env,
-	} as Record<string, string>;
-
-	for (const key of STRIPPED_ENV_KEYS) {
-		delete env[key];
-	}
-
-	if (platform() !== "win32") {
-		const pathAdditions = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"];
-		const currentPath = env.PATH || "";
-		const pathParts = currentPath.split(delimiter);
-
-		for (const addition of pathAdditions) {
-			if (!pathParts.includes(addition)) {
-				pathParts.push(addition);
-			}
-		}
-
-		env.PATH = pathParts.join(delimiter);
-	}
-
-	env.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";
-
-	return env;
-}
-
-export function hasClaudeCredentials(): boolean {
-	return getExistingClaudeCredentials() !== null;
-}

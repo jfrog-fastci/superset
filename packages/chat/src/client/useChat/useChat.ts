@@ -15,14 +15,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChunkRow } from "../../schema";
 import { messageRowToUIMessage } from "../../session-db/collections/messages/materialize";
 import {
-	acquireSessionDB,
-	releaseSessionDB,
-} from "../../session-db/session-db-cache";
-import {
 	type UseChatMetadataReturn,
 	useChatMetadata,
 } from "./hooks/useChatMetadata";
 import { useCollectionData } from "./hooks/useCollectionData";
+import { acquireSessionDB, releaseSessionDB } from "./utils/session-db-cache";
 
 export interface UseChatOptions {
 	sessionId: string;

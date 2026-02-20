@@ -1,7 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { SlashCommand } from "../../types";
+
+interface SlashCommand {
+	name: string;
+	description: string;
+	argumentHint: string;
+}
 
 /**
  * Scan `.claude/commands/*.md` for custom slash commands.

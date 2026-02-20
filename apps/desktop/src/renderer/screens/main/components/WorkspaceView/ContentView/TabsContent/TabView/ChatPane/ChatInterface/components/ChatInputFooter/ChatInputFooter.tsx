@@ -1,4 +1,3 @@
-import type { SlashCommand } from "@superset/chat";
 import {
 	PromptInput,
 	PromptInputAttachment,
@@ -16,6 +15,7 @@ import { UploadIcon } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniPaperClip } from "react-icons/hi2";
+import type { SlashCommand } from "../../hooks/useSlashCommands";
 import type { ModelOption, PermissionMode } from "../../types";
 import {
 	MentionAnchor,

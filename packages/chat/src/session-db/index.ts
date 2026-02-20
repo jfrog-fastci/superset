@@ -5,4 +5,3 @@ export {
 	type SessionDB,
 	type SessionDBConfig,
 } from "./session-db";
-export { acquireSessionDB, releaseSessionDB } from "./session-db-cache";

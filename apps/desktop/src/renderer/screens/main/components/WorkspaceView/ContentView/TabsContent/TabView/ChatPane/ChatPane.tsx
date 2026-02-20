@@ -1,14 +1,20 @@
+import { ChatServiceProvider } from "@superset/chat/client";
 import { useCallback } from "react";
 import type { MosaicBranch } from "react-mosaic-component";
 import { env } from "renderer/env.renderer";
 import { authClient, getAuthToken } from "renderer/lib/auth-client";
 import { electronTrpc } from "renderer/lib/electron-trpc";
+import { electronQueryClient } from "renderer/providers/ElectronTRPCProvider";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { BasePaneWindow, PaneToolbarActions } from "../components";
 import { ChatInterface } from "./ChatInterface";
 import { SessionSelector } from "./components/SessionSelector";
+import { createChatServiceIpcClient } from "./utils/chat-service-client";
 
 const apiUrl = env.NEXT_PUBLIC_API_URL;
+
+// Module-level IPC client — shared across all local workspaces
+const ipcClient = createChatServiceIpcClient();
 
 interface ChatPaneProps {
 	paneId: string;
@@ -75,42 +81,48 @@ export function ChatPane({
 		[sessionId, paneId, switchChatSession],
 	);
 
+	// For now all workspaces are local (IPC). When sandbox support lands,
+	// cloud workspaces will use: createChatServiceHttpClient(sandboxUrl)
+	const chatClient = ipcClient;
+
 	return (
-		<BasePaneWindow
-			paneId={paneId}
-			path={path}
-			tabId={tabId}
-			splitPaneAuto={splitPaneAuto}
-			removePane={removePane}
-			setFocusedPane={setFocusedPane}
-			renderToolbar={(handlers) => (
-				<div className="flex h-full w-full items-center justify-between px-3">
-					<div className="flex min-w-0 items-center gap-2">
-						<SessionSelector
-							currentSessionId={sessionId}
-							onSelectSession={handleSelectSession}
-							onNewChat={handleNewChat}
-							onDeleteSession={handleDeleteSession}
+		<ChatServiceProvider client={chatClient} queryClient={electronQueryClient}>
+			<BasePaneWindow
+				paneId={paneId}
+				path={path}
+				tabId={tabId}
+				splitPaneAuto={splitPaneAuto}
+				removePane={removePane}
+				setFocusedPane={setFocusedPane}
+				renderToolbar={(handlers) => (
+					<div className="flex h-full w-full items-center justify-between px-3">
+						<div className="flex min-w-0 items-center gap-2">
+							<SessionSelector
+								currentSessionId={sessionId}
+								onSelectSession={handleSelectSession}
+								onNewChat={handleNewChat}
+								onDeleteSession={handleDeleteSession}
+							/>
+						</div>
+						<PaneToolbarActions
+							splitOrientation={handlers.splitOrientation}
+							onSplitPane={handlers.onSplitPane}
+							onClosePane={handlers.onClosePane}
+							closeHotkeyId="CLOSE_TERMINAL"
 						/>
 					</div>
-					<PaneToolbarActions
-						splitOrientation={handlers.splitOrientation}
-						onSplitPane={handlers.onSplitPane}
-						onClosePane={handlers.onClosePane}
-						closeHotkeyId="CLOSE_TERMINAL"
-					/>
-				</div>
-			)}
-		>
-			<ChatInterface
-				sessionId={sessionId}
-				organizationId={organizationId}
-				deviceId={deviceId}
-				workspaceId={workspaceId}
-				cwd={workspace?.worktreePath ?? ""}
-				paneId={paneId}
-				tabId={tabId}
-			/>
-		</BasePaneWindow>
+				)}
+			>
+				<ChatInterface
+					sessionId={sessionId}
+					organizationId={organizationId}
+					deviceId={deviceId}
+					workspaceId={workspaceId}
+					cwd={workspace?.worktreePath ?? ""}
+					paneId={paneId}
+					tabId={tabId}
+				/>
+			</BasePaneWindow>
+		</ChatServiceProvider>
 	);
 }

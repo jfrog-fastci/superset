@@ -1,4 +1,4 @@
-import { sessionStateSchema } from "@superset/chat";
+import { sessionStateSchema } from "@superset/chat/schema";
 import { db } from "@superset/db/client";
 import { chatSessions } from "@superset/db/schema";
 import { eq } from "drizzle-orm";

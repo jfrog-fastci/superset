@@ -1,10 +1,11 @@
 import { initTRPC } from "@trpc/server";
+import superjson from "superjson";
 import { z } from "zod";
 import type { ChatService } from "../chat-service";
 import { getSlashCommands } from "../slash-commands";
 import { searchFiles } from "./file-search";
 
-const t = initTRPC.create();
+const t = initTRPC.create({ transformer: superjson });
 
 export const searchFilesInput = z.object({
 	rootPath: z.string(),

@@ -1,6 +1,1 @@
-export {
-	type ChatServiceEndpoint,
-	ChatServiceProvider,
-	chatServiceTrpc,
-	useChatService,
-} from "./provider";
+export { ChatServiceProvider, chatServiceTrpc } from "./provider";

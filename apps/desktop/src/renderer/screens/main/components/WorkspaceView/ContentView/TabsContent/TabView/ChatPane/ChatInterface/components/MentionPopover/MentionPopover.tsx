@@ -1,3 +1,4 @@
+import { chatServiceTrpc } from "@superset/chat/client";
 import {
 	PromptInputButton,
 	usePromptInputController,
@@ -30,7 +31,6 @@ import {
 import { HiMiniAtSymbol } from "react-icons/hi2";
 import { LuSquareCheck } from "react-icons/lu";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
-import { electronTrpc } from "renderer/lib/electron-trpc";
 import { getFileIcon } from "renderer/screens/main/components/WorkspaceView/RightSidebar/FilesView/utils";
 
 const MENTION_SEARCH_LIMIT = 20;
@@ -104,20 +104,19 @@ export function MentionProvider({
 	const fileQuery = isTaskSearch ? "" : searchQuery;
 
 	// File search via chatService (IPC to main process)
-	const { data: fileResults } =
-		electronTrpc.chatService.workspace.searchFiles.useQuery(
-			{
-				rootPath: cwd,
-				query: fileQuery,
-				includeHidden: false,
-				limit: MENTION_SEARCH_LIMIT,
-			},
-			{
-				enabled: open && fileQuery.length > 0 && !!cwd,
-				staleTime: 1000,
-				placeholderData: (previous) => previous ?? [],
-			},
-		);
+	const { data: fileResults } = chatServiceTrpc.workspace.searchFiles.useQuery(
+		{
+			rootPath: cwd,
+			query: fileQuery,
+			includeHidden: false,
+			limit: MENTION_SEARCH_LIMIT,
+		},
+		{
+			enabled: open && fileQuery.length > 0 && !!cwd,
+			staleTime: 1000,
+			placeholderData: (previous) => previous ?? [],
+		},
+	);
 
 	// Task search — client-side with fuse.js over org tasks
 	const [orgTasks, setOrgTasks] = useState<TaskItem[]>([]);

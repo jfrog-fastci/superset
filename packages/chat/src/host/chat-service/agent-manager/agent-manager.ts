@@ -13,7 +13,7 @@ import { setAnthropicAuthToken } from "@superset/agent";
 import {
 	getCredentialsFromConfig,
 	getCredentialsFromKeychain,
-} from "../../anthropic-auth";
+} from "../../auth/anthropic";
 import {
 	sessionAbortControllers,
 	sessionContext,
