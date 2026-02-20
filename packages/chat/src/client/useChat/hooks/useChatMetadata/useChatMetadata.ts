@@ -7,13 +7,6 @@ import { useCollectionData } from "../useCollectionData";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SessionConfig {
-	model?: string;
-	permissionMode?: string;
-	thinkingEnabled?: boolean;
-	cwd?: string;
-}
-
 export interface ChatUserPresence {
 	userId: string;
 	deviceId: string;
@@ -43,10 +36,6 @@ export interface UseChatMetadataOptions {
 export interface UseChatMetadataReturn {
 	/** Current session title (derived from stream config events). */
 	title: string | null;
-	/** Current session config (derived from stream config events). */
-	config: SessionConfig;
-	/** Update config — posts a config event to the durable stream. */
-	updateConfig: (config: SessionConfig) => void;
 	/** Online users in this session. */
 	users: ChatUserPresence[];
 	/** Registered agents in this session. */
@@ -78,51 +67,31 @@ export function useChatMetadata(
 	const { sessionDB, proxyUrl, sessionId, getHeaders } = options;
 
 	const authHeaders = getHeaders ?? (() => ({}));
-	const configUrl = `${proxyUrl}/api/chat/${sessionId}/stream/config`;
 
 	// -----------------------------------------------------------------------
-	// Config + Title — derived from config-type chunks
+	// Title — derived from config-type chunks (title chunks remain)
 	// -----------------------------------------------------------------------
 
 	const chunks = useCollectionData(
 		sessionDB?.collections.chunks ?? null,
 	) as ChunkRow[];
 
-	const { title, config } = useMemo(() => {
+	const title = useMemo(() => {
 		let title: string | null = null;
-		const config: SessionConfig = {};
 
 		for (const row of chunks) {
 			try {
 				const parsed = JSON.parse(row.chunk);
-				if (parsed.type === "config") {
-					if (typeof parsed.model === "string") config.model = parsed.model;
-					if (typeof parsed.permissionMode === "string")
-						config.permissionMode = parsed.permissionMode;
-					if (typeof parsed.thinkingEnabled === "boolean")
-						config.thinkingEnabled = parsed.thinkingEnabled;
-					if (typeof parsed.cwd === "string") config.cwd = parsed.cwd;
-					if (typeof parsed.title === "string") title = parsed.title;
+				if (parsed.type === "config" && typeof parsed.title === "string") {
+					title = parsed.title;
 				}
 			} catch {
 				// skip unparseable
 			}
 		}
 
-		return { title, config };
+		return title;
 	}, [chunks]);
-
-	const updateConfig = useCallback(
-		(newConfig: SessionConfig) => {
-			if (!sessionId) return;
-			fetch(configUrl, {
-				method: "POST",
-				headers: { "Content-Type": "application/json", ...authHeaders() },
-				body: JSON.stringify(newConfig),
-			}).catch(console.error);
-		},
-		[configUrl, authHeaders, sessionId],
-	);
 
 	// -----------------------------------------------------------------------
 	// Presence — users from presence collection
@@ -225,8 +194,6 @@ export function useChatMetadata(
 
 	return {
 		title,
-		config,
-		updateConfig,
 		users,
 		agents,
 		updateStatus,

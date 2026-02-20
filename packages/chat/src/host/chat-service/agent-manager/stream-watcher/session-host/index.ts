@@ -1,6 +1,6 @@
 export {
+	type MessageMetadata,
 	SessionHost,
-	type SessionHostConfig,
 	type SessionHostEventMap,
 	type SessionHostOptions,
 } from "./session-host";

@@ -3,7 +3,7 @@ import type { PromptInputMessage } from "@superset/ui/ai-elements/prompt-input";
 import { PromptInputProvider } from "@superset/ui/ai-elements/prompt-input";
 import type { FileUIPart } from "ai";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { env } from "renderer/env.renderer";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { getAuthToken } from "renderer/lib/auth-client";
@@ -121,6 +121,16 @@ export function ChatInterface({
 
 	const activateMutation = chatServiceTrpc.session.activate.useMutation();
 
+	// --- Per-message metadata (sent with every message) ---
+	const messageMetadata = useMemo(
+		() => ({
+			model: activeModel?.id,
+			permissionMode,
+			thinkingEnabled,
+		}),
+		[activeModel?.id, permissionMode, thinkingEnabled],
+	);
+
 	// --- Send pending message once the session is ready ---
 	const sentPendingRef = useRef(false);
 	useEffect(() => {
@@ -130,71 +140,23 @@ export function ChatInterface({
 		chat.sendMessage(
 			pendingMessage ?? "",
 			pendingFiles.length > 0 ? pendingFiles : undefined,
+			messageMetadata,
 		);
 		setPendingMessage(null);
 		setPendingFiles([]);
-	}, [chat.ready, chat.sendMessage, pendingMessage, pendingFiles]);
-
-	// --- Push initial config once session is ready ---
-	const registeredRef = useRef(false);
-	useEffect(() => {
-		if (!chat.ready || registeredRef.current) return;
-		registeredRef.current = true;
-		chat.metadata.updateConfig({
-			model: activeModel?.id,
-			permissionMode,
-			thinkingEnabled,
-			cwd,
-		});
 	}, [
 		chat.ready,
-		cwd,
-		chat.metadata.updateConfig,
-		permissionMode,
-		activeModel?.id,
-		thinkingEnabled,
+		chat.sendMessage,
+		pendingMessage,
+		pendingFiles,
+		messageMetadata,
 	]);
 
-	// Reset refs when sessionId changes so pending/config are re-sent for new sessions
+	// Reset ref when sessionId changes so pending message is re-sent for new sessions
 	// biome-ignore lint/correctness/useExhaustiveDependencies: sessionId triggers the reset intentionally
 	useEffect(() => {
 		sentPendingRef.current = false;
-		registeredRef.current = false;
 	}, [sessionId]);
-
-	// --- Push config changes after initial registration ---
-	const prevConfigRef = useRef({
-		modelId: activeModel?.id,
-		permissionMode,
-		thinkingEnabled,
-	});
-	useEffect(() => {
-		const prev = prevConfigRef.current;
-		if (
-			prev.modelId === activeModel?.id &&
-			prev.permissionMode === permissionMode &&
-			prev.thinkingEnabled === thinkingEnabled
-		) {
-			return;
-		}
-		prevConfigRef.current = {
-			modelId: activeModel?.id,
-			permissionMode,
-			thinkingEnabled,
-		};
-		chat.metadata.updateConfig({
-			model: activeModel?.id,
-			permissionMode,
-			thinkingEnabled,
-			cwd,
-		});
-	}, [
-		activeModel?.id,
-		permissionMode,
-		thinkingEnabled,
-		cwd,
-		chat.metadata.updateConfig,
-	]);
 
 	// --- Display messages: show synthetic pending while useChat preloads ---
 	const displayMessages =
@@ -233,7 +195,7 @@ export function ChatInterface({
 					uploadedFiles = results;
 				}
 
-				chat.sendMessage(text, uploadedFiles);
+				chat.sendMessage(text, uploadedFiles, messageMetadata);
 			} else {
 				// No session — create one, then switch (re-renders with sessionId)
 				if (!organizationId) return;
@@ -246,21 +208,6 @@ export function ChatInterface({
 						deviceId,
 						workspaceId,
 					);
-
-					// Config is fire-and-forget
-					fetch(`${apiUrl}/api/chat/${newSessionId}/stream/config`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...getAuthHeaders(),
-						},
-						body: JSON.stringify({
-							model: activeModel?.id,
-							permissionMode,
-							thinkingEnabled,
-							cwd,
-						}),
-					});
 
 					// Upload files immediately
 					let uploadedFiles: FileUIPart[] = [];
@@ -287,10 +234,7 @@ export function ChatInterface({
 			switchChatSession,
 			activateMutation,
 			chat.sendMessage,
-			activeModel?.id,
-			permissionMode,
-			thinkingEnabled,
-			cwd,
+			messageMetadata,
 		],
 	);
 

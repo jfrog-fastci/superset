@@ -27,11 +27,21 @@ export interface UseChatOptions {
 	getHeaders?: () => Record<string, string>;
 }
 
+export interface MessageMetadata {
+	model?: string;
+	permissionMode?: string;
+	thinkingEnabled?: boolean;
+}
+
 export interface UseChatReturn {
 	ready: boolean;
 	messages: (UIMessage & { actorId: string; createdAt: Date })[];
 	isLoading: boolean;
-	sendMessage: (text: string, files?: FileUIPart[]) => Promise<void>;
+	sendMessage: (
+		text: string,
+		files?: FileUIPart[],
+		metadata?: MessageMetadata,
+	) => Promise<void>;
 	stop: () => void;
 	submitToolResult: (
 		toolCallId: string,
@@ -141,10 +151,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 			createOptimisticAction<{
 				text: string;
 				files?: FileUIPart[];
+				metadata?: MessageMetadata;
 				messageId: string;
 				txid: string;
 			}>({
-				onMutate: ({ text, files, messageId }) => {
+				onMutate: ({ text, files, metadata, messageId }) => {
 					const { sessionDB } = depsRef.current;
 					if (!sessionDB) return;
 					const now = new Date().toISOString();
@@ -164,13 +175,14 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 								parts,
 								createdAt: now,
 							},
+							...(metadata ? { metadata } : {}),
 						}),
 						seq: 0,
 						createdAt: now,
 					};
 					sessionDB.collections.chunks.insert(chunk);
 				},
-				mutationFn: async ({ text, files, messageId, txid }) => {
+				mutationFn: async ({ text, files, metadata, messageId, txid }) => {
 					const { url, headers, sessionDB } = depsRef.current;
 					const res = await fetch(url("/messages"), {
 						method: "POST",
@@ -180,6 +192,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 							messageId,
 							txid,
 							...(files && files.length > 0 ? { files } : {}),
+							...(metadata ? { metadata } : {}),
 						}),
 					});
 					if (!res.ok) {
@@ -193,13 +206,13 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 	);
 
 	const sendMessage = useCallback(
-		async (text: string, files?: FileUIPart[]) => {
+		async (text: string, files?: FileUIPart[], metadata?: MessageMetadata) => {
 			if (!sessionId) return;
 			setError(null);
 			const messageId = crypto.randomUUID();
 			const txid = crypto.randomUUID();
 			try {
-				const tx = optimisticSend({ text, files, messageId, txid });
+				const tx = optimisticSend({ text, files, metadata, messageId, txid });
 				await tx.isPersisted.promise;
 			} catch (err) {
 				setError(err instanceof Error ? err.message : "Failed to send message");

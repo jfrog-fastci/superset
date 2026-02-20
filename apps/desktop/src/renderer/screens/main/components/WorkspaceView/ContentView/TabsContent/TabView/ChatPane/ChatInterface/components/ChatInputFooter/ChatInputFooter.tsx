@@ -22,11 +22,7 @@ import {
 import type { SlashCommand } from "../../hooks/useSlashCommands";
 import type { ModelOption, PermissionMode } from "../../types";
 import { IssueLinkCommand } from "../IssueLinkCommand";
-import {
-	MentionAnchor,
-	MentionProvider,
-	MentionTrigger,
-} from "../MentionPopover";
+import { MentionAnchor, MentionProvider } from "../MentionPopover";
 import { ModelPicker } from "../ModelPicker";
 import { PermissionModePicker } from "../PermissionModePicker";
 import { PlusMenu } from "../PlusMenu";
@@ -195,57 +191,55 @@ export function ChatInputFooter({
 									maxFileSize={10 * 1024 * 1024}
 									globalDrop
 								>
-								<ChatShortcuts
-									setIssueLinkOpen={setIssueLinkOpen}
-								/>
-								<IssueLinkInserter
-									issueLinkOpen={issueLinkOpen}
-									setIssueLinkOpen={setIssueLinkOpen}
-								/>
-								{isDragging && (
-									<div className="mx-3 mt-3 flex self-stretch flex-col items-center gap-2 bg-muted py-6">
-										<div className="flex size-8 items-center justify-center rounded-full bg-muted-foreground/20">
-											<UploadIcon className="size-4 text-muted-foreground" />
+									<ChatShortcuts setIssueLinkOpen={setIssueLinkOpen} />
+									<IssueLinkInserter
+										issueLinkOpen={issueLinkOpen}
+										setIssueLinkOpen={setIssueLinkOpen}
+									/>
+									{isDragging && (
+										<div className="mx-3 mt-3 flex self-stretch flex-col items-center gap-2 bg-muted py-6">
+											<div className="flex size-8 items-center justify-center rounded-full bg-muted-foreground/20">
+												<UploadIcon className="size-4 text-muted-foreground" />
+											</div>
+											<p className="font-medium text-foreground text-sm">
+												Drop files here
+											</p>
+											<p className="text-muted-foreground text-xs">
+												Images, PDFs, text files, or folders
+											</p>
 										</div>
-										<p className="font-medium text-foreground text-sm">
-											Drop files here
-										</p>
-										<p className="text-muted-foreground text-xs">
-											Images, PDFs, text files, or folders
-										</p>
-									</div>
-								)}
-								<PromptInputAttachments>
-									{(file) => <PromptInputAttachment data={file} />}
-								</PromptInputAttachments>
-								<PromptInputTextarea placeholder="Ask to make changes, @mention files, run /commands" />
-								<PromptInputFooter>
-									<PromptInputTools>
-										<ModelPicker
-											models={availableModels}
-											selectedModel={selectedModel}
-											onSelectModel={setSelectedModel}
-											open={modelSelectorOpen}
-											onOpenChange={setModelSelectorOpen}
-										/>
-										<ThinkingToggle
-											enabled={thinkingEnabled}
-											onToggle={setThinkingEnabled}
-										/>
-										<PermissionModePicker
-											selectedMode={permissionMode}
-											onSelectMode={setPermissionMode}
-										/>
-									</PromptInputTools>
-									<div className="flex items-center space-x-2">
-										<PlusMenu onLinkIssue={() => setIssueLinkOpen(true)} />
-										<PromptInputSubmit
-											status={isStreaming ? "streaming" : undefined}
-											onClick={isStreaming ? onStop : undefined}
-										/>
-									</div>
-								</PromptInputFooter>
-							</PromptInput>
+									)}
+									<PromptInputAttachments>
+										{(file) => <PromptInputAttachment data={file} />}
+									</PromptInputAttachments>
+									<PromptInputTextarea placeholder="Ask to make changes, @mention files, run /commands" />
+									<PromptInputFooter>
+										<PromptInputTools>
+											<ModelPicker
+												models={availableModels}
+												selectedModel={selectedModel}
+												onSelectModel={setSelectedModel}
+												open={modelSelectorOpen}
+												onOpenChange={setModelSelectorOpen}
+											/>
+											<ThinkingToggle
+												enabled={thinkingEnabled}
+												onToggle={setThinkingEnabled}
+											/>
+											<PermissionModePicker
+												selectedMode={permissionMode}
+												onSelectMode={setPermissionMode}
+											/>
+										</PromptInputTools>
+										<div className="flex items-center space-x-2">
+											<PlusMenu onLinkIssue={() => setIssueLinkOpen(true)} />
+											<PromptInputSubmit
+												status={isStreaming ? "streaming" : undefined}
+												onClick={isStreaming ? onStop : undefined}
+											/>
+										</div>
+									</PromptInputFooter>
+								</PromptInput>
 							</div>
 						</MentionAnchor>
 					</MentionProvider>

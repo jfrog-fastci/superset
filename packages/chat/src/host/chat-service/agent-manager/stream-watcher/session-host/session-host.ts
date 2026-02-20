@@ -16,15 +16,16 @@ export interface SessionHostOptions {
 	signal?: AbortSignal;
 }
 
-export interface SessionHostConfig {
+export interface MessageMetadata {
 	model?: string;
-	cwd?: string;
 	permissionMode?: string;
 	thinkingEnabled?: boolean;
 }
 
 export interface SessionHostEventMap {
-	message: [data: { messageId: string; message: UIMessage }];
+	message: [
+		data: { messageId: string; message: UIMessage; metadata?: MessageMetadata },
+	];
 	toolApproval: [
 		data: {
 			approvalId: string;
@@ -42,7 +43,6 @@ export interface SessionHostEventMap {
 	];
 	abort: [];
 	regenerate: [];
-	config: [config: SessionHostConfig];
 	connected: [];
 	disconnected: [data: { reason?: string }];
 	error: [error: Error];
@@ -63,8 +63,6 @@ export class SessionHost {
 	private unsubscribe: (() => void) | null = null;
 	private abortController: AbortController | null = null;
 	private readonly emitter = new EventEmitter();
-
-	config: SessionHostConfig = {};
 
 	constructor(options: SessionHostOptions) {
 		this.sessionId = options.sessionId;
@@ -141,13 +139,12 @@ export class SessionHost {
 		const chunks = this.sessionDB.collections.chunks;
 
 		// Seed seenMessageIds from existing chunks (prevents re-triggering history).
-		// Also replay the latest config event.
 		// Track user messages and the latest assistant timestamp for catch-up.
-		let latestConfig: Record<string, unknown> | null = null;
 		let lastAssistantTime = "";
 		const userMessages: Array<{
 			messageId: string;
 			message: UIMessage;
+			metadata?: MessageMetadata;
 			createdAt: string;
 		}> = [];
 
@@ -163,6 +160,7 @@ export class SessionHost {
 					userMessages.push({
 						messageId: chunkRow.messageId,
 						message: parsed.message as UIMessage,
+						metadata: parsed.metadata as MessageMetadata | undefined,
 						createdAt: chunkRow.createdAt,
 					});
 				}
@@ -172,16 +170,9 @@ export class SessionHost {
 				) {
 					lastAssistantTime = chunkRow.createdAt;
 				}
-				if (parsed.type === "config") {
-					latestConfig = parsed;
-				}
 			} catch {
 				// skip unparseable
 			}
-		}
-
-		if (latestConfig) {
-			this.applyConfig(latestConfig);
 		}
 
 		// Subscribe to chunk changes (live updates via SSE)
@@ -219,6 +210,7 @@ export class SessionHost {
 				this.emit("message", {
 					messageId: latest.messageId,
 					message: latest.message,
+					metadata: latest.metadata,
 				});
 			}
 		}
@@ -329,23 +321,6 @@ export class SessionHost {
 		}
 	}
 
-	async postConfig(config: Partial<SessionHostConfig>): Promise<void> {
-		const response = await fetch(
-			`${this.baseUrl}/${this.sessionId}/stream/config`,
-			{
-				method: "POST",
-				headers: {
-					...this.headers,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(config),
-			},
-		);
-		if (!response.ok) {
-			throw new Error(`Failed to post config: ${response.status}`);
-		}
-	}
-
 	async postTitle(title: string): Promise<void> {
 		const response = await fetch(`${this.baseUrl}/${this.sessionId}`, {
 			method: "PATCH",
@@ -363,7 +338,7 @@ export class SessionHost {
 	// -- Internal -------------------------------------------------------------
 
 	private handleChunk(parsed: Record<string, unknown>, row: ChunkRow): void {
-		// User message -> emit "message"
+		// User message -> emit "message" with per-message metadata
 		if (
 			parsed.type === "whole-message" &&
 			typeof parsed.message === "object" &&
@@ -377,6 +352,7 @@ export class SessionHost {
 			this.emit("message", {
 				messageId: row.messageId,
 				message: parsed.message as UIMessage,
+				metadata: parsed.metadata as MessageMetadata | undefined,
 			});
 		}
 
@@ -416,20 +392,5 @@ export class SessionHost {
 				this.emit("regenerate");
 			}
 		}
-
-		// Config -> merge and emit "config"
-		if (parsed.type === "config") {
-			this.applyConfig(parsed);
-			this.emit("config", { ...this.config });
-		}
-	}
-
-	private applyConfig(config: Record<string, unknown>): void {
-		if (typeof config.model === "string") this.config.model = config.model;
-		if (typeof config.cwd === "string") this.config.cwd = config.cwd;
-		if (typeof config.permissionMode === "string")
-			this.config.permissionMode = config.permissionMode;
-		if (typeof config.thinkingEnabled === "boolean")
-			this.config.thinkingEnabled = config.thinkingEnabled;
 	}
 }

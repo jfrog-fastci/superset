@@ -13,13 +13,16 @@ import { SessionHost } from "./session-host";
 export class StreamWatcher {
 	private host: SessionHost;
 	private readonly sessionId: string;
+	private readonly cwd: string;
 
 	constructor(options: {
 		sessionId: string;
 		authToken: string;
 		apiUrl: string;
+		cwd: string;
 	}) {
 		this.sessionId = options.sessionId;
+		this.cwd = options.cwd;
 
 		this.host = new SessionHost({
 			sessionId: options.sessionId,
@@ -27,7 +30,7 @@ export class StreamWatcher {
 			headers: { Authorization: `Bearer ${options.authToken}` },
 		});
 
-		this.host.on("message", ({ message }) => {
+		this.host.on("message", ({ message, metadata }) => {
 			const text = extractTextFromMessage(message);
 			const hasFiles = message.parts?.some((p) => p.type === "file");
 			if (!text.trim() && !hasFiles) return;
@@ -37,10 +40,10 @@ export class StreamWatcher {
 				text,
 				message,
 				host: this.host,
-				modelId: this.host.config.model ?? "anthropic/claude-sonnet-4-5",
-				cwd: this.host.config.cwd ?? process.env.HOME ?? "/",
-				permissionMode: this.host.config.permissionMode,
-				thinkingEnabled: this.host.config.thinkingEnabled,
+				modelId: metadata?.model ?? "anthropic/claude-sonnet-4-6",
+				cwd: this.cwd,
+				permissionMode: metadata?.permissionMode ?? "bypassPermissions",
+				thinkingEnabled: metadata?.thinkingEnabled ?? false,
 				authToken: options.authToken,
 				apiUrl: options.apiUrl,
 			});

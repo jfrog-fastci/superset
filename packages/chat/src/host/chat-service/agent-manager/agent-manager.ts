@@ -10,6 +10,9 @@
 
 import { Shape, ShapeStream } from "@electric-sql/client";
 import { setAnthropicAuthToken } from "@superset/agent";
+import { db } from "@superset/db/client";
+import { chatSessions, workspaces } from "@superset/db/schema";
+import { eq } from "drizzle-orm";
 import {
 	getCredentialsFromConfig,
 	getCredentialsFromKeychain,
@@ -142,15 +145,53 @@ export class AgentManager {
 	}
 
 	private startWatcher(sessionId: string): void {
-		const watcher = new StreamWatcher({
-			sessionId,
-			authToken: this.authToken,
-			apiUrl: this.apiUrl,
-		});
+		// Resolve cwd from workspace asynchronously, then start the watcher
+		this.resolveCwd(sessionId)
+			.then((cwd) => {
+				const watcher = new StreamWatcher({
+					sessionId,
+					authToken: this.authToken,
+					apiUrl: this.apiUrl,
+					cwd,
+				});
 
-		watcher.start();
-		this.watchers.set(sessionId, watcher);
-		this.logActiveSessions();
+				watcher.start();
+				this.watchers.set(sessionId, watcher);
+				this.logActiveSessions();
+			})
+			.catch((err) => {
+				console.error(
+					`[agent-manager] Failed to resolve cwd for ${sessionId}:`,
+					err,
+				);
+			});
+	}
+
+	private async resolveCwd(sessionId: string): Promise<string> {
+		try {
+			const session = await db.query.chatSessions.findFirst({
+				where: eq(chatSessions.id, sessionId),
+				columns: { workspaceId: true },
+			});
+
+			if (session?.workspaceId) {
+				const workspace = await db.query.workspaces.findFirst({
+					where: eq(workspaces.id, session.workspaceId),
+					columns: { config: true },
+				});
+
+				if (workspace?.config && "path" in workspace.config) {
+					return workspace.config.path;
+				}
+			}
+		} catch (err) {
+			console.warn(
+				`[agent-manager] Could not resolve workspace path for ${sessionId}:`,
+				err,
+			);
+		}
+
+		return process.env.HOME ?? "/";
 	}
 
 	private cleanupSession(sessionId: string): void {
