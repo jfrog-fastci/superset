@@ -16,7 +16,6 @@ import { LuUndo2 } from "react-icons/lu";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useBranchSyncInvalidation } from "renderer/screens/main/hooks/useBranchSyncInvalidation";
 import { useGitChangesStatus } from "renderer/screens/main/hooks/useGitChangesStatus";
-import { usePRComments } from "renderer/screens/main/hooks/usePRComments";
 import { useChangesStore } from "renderer/stores/changes";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { CategorySection } from "./components/CategorySection";
@@ -64,8 +63,6 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 		workspaceBranch: workspace?.branch,
 		workspaceId: workspaceId ?? "",
 	});
-
-	const { commentsByFile } = usePRComments({ workspaceId });
 
 	const handleRefresh = () => {
 		refetch();
@@ -373,7 +370,6 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 							projectId={projectId}
 							category="against-base"
 							isExpandedView={isExpandedView}
-							commentsByFile={commentsByFile}
 						/>
 					</CategorySection>
 

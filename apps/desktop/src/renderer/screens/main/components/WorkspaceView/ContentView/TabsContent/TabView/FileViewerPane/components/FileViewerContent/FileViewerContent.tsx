@@ -1,8 +1,9 @@
 import Editor, { type OnMount } from "@monaco-editor/react";
-import type { PRCommentThread } from "@superset/local-db";
 import type * as Monaco from "monaco-editor";
+import { useParams } from "@tanstack/react-router";
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import { LuLoader } from "react-icons/lu";
+import { usePRComments } from "renderer/screens/main/hooks";
 import { MarkdownRenderer } from "renderer/components/MarkdownRenderer";
 import {
 	registerSaveAction,
@@ -83,7 +84,6 @@ interface FileViewerContentProps {
 	onEditorChange: (value: string | undefined) => void;
 	onDiffChange?: (content: string) => void;
 	setIsDirty: (dirty: boolean) => void;
-	commentThreads?: PRCommentThread[];
 	// Context menu props
 	onSplitHorizontal: () => void;
 	onSplitVertical: () => void;
@@ -116,7 +116,6 @@ export function FileViewerContent({
 	onEditorChange,
 	onDiffChange,
 	setIsDirty,
-	commentThreads,
 	// Context menu props
 	onSplitHorizontal,
 	onSplitVertical,
@@ -126,6 +125,10 @@ export function FileViewerContent({
 	onMoveToTab,
 	onMoveToNewTab,
 }: FileViewerContentProps) {
+	const { workspaceId } = useParams({ strict: false });
+	const { commentsByFile } = usePRComments({ workspaceId });
+	const commentThreads = filePath ? commentsByFile.get(filePath) : undefined;
+
 	const isImage = isImageFile(filePath);
 	const isMonacoReady = useMonacoReady();
 	const monacoEditorOptions = useMonacoEditorOptions();

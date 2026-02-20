@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import type { CommentsByFile } from "renderer/screens/main/hooks/usePRComments";
 import { useChangesStore } from "renderer/stores/changes";
 import type { GitChangesStatus } from "shared/changes-types";
 import { useScrollContext } from "../../context";
@@ -16,14 +15,12 @@ interface InfiniteScrollViewProps {
 	status: GitChangesStatus;
 	worktreePath: string;
 	baseBranch: string;
-	commentsByFile?: CommentsByFile;
 }
 
 export function InfiniteScrollView({
 	status,
 	worktreePath,
 	baseBranch,
-	commentsByFile,
 }: InfiniteScrollViewProps) {
 	const { containerRef, viewedCount } = useScrollContext();
 	const {
@@ -179,7 +176,6 @@ export function InfiniteScrollView({
 						onToggleExpanded={() => toggleFile(focusedEntry.key)}
 						{...getFocusedFileActions(focusedEntry)}
 						isActioning={isActioning}
-						commentThreads={commentsByFile?.get(focusedEntry.file.path)}
 					/>
 				)
 			) : (
@@ -201,7 +197,6 @@ export function InfiniteScrollView({
 									collapsedFiles={collapsedFiles}
 									onToggleFile={toggleFile}
 									scrollElementRef={containerRef}
-									commentsByFile={commentsByFile}
 								/>
 							)}
 						</>

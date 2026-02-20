@@ -1,6 +1,5 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useRef } from "react";
-import type { CommentsByFile } from "renderer/screens/main/hooks/usePRComments";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { FileDiffSection } from "../FileDiffSection";
 
@@ -17,7 +16,6 @@ interface VirtualizedFileListProps {
 	onUnstage?: (file: ChangedFile) => void;
 	onDiscard?: (file: ChangedFile) => void;
 	isActioning?: boolean;
-	commentsByFile?: CommentsByFile;
 }
 
 const ESTIMATED_COLLAPSED_HEIGHT = 60;
@@ -36,7 +34,6 @@ export function VirtualizedFileList({
 	onUnstage,
 	onDiscard,
 	isActioning = false,
-	commentsByFile,
 }: VirtualizedFileListProps) {
 	const listRef = useRef<HTMLDivElement>(null);
 
@@ -85,7 +82,6 @@ export function VirtualizedFileList({
 								onUnstage={onUnstage ? () => onUnstage(file) : undefined}
 								onDiscard={onDiscard ? () => onDiscard(file) : undefined}
 								isActioning={isActioning}
-								commentThreads={commentsByFile?.get(file.path)}
 							/>
 						</div>
 					);

@@ -28,6 +28,8 @@ import {
 	LuTrash2,
 	LuUndo2,
 } from "react-icons/lu";
+import { useParams } from "@tanstack/react-router";
+import { usePRComments } from "renderer/screens/main/hooks";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { createFileKey, useScrollContext } from "../../../../ChangesContent";
 import { useFileDrag, usePathActions } from "../../hooks";
@@ -49,7 +51,6 @@ interface FileItemProps {
 	/** Expanded view uses scroll-sync highlighting; collapsed view uses selection highlighting */
 	isExpandedView?: boolean;
 	projectId?: string;
-	commentCount?: number;
 }
 
 function LevelIndicators({ level }: { level: number }) {
@@ -84,8 +85,10 @@ export function FileItem({
 	commitHash,
 	isExpandedView = false,
 	projectId,
-	commentCount,
 }: FileItemProps) {
+	const { workspaceId } = useParams({ strict: false });
+	const { commentsByFile } = usePRComments({ workspaceId });
+	const commentCount = commentsByFile.get(file.path)?.length;
 	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 	const { activeFileKey } = useScrollContext();
 	const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

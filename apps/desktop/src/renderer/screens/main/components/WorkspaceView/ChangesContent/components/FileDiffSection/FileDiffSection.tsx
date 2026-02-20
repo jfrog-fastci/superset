@@ -1,9 +1,10 @@
-import type { PRCommentThread } from "@superset/local-db";
 import { Button } from "@superset/ui/button";
 import { Collapsible, CollapsibleContent } from "@superset/ui/collapsible";
+import { useParams } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LuFileCode, LuLoader } from "react-icons/lu";
 import { electronTrpc } from "renderer/lib/electron-trpc";
+import { usePRComments } from "renderer/screens/main/hooks";
 import { useChangesStore } from "renderer/stores/changes";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import {
@@ -28,7 +29,6 @@ interface FileDiffSectionProps {
 	onUnstage?: () => void;
 	onDiscard?: () => void;
 	isActioning?: boolean;
-	commentThreads?: PRCommentThread[];
 }
 
 const VISIBILITY_MARGIN = "200px 0px";
@@ -72,8 +72,10 @@ export function FileDiffSection({
 	onUnstage,
 	onDiscard,
 	isActioning = false,
-	commentThreads,
 }: FileDiffSectionProps) {
+	const { workspaceId } = useParams({ strict: false });
+	const { commentsByFile } = usePRComments({ workspaceId });
+	const commentThreads = commentsByFile.get(file.path);
 	const sectionRef = useRef<HTMLDivElement>(null);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const {

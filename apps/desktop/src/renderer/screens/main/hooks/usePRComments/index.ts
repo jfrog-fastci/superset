@@ -1,1 +1,1 @@
-export { type CommentsByFile, usePRComments } from "./usePRComments";
+export { usePRComments } from "./usePRComments";
