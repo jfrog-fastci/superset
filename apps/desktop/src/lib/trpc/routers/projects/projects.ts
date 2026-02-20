@@ -235,51 +235,6 @@ async function ensureMainWorkspace(project: Project): Promise<void> {
 	}
 }
 
-/**
- * Initializes a git repository, creates an initial commit, and returns the default branch name.
- * Handles --initial-branch=main fallback for older Git versions and git config error detection.
- */
-async function initGitRepo(
-	repoPath: string,
-	options?: { stageAll?: boolean; commitMessage?: string },
-): Promise<string> {
-	const git = simpleGit(repoPath);
-
-	try {
-		await git.init(["--initial-branch=main"]);
-	} catch {
-		await git.init();
-	}
-
-	const message = options?.commitMessage ?? "Initial commit";
-
-	try {
-		if (options?.stageAll) {
-			await git.add(".");
-			await git.commit(message);
-		} else {
-			await git.raw(["commit", "--allow-empty", "-m", message]);
-		}
-	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : String(err);
-		if (
-			errorMessage.includes("empty ident") ||
-			errorMessage.includes("user.email") ||
-			errorMessage.includes("user.name")
-		) {
-			throw new Error(
-				"Git user not configured. Please run:\n" +
-					'  git config --global user.name "Your Name"\n' +
-					'  git config --global user.email "you@example.com"',
-			);
-		}
-		throw new Error(`Failed to create initial commit: ${errorMessage}`);
-	}
-
-	const branchSummary = await git.branch();
-	return branchSummary.current || "main";
-}
-
 // Safe filename regex: letters, numbers, dots, underscores, hyphens, spaces, and common unicode
 // Allows most valid Git repo names while avoiding path traversal characters
 const SAFE_REPO_NAME_REGEX = /^[a-zA-Z0-9._\- ]+$/;
