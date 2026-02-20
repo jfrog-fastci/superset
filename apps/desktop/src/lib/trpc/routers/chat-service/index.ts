@@ -1,5 +1,7 @@
-import { ChatService } from "@superset/chat-service";
-import { createChatServiceRouter as buildRouter } from "@superset/chat-service/router";
+import {
+	createChatServiceRouter as buildRouter,
+	ChatService,
+} from "@superset/chat/host";
 import { env } from "main/env.main";
 import { getHashedDeviceId } from "main/lib/device-info";
 

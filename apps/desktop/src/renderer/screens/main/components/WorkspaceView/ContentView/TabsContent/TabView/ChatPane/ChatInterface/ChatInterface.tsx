@@ -1,6 +1,5 @@
-import { acquireSessionDB } from "@superset/durable-session";
-import type { SlashCommand } from "@superset/durable-session/react";
-import { useDurableChat } from "@superset/durable-session/react";
+import type { SlashCommand } from "@superset/chat";
+import { acquireSessionDB, useChat } from "@superset/chat/client";
 import type { PromptInputMessage } from "@superset/ui/ai-elements/prompt-input";
 import { PromptInputProvider } from "@superset/ui/ai-elements/prompt-input";
 import type { FileUIPart } from "ai";
@@ -241,7 +240,7 @@ function EmptyChatInterface({
 }
 
 // ---------------------------------------------------------------------------
-// ActiveChatInterface — self-contained via useDurableChat
+// ActiveChatInterface — self-contained via useChat
 // ---------------------------------------------------------------------------
 
 function ActiveChatInterface({
@@ -273,13 +272,13 @@ function ActiveChatInterface({
 		stop,
 		error,
 		metadata,
-	} = useDurableChat({
+	} = useChat({
 		sessionId,
 		proxyUrl: apiUrl,
 		getHeaders: getAuthHeaders,
 	});
 
-	// Once ready, send the pending message through useDurableChat's optimistic
+	// Once ready, send the pending message through useChat's optimistic
 	// path — the optimistic insert replaces the synthetic message seamlessly.
 	const sentPendingRef = useRef(false);
 	useEffect(() => {
@@ -293,7 +292,7 @@ function ActiveChatInterface({
 		clearPendingMessage();
 	}, [ready, pendingMessage, pendingFiles, sendMessage, clearPendingMessage]);
 
-	// Show pending message immediately while useDurableChat preloads.
+	// Show pending message immediately while useChat preloads.
 	const displayMessages =
 		messages.length === 0 && (pendingMessage || pendingFiles.length > 0)
 			? [
@@ -363,6 +362,9 @@ function ActiveChatInterface({
 		metadata.updateConfig,
 	]);
 
+	const { data: slashCommands = [] } =
+		electronTrpc.chatService.workspace.getSlashCommands.useQuery({ cwd });
+
 	const activateMutation =
 		electronTrpc.chatService.session.activate.useMutation();
 
@@ -416,7 +418,7 @@ function ActiveChatInterface({
 					organizationId={organizationId}
 					error={error}
 					isStreaming={isStreaming || !!pendingMessage}
-					availableModels={metadata.config.availableModels ?? []}
+					availableModels={[]}
 					selectedModel={selectedModel}
 					setSelectedModel={setSelectedModel}
 					modelSelectorOpen={modelSelectorOpen}
@@ -425,7 +427,7 @@ function ActiveChatInterface({
 					setPermissionMode={setPermissionMode}
 					thinkingEnabled={thinkingEnabled}
 					setThinkingEnabled={setThinkingEnabled}
-					slashCommands={metadata.config.slashCommands ?? []}
+					slashCommands={slashCommands}
 					onSend={handleSend}
 					onStop={handleStop}
 					onSlashCommandSend={handleSlashCommandSend}

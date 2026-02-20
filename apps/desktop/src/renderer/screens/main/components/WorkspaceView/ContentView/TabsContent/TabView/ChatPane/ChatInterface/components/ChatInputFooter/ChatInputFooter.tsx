@@ -1,4 +1,4 @@
-import type { SlashCommand } from "@superset/durable-session/react";
+import type { SlashCommand } from "@superset/chat";
 import {
 	PromptInput,
 	PromptInputAttachment,

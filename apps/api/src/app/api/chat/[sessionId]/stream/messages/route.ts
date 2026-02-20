@@ -1,6 +1,6 @@
+import { sessionStateSchema } from "@superset/chat";
 import { db } from "@superset/db/client";
 import { chatSessions } from "@superset/db/schema";
-import { sessionStateSchema } from "@superset/durable-session";
 import { eq } from "drizzle-orm";
 import { appendToStream, ensureStream, requireAuth } from "../../../lib";
 
