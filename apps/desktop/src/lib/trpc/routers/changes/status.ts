@@ -23,8 +23,8 @@ export const createStatusRouter = () => {
 			.query(async ({ input }): Promise<GitChangesStatus> => {
 				assertRegisteredWorktree(input.worktreePath);
 
-				const git = simpleGit(input.worktreePath);
 				const defaultBranch = input.defaultBranch || "main";
+				const git = simpleGit(input.worktreePath);
 
 				const status = await getStatusNoLock(input.worktreePath);
 				const parsed = parseGitStatus(status);

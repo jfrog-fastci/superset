@@ -85,20 +85,19 @@ const PR_JSON_FIELDS =
 async function getPRForBranch(
 	worktreePath: string,
 ): Promise<GitHubStatus["pr"]> {
-	// Try branch-based lookup first, then fall back to commit-based search.
-	// Branch-based is fast but fails when the branch was renamed after PR creation.
+	// Try branch tracking first (fast, works for `gh pr checkout` forks),
+	// then fall back to explicit head-branch lookup.
 	const branchResult = await getPRByBranchTracking(worktreePath);
 	if (branchResult !== undefined) {
 		return branchResult;
 	}
 
-	return findPRByHeadCommit(worktreePath);
+	return findPRByHeadBranch(worktreePath);
 }
 
 /**
  * Looks up a PR using `gh pr view` (no args), which matches via the branch's
  * tracking ref. Essential for fork PRs that track refs/pull/XXX/head.
- * Returns the PR, null (no match), or undefined (branch name mismatch — caller should try commit-based).
  */
 async function getPRByBranchTracking(
 	worktreePath: string,
@@ -127,7 +126,6 @@ async function getPRByBranchTracking(
 			error instanceof Error &&
 			error.message.includes("no pull requests found")
 		) {
-			// Branch name didn't match any PR — signal caller to try commit-based
 			return undefined;
 		}
 		throw error;
@@ -135,61 +133,49 @@ async function getPRByBranchTracking(
 }
 
 /**
- * Finds a PR by searching GitHub for the local HEAD commit SHA.
- * Handles cases where the branch was renamed after PR creation.
+ * Finds a PR by explicitly searching for the current branch name as the head ref.
+ * Covers cases where `gh pr view` (no args) fails to match.
  */
-async function findPRByHeadCommit(
+async function findPRByHeadBranch(
 	worktreePath: string,
 ): Promise<GitHubStatus["pr"]> {
 	try {
-		const { stdout: headOutput } = await execFileAsync(
+		const { stdout: branchOutput } = await execFileAsync(
 			"git",
-			["-C", worktreePath, "rev-parse", "HEAD"],
+			["-C", worktreePath, "rev-parse", "--abbrev-ref", "HEAD"],
 			{ timeout: 10_000 },
 		);
-		const headSha = headOutput.trim();
+		const branchName = branchOutput.trim();
 
-		const { stdout: searchOutput } = await execWithShellEnv(
+		const { stdout } = await execWithShellEnv(
 			"gh",
 			[
-				"api",
-				`search/issues?q=${headSha}+type:pr+repo:{owner}/{repo}`,
+				"pr",
+				"list",
+				"--head",
+				branchName,
+				"--json",
+				PR_JSON_FIELDS,
 				"--jq",
-				".items[].number",
+				".[0]",
 			],
 			{ cwd: worktreePath },
 		);
 
-		const prNumbers = searchOutput
-			.trim()
-			.split("\n")
-			.filter(Boolean)
-			.map(Number);
-		if (prNumbers.length === 0) {
+		if (!stdout.trim()) {
 			return null;
 		}
 
-		// Check each candidate PR — prefer one whose headRefOid matches exactly
-		for (const prNumber of prNumbers) {
-			try {
-				const { stdout } = await execWithShellEnv(
-					"gh",
-					["pr", "view", String(prNumber), "--json", PR_JSON_FIELDS],
-					{ cwd: worktreePath },
-				);
-
-				const data = parsePRResponse(stdout);
-				if (!data) {
-					continue;
-				}
-
-				if (await sharesAncestry(worktreePath, data.headRefOid)) {
-					return formatPRData(data);
-				}
-			} catch {}
+		const data = parsePRResponse(stdout);
+		if (!data) {
+			return null;
 		}
 
-		return null;
+		if (!(await sharesAncestry(worktreePath, data.headRefOid))) {
+			return null;
+		}
+
+		return formatPRData(data);
 	} catch {
 		return null;
 	}

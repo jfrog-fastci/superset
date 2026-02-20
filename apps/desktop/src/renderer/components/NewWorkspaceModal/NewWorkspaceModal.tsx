@@ -39,25 +39,19 @@ import {
 import { LuFolderOpen } from "react-icons/lu";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { formatRelativeTime } from "renderer/lib/formatRelativeTime";
-import {
-	processOpenNewResults,
-	useOpenNew,
-} from "renderer/react-query/projects";
+import { resolveEffectiveWorkspaceBaseBranch } from "renderer/lib/workspaceBaseBranch";
+import { useOpenProject } from "renderer/react-query/projects";
 import { useCreateWorkspace } from "renderer/react-query/workspaces";
 import {
 	useCloseNewWorkspaceModal,
 	useNewWorkspaceModalOpen,
 	usePreSelectedProjectId,
 } from "renderer/stores/new-workspace-modal";
-import {
-	resolveBranchPrefix,
-	sanitizeBranchName,
-	sanitizeSegment,
-} from "shared/utils/branch";
+import { resolveBranchPrefix, sanitizeBranchName } from "shared/utils/branch";
 import { ExistingWorktreesList } from "./components/ExistingWorktreesList";
 
 function generateSlugFromTitle(title: string): string {
-	return sanitizeSegment(title);
+	return sanitizeBranchName(title);
 }
 
 type Mode = "existing" | "new" | "cloud";
@@ -102,7 +96,7 @@ export function NewWorkspaceModal() {
 		electronTrpc.settings.getBranchPrefix.useQuery();
 	const { data: gitInfo } = electronTrpc.settings.getGitInfo.useQuery();
 	const createWorkspace = useCreateWorkspace();
-	const openNew = useOpenNew();
+	const { openNew } = useOpenProject();
 
 	const resolvedPrefix = useMemo(() => {
 		const projectOverrides = project?.branchPrefixMode != null;
@@ -133,7 +127,12 @@ export function NewWorkspaceModal() {
 		}
 	}, [isOpen, selectedProjectId, preSelectedProjectId]);
 
-	const effectiveBaseBranch = baseBranch ?? branchData?.defaultBranch ?? null;
+	const effectiveBaseBranch = resolveEffectiveWorkspaceBaseBranch({
+		explicitBaseBranch: baseBranch,
+		workspaceBaseBranch: project?.workspaceBaseBranch,
+		defaultBranch: branchData?.defaultBranch,
+		branches: branchData?.branches,
+	});
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset when project changes
 	useEffect(() => {
@@ -201,28 +200,14 @@ export function NewWorkspaceModal() {
 
 	const handleImportRepo = async () => {
 		try {
-			const result = await openNew.mutateAsync(undefined);
-			if (result.canceled) return;
+			const projects = await openNew();
 
-			if ("error" in result) {
-				toast.error("Failed to open project", { description: result.error });
-				return;
+			if (projects.length > 1) {
+				toast.success(`${projects.length} projects imported`);
 			}
 
-			if ("results" in result) {
-				const { successes } = processOpenNewResults({
-					results: result.results,
-					showSuccessToast: false,
-					showGitInitToast: true,
-				});
-
-				if (successes.length > 1) {
-					toast.success(`${successes.length} projects imported`);
-				}
-
-				if (successes.length > 0) {
-					setSelectedProjectId(successes[0].project.id);
-				}
+			if (projects.length > 0) {
+				setSelectedProjectId(projects[0].id);
 			}
 		} catch (error) {
 			toast.error("Failed to open project", {
@@ -248,7 +233,7 @@ export function NewWorkspaceModal() {
 				projectId: selectedProjectId,
 				name: workspaceName,
 				branchName: branchSlug || undefined,
-				baseBranch: effectiveBaseBranch || undefined,
+				baseBranch: baseBranch || undefined,
 				applyPrefix,
 			});
 
@@ -341,7 +326,7 @@ export function NewWorkspaceModal() {
 											: "text-muted-foreground hover:text-foreground"
 									}`}
 								>
-									Existing
+									Import
 								</button>
 								<button
 									type="button"
@@ -376,7 +361,7 @@ export function NewWorkspaceModal() {
 												{branchPreview || "branch-name"}
 											</span>
 											<span className="text-muted-foreground/60">
-												from {effectiveBaseBranch}
+												from {effectiveBaseBranch ?? "..."}
 											</span>
 										</p>
 									)}

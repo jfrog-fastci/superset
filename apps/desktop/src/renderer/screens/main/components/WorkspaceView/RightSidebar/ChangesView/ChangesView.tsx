@@ -15,6 +15,7 @@ import { HiMiniMinus, HiMiniPlus } from "react-icons/hi2";
 import { LuUndo2 } from "react-icons/lu";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useBranchSyncInvalidation } from "renderer/screens/main/hooks/useBranchSyncInvalidation";
+import { useGitChangesStatus } from "renderer/screens/main/hooks/useGitChangesStatus";
 import { useChangesStore } from "renderer/stores/changes";
 import type { ChangeCategory, ChangedFile } from "shared/changes-types";
 import { CategorySection } from "./components/CategorySection";
@@ -39,28 +40,14 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 		{ enabled: !!workspaceId },
 	);
 	const worktreePath = workspace?.worktreePath;
+	const projectId = workspace?.projectId;
 
-	const { getBaseBranch } = useChangesStore();
-	const baseBranch = getBaseBranch(worktreePath || "");
-	const { data: branchData } = electronTrpc.changes.getBranches.useQuery(
-		{ worktreePath: worktreePath || "" },
-		{ enabled: !!worktreePath },
-	);
-
-	const effectiveBaseBranch = baseBranch ?? branchData?.defaultBranch ?? "main";
-
-	const {
-		data: status,
-		isLoading,
-		refetch,
-	} = electronTrpc.changes.getStatus.useQuery(
-		{ worktreePath: worktreePath || "", defaultBranch: effectiveBaseBranch },
-		{
-			enabled: !!worktreePath,
+	const { status, isLoading, effectiveBaseBranch, refetch } =
+		useGitChangesStatus({
+			worktreePath,
 			refetchInterval: 2500,
 			refetchOnWindowFocus: true,
-		},
-	);
+		});
 
 	const { data: githubStatus, refetch: refetchGithubStatus } =
 		electronTrpc.workspaces.getGitHubStatus.useQuery(
@@ -380,6 +367,7 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 							selectedCommitHash={selectedCommitHash}
 							onFileSelect={(file) => handleFileSelect(file, "against-base")}
 							worktreePath={worktreePath}
+							projectId={projectId}
 							category="against-base"
 							isExpandedView={isExpandedView}
 						/>
@@ -402,6 +390,7 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 								onFileSelect={handleCommitFileSelect}
 								viewMode={fileListViewMode}
 								worktreePath={worktreePath}
+								projectId={projectId}
 								isExpandedView={isExpandedView}
 							/>
 						))}
@@ -465,6 +454,7 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 							}
 							isActioning={unstageFileMutation.isPending}
 							worktreePath={worktreePath}
+							projectId={projectId}
 							category="staged"
 							isExpandedView={isExpandedView}
 						/>
@@ -532,6 +522,7 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 								deleteUntrackedMutation.isPending
 							}
 							worktreePath={worktreePath}
+							projectId={projectId}
 							onDiscard={handleDiscard}
 							category="unstaged"
 							isExpandedView={isExpandedView}

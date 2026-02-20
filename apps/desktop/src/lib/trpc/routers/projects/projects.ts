@@ -3,6 +3,7 @@ import { access, mkdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
 	BRANCH_PREFIX_MODES,
+	EXTERNAL_APPS,
 	projects,
 	type SelectProject,
 	settings,
@@ -43,7 +44,6 @@ import { fetchGitHubOwner, getGitHubAvatarUrl } from "./utils/github";
 
 type Project = SelectProject;
 
-// Return types for openNew procedure (single project)
 type OpenNewCanceled = { canceled: true };
 type OpenNewError = { canceled: false; error: string };
 type OpenNewResult =
@@ -52,17 +52,61 @@ type OpenNewResult =
 	| { canceled: false; needsGitInit: true; selectedPath: string }
 	| OpenNewError;
 
-// Per-folder outcome for multi-select
 type FolderOutcome =
 	| { status: "success"; project: Project }
 	| { status: "needsGitInit"; selectedPath: string }
 	| { status: "error"; selectedPath: string; error: string };
 
-// Return types for openNew procedure (multi-select)
 type OpenNewMultiResult =
 	| OpenNewCanceled
 	| { canceled: false; multi: true; results: FolderOutcome[] }
 	| OpenNewError;
+
+/**
+ * Initializes a git repository in the given path with an initial commit.
+ * Supports staging all files (for template repos) and custom commit messages.
+ */
+async function initGitRepo(
+	path: string,
+	options?: { stageAll?: boolean; commitMessage?: string },
+): Promise<{ defaultBranch: string }> {
+	const git = simpleGit(path);
+
+	try {
+		await git.init(["--initial-branch=main"]);
+	} catch (err) {
+		console.warn("Git init with --initial-branch failed, using fallback:", err);
+		await git.init();
+	}
+
+	const message = options?.commitMessage ?? "Initial commit";
+
+	try {
+		if (options?.stageAll) {
+			await git.add(".");
+			await git.commit(message);
+		} else {
+			await git.raw(["commit", "--allow-empty", "-m", message]);
+		}
+	} catch (err) {
+		const errorMessage = err instanceof Error ? err.message : String(err);
+		if (
+			errorMessage.includes("empty ident") ||
+			errorMessage.includes("user.email") ||
+			errorMessage.includes("user.name")
+		) {
+			throw new Error(
+				"Git user not configured. Please run:\n" +
+					'  git config --global user.name "Your Name"\n' +
+					'  git config --global user.email "you@example.com"',
+			);
+		}
+		throw new Error(`Failed to create initial commit: ${errorMessage}`);
+	}
+
+	const defaultBranch = (await getCurrentBranch(path)) || "main";
+	return { defaultBranch };
+}
 
 /**
  * Creates or updates a project record in the database.
@@ -320,6 +364,18 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				return project;
 			}),
 
+		getDefaultApp: publicProcedure
+			.input(z.object({ projectId: z.string() }))
+			.query(({ input }) => {
+				const project = localDb
+					.select()
+					.from(projects)
+					.where(eq(projects.id, input.projectId))
+					.get();
+
+				return project?.defaultApp ?? "cursor";
+			}),
+
 		getRecents: publicProcedure.query((): Project[] => {
 			return localDb
 				.select()
@@ -528,16 +584,10 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 			const outcomes: FolderOutcome[] = [];
 
 			for (const selectedPath of result.filePaths) {
-				let mainRepoPath: string;
 				try {
-					mainRepoPath = await getGitRoot(selectedPath);
-				} catch {
-					outcomes.push({ status: "needsGitInit", selectedPath });
-					continue;
-				}
-
-				try {
+					const mainRepoPath = await getGitRoot(selectedPath);
 					const defaultBranch = await getDefaultBranch(mainRepoPath);
+
 					const project = upsertProject(mainRepoPath, defaultBranch);
 					await ensureMainWorkspace(project);
 
@@ -547,17 +597,27 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					});
 
 					outcomes.push({ status: "success", project });
-				} catch (error) {
-					console.error(
-						"[projects/openNew] Failed to open project:",
-						selectedPath,
-						error,
-					);
-					outcomes.push({
-						status: "error",
-						selectedPath,
-						error: error instanceof Error ? error.message : String(error),
-					});
+				} catch (gitError) {
+					const msg =
+						gitError instanceof Error ? gitError.message : String(gitError);
+					const msgLower = msg.toLowerCase();
+					if (
+						msgLower.includes("not a git repository") ||
+						msgLower.includes("cannot find git root")
+					) {
+						outcomes.push({ status: "needsGitInit", selectedPath });
+					} else {
+						console.error(
+							"[projects/openNew] Failed to open project:",
+							selectedPath,
+							gitError,
+						);
+						outcomes.push({
+							status: "error",
+							selectedPath,
+							error: msg,
+						});
+					}
 				}
 			}
 
@@ -569,12 +629,10 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 			.mutation(async ({ input }): Promise<OpenNewResult> => {
 				const selectedPath = input.path;
 
-				// Check if path exists
 				if (!existsSync(selectedPath)) {
 					return { canceled: false, error: "Path does not exist" };
 				}
 
-				// Check if path is a directory
 				try {
 					const stats = statSync(selectedPath);
 					if (!stats.isDirectory()) {
@@ -593,19 +651,17 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				let mainRepoPath: string;
 				try {
 					mainRepoPath = await getGitRoot(selectedPath);
-				} catch (_error) {
-					// Return a special response so the UI can offer to initialize git
+				} catch {
 					return {
 						canceled: false,
-						needsGitInit: true,
+						needsGitInit: true as const,
 						selectedPath,
 					};
 				}
 
 				const defaultBranch = await getDefaultBranch(mainRepoPath);
-				const project = upsertProject(mainRepoPath, defaultBranch);
 
-				// Auto-create main workspace if it doesn't exist
+				const project = upsertProject(mainRepoPath, defaultBranch);
 				await ensureMainWorkspace(project);
 
 				track("project_opened", {
@@ -622,7 +678,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 		initGitAndOpen: publicProcedure
 			.input(z.object({ path: z.string() }))
 			.mutation(async ({ input }) => {
-				const defaultBranch = await initGitRepo(input.path);
+				const { defaultBranch } = await initGitRepo(input.path);
 				const project = upsertProject(input.path, defaultBranch);
 				await ensureMainWorkspace(project);
 
@@ -835,7 +891,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 
 					await mkdir(repoPath, { recursive: true });
 
-					const defaultBranch = await initGitRepo(repoPath);
+					const { defaultBranch } = await initGitRepo(repoPath);
 					const project = upsertProject(repoPath, defaultBranch);
 					await ensureMainWorkspace(project);
 
@@ -933,7 +989,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						force: true,
 					});
 
-					const defaultBranch = await initGitRepo(repoPath, {
+					const { defaultBranch } = await initGitRepo(repoPath, {
 						stageAll: true,
 						commitMessage: "Initial commit from template",
 					});
@@ -976,7 +1032,9 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 							.optional(),
 						branchPrefixMode: z.enum(BRANCH_PREFIX_MODES).nullable().optional(),
 						branchPrefixCustom: z.string().nullable().optional(),
+						workspaceBaseBranch: z.string().nullable().optional(),
 						hideImage: z.boolean().optional(),
+						defaultApp: z.enum(EXTERNAL_APPS).nullable().optional(),
 					}),
 				}),
 			)
@@ -1003,8 +1061,14 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						...(input.patch.branchPrefixCustom !== undefined && {
 							branchPrefixCustom: input.patch.branchPrefixCustom,
 						}),
+						...(input.patch.workspaceBaseBranch !== undefined && {
+							workspaceBaseBranch: input.patch.workspaceBaseBranch,
+						}),
 						...(input.patch.hideImage !== undefined && {
 							hideImage: input.patch.hideImage,
+						}),
+						...(input.patch.defaultApp !== undefined && {
+							defaultApp: input.patch.defaultApp,
 						}),
 						lastOpenedAt: Date.now(),
 					})
