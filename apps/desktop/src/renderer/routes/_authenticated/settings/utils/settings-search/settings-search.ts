@@ -28,8 +28,6 @@ export const SETTING_ITEM_ID = {
 	BEHAVIOR_TELEMETRY: "behavior-telemetry",
 	BEHAVIOR_FILE_OPEN_MODE: "behavior-file-open-mode",
 	BEHAVIOR_RESOURCE_MONITOR: "behavior-resource-monitor",
-	BEHAVIOR_WORKTREE_LOCATION: "behavior-worktree-location",
-
 	TERMINAL_PRESETS: "terminal-presets",
 	TERMINAL_QUICK_ADD: "terminal-quick-add",
 	TERMINAL_AUTO_APPLY_PRESET: "terminal-auto-apply-preset",
@@ -48,7 +46,6 @@ export const SETTING_ITEM_ID = {
 	PROJECT_PATH: "project-path",
 	PROJECT_SCRIPTS: "project-scripts",
 	PROJECT_BRANCH_PREFIX: "project-branch-prefix",
-	PROJECT_WORKTREE_LOCATION: "project-worktree-location",
 	PROJECT_ENV_VARS: "project-env-vars",
 
 	// API Keys
@@ -448,22 +445,6 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 		],
 	},
 	{
-		id: SETTING_ITEM_ID.BEHAVIOR_WORKTREE_LOCATION,
-		section: "behavior",
-		title: "Worktree location",
-		description: "Base directory where new worktrees are created on disk",
-		keywords: [
-			"worktree",
-			"location",
-			"directory",
-			"path",
-			"folder",
-			"storage",
-			"base",
-			"default",
-		],
-	},
-	{
 		id: SETTING_ITEM_ID.TERMINAL_PRESETS,
 		section: "terminal",
 		title: "Terminal Presets",
@@ -720,22 +701,6 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 			"username",
 			"feat",
 			"custom",
-			"override",
-		],
-	},
-	{
-		id: SETTING_ITEM_ID.PROJECT_WORKTREE_LOCATION,
-		section: "project",
-		title: "Worktree Location",
-		description: "Override the global worktree directory for this project",
-		keywords: [
-			"project",
-			"worktree",
-			"location",
-			"directory",
-			"path",
-			"folder",
-			"storage",
 			"override",
 		],
 	},

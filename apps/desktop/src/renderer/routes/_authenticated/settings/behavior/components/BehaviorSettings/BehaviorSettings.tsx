@@ -12,10 +12,6 @@ import { Switch } from "@superset/ui/switch";
 import { useEffect, useState } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { resolveBranchPrefix, sanitizeSegment } from "shared/utils/branch";
-import {
-	useDefaultWorktreePath,
-	WorktreeLocationPicker,
-} from "../../../components/WorktreeLocationPicker";
 import { BRANCH_PREFIX_MODE_LABELS } from "../../../utils/branch-prefix";
 import {
 	isItemVisible,
@@ -52,11 +48,6 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 		SETTING_ITEM_ID.BEHAVIOR_RESOURCE_MONITOR,
 		visibleItems,
 	);
-	const showWorktreeLocation = isItemVisible(
-		SETTING_ITEM_ID.BEHAVIOR_WORKTREE_LOCATION,
-		visibleItems,
-	);
-
 	const utils = electronTrpc.useUtils();
 
 	const { data: confirmOnQuit, isLoading: isConfirmLoading } =
@@ -217,30 +208,6 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 				utils.settings.getShowResourceMonitor.invalidate();
 			},
 		});
-
-	const { data: worktreeBaseDir, isLoading: isWorktreeBaseDirLoading } =
-		electronTrpc.settings.getWorktreeBaseDir.useQuery();
-	const setWorktreeBaseDir =
-		electronTrpc.settings.setWorktreeBaseDir.useMutation({
-			onMutate: async ({ path }) => {
-				await utils.settings.getWorktreeBaseDir.cancel();
-				const previous = utils.settings.getWorktreeBaseDir.getData();
-				utils.settings.getWorktreeBaseDir.setData(undefined, path);
-				return { previous };
-			},
-			onError: (_err, _vars, context) => {
-				if (context?.previous !== undefined) {
-					utils.settings.getWorktreeBaseDir.setData(
-						undefined,
-						context.previous,
-					);
-				}
-			},
-			onSettled: () => {
-				utils.settings.getWorktreeBaseDir.invalidate();
-			},
-		});
-	const defaultWorktreePath = useDefaultWorktreePath();
 
 	const previewPrefix =
 		resolveBranchPrefix({
@@ -403,25 +370,6 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 							disabled={
 								isResourceMonitorLoading || setShowResourceMonitor.isPending
 							}
-						/>
-					</div>
-				)}
-
-				{showWorktreeLocation && (
-					<div className="space-y-0.5">
-						<Label className="text-sm font-medium">Worktree location</Label>
-						<p className="text-xs text-muted-foreground">
-							Base directory for new worktrees
-						</p>
-						<WorktreeLocationPicker
-							currentPath={worktreeBaseDir}
-							defaultPathLabel={`Default (${defaultWorktreePath})`}
-							defaultBrowsePath={worktreeBaseDir}
-							disabled={
-								isWorktreeBaseDirLoading || setWorktreeBaseDir.isPending
-							}
-							onSelect={(path) => setWorktreeBaseDir.mutate({ path })}
-							onReset={() => setWorktreeBaseDir.mutate({ path: null })}
 						/>
 					</div>
 				)}
