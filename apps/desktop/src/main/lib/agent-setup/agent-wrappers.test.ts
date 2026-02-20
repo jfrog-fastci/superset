@@ -1,8 +1,14 @@
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 const TEST_ROOT = path.join(
 	tmpdir(),
@@ -30,8 +36,11 @@ mock.module("./paths", () => ({
 	OPENCODE_PLUGIN_DIR: TEST_OPENCODE_PLUGIN_DIR,
 }));
 
-const { buildCopilotWrapperExecLine, buildWrapperScript, getCopilotHookScriptPath } =
-	await import("./agent-wrappers");
+const {
+	buildCopilotWrapperExecLine,
+	buildWrapperScript,
+	getCopilotHookScriptPath,
+} = await import("./agent-wrappers");
 
 describe("agent-wrappers copilot", () => {
 	beforeEach(() => {
@@ -60,7 +69,9 @@ describe("agent-wrappers copilot", () => {
 		writeFileSync(hookScriptPath, "#!/bin/bash\nexit 0\n", { mode: 0o755 });
 		writeFileSync(hookFile, '{"superset":"old","bash":"/tmp/old-hook.sh"}');
 
-		writeFileSync(realCopilot, "#!/bin/bash\necho real-copilot\n", { mode: 0o755 });
+		writeFileSync(realCopilot, "#!/bin/bash\necho real-copilot\n", {
+			mode: 0o755,
+		});
 		chmodSync(realCopilot, 0o755);
 
 		const wrapperScript = buildWrapperScript(
