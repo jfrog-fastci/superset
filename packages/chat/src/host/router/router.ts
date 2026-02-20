@@ -77,7 +77,7 @@ export function createChatServiceRouter(service: ChatService) {
 						thinkingEnabled: z.boolean().optional(),
 					}),
 				)
-				.mutation(({ input }) => {
+				.mutation(() => {
 					// Config is applied directly on the service's watcher for this session
 					// For now this is a no-op placeholder — the stream watcher reads config from its SessionHost
 					return { success: true };
