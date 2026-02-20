@@ -6,6 +6,21 @@ import { BASH_DIR, BIN_DIR, ZSH_DIR } from "./paths";
 const ZSH_RC = path.join(ZSH_DIR, ".zshrc");
 const BASH_RCFILE = path.join(BASH_DIR, "rcfile");
 
+/** Agent binaries that get wrapper shims to guarantee resolution. */
+const SHIMMED_BINARIES = ["claude", "codex", "opencode", "gemini"];
+
+/**
+ * Shell function shims that override PATH-based lookup.
+ * Functions take precedence over PATH in both zsh and bash,
+ * so even if a precmd hook or .zlogin re-orders PATH, the
+ * wrapped binary is always invoked.
+ */
+function buildShimFunctions(): string {
+	return SHIMMED_BINARIES.map(
+		(name) => `${name}() { "${BIN_DIR}/${name}" "$@"; }`,
+	).join("\n");
+}
+
 export function createZshWrapper(): void {
 	// .zprofile must NOT reset ZDOTDIR — our .zshrc needs to run after it
 	const zprofilePath = path.join(ZSH_DIR, ".zprofile");
@@ -22,8 +37,27 @@ _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
 export ZDOTDIR="$_superset_home"
 [[ -f "$_superset_home/.zshrc" ]] && source "$_superset_home/.zshrc"
 export PATH="${BIN_DIR}:$PATH"
+rehash 2>/dev/null
+${buildShimFunctions()}
+# Restore ZDOTDIR so our .zlogin runs after user's .zlogin
+export ZDOTDIR="${ZSH_DIR}"
 `;
 	fs.writeFileSync(zshrcPath, zshrcScript, { mode: 0o644 });
+
+	// .zlogin runs AFTER .zshrc in login shells. By restoring ZDOTDIR above,
+	// zsh sources our .zlogin instead of the user's directly. We source the
+	// user's .zlogin here, then re-prepend BIN_DIR so tools like mise, nvm,
+	// or manual PATH exports in .zlogin can't shadow our wrapper.
+	const zloginPath = path.join(ZSH_DIR, ".zlogin");
+	const zloginScript = `# Superset zsh login wrapper
+_superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
+[[ -o interactive && -f "$_superset_home/.zlogin" ]] && source "$_superset_home/.zlogin"
+export PATH="${BIN_DIR}:$PATH"
+rehash 2>/dev/null
+export ZDOTDIR="$_superset_home"
+`;
+	fs.writeFileSync(zloginPath, zloginScript, { mode: 0o644 });
+
 	console.log("[agent-setup] Created zsh wrapper");
 }
 
@@ -48,6 +82,8 @@ fi
 
 # Prepend superset bin to PATH
 export PATH="${BIN_DIR}:$PATH"
+hash -r 2>/dev/null
+${buildShimFunctions()}
 # Minimal prompt (path/env shown in toolbar) - emerald to match app theme
 export PS1=$'\\[\\e[1;38;2;52;211;153m\\]❯\\[\\e[0m\\] '
 `;
