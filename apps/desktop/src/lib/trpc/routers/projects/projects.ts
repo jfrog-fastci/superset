@@ -62,10 +62,6 @@ type OpenNewMultiResult =
 	| { canceled: false; multi: true; results: FolderOutcome[] }
 	| OpenNewError;
 
-/**
- * Initializes a git repository in the given path with an initial commit.
- * Supports staging all files (for template repos) and custom commit messages.
- */
 async function initGitRepo(
 	path: string,
 	options?: { stageAll?: boolean; commitMessage?: string },
@@ -936,7 +932,6 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						};
 					}
 
-					// Clone the template repo (shallow), then strip its history
 					const git = simpleGit();
 					await git.clone(input.templateUrl, repoPath, ["--depth", "1"]);
 					await rm(join(repoPath, ".git"), {

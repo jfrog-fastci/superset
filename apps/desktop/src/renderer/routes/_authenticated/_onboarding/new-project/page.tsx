@@ -23,10 +23,6 @@ function NewProjectPage() {
 	const [mode, setMode] = useState<NewProjectMode>("empty");
 	const [error, setError] = useState<string | null>(null);
 
-	const handleError = (message: string) => {
-		setError(message);
-	};
-
 	return (
 		<div className="flex flex-1 items-center justify-center">
 			<div className="w-full max-w-md px-6">
@@ -63,9 +59,9 @@ function NewProjectPage() {
 					</div>
 				</div>
 
-				{mode === "empty" && <EmptyRepoTab onError={handleError} />}
-				{mode === "clone" && <CloneRepoTab onError={handleError} />}
-				{mode === "template" && <TemplateRepoTab onError={handleError} />}
+				{mode === "empty" && <EmptyRepoTab onError={setError} />}
+				{mode === "clone" && <CloneRepoTab onError={setError} />}
+				{mode === "template" && <TemplateRepoTab onError={setError} />}
 
 				{error && (
 					<div className="mt-4 rounded-md px-4 py-3 bg-destructive/10 border border-destructive/20">

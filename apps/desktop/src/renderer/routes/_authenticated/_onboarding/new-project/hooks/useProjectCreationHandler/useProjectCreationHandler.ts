@@ -1,11 +1,6 @@
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useCreateWorkspace } from "renderer/react-query/workspaces";
 
-/**
- * Shared handler for project creation mutation results.
- * All three tabs (Empty, Clone, Template) use the same success/error pattern:
- * check canceled → invalidate + createWorkspace (handles navigation) → surface error.
- */
 export function useProjectCreationHandler(onError: (error: string) => void) {
 	const utils = electronTrpc.useUtils();
 	const createWorkspace = useCreateWorkspace();
