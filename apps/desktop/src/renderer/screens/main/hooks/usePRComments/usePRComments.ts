@@ -28,7 +28,8 @@ export function usePRComments({
 		{ workspaceId: workspaceId ?? "" },
 		{
 			enabled: enabled && !!workspaceId,
-			refetchInterval: 30_000,
+			staleTime: 30_000,
+			refetchInterval: 60_000,
 		},
 	);
 

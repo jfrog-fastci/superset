@@ -256,40 +256,24 @@ export function RightSidebar() {
 					</Tooltip>
 				</div>
 			</div>
-			{showChangesTab && (
-				<div
-					className={
-						rightSidebarTab === RightSidebarTab.Changes
-							? "flex-1 min-h-0 flex flex-col overflow-hidden"
-							: "hidden"
-					}
-				>
+			{showChangesTab && rightSidebarTab === RightSidebarTab.Changes && (
+				<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 					<ChangesView
 						onFileOpen={handleFileOpen}
 						isExpandedView={isExpanded}
 					/>
 				</div>
 			)}
-			{showChangesTab && (
-				<div
-					className={
-						rightSidebarTab === RightSidebarTab.Comments
-							? "flex-1 min-h-0 flex flex-col overflow-hidden"
-							: "hidden"
-					}
-				>
+			{showChangesTab && rightSidebarTab === RightSidebarTab.Comments && (
+				<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 					<CommentsView isExpandedView={isExpanded} />
 				</div>
 			)}
-			<div
-				className={
-					rightSidebarTab === RightSidebarTab.Files
-						? "flex-1 min-h-0 flex flex-col overflow-hidden"
-						: "hidden"
-				}
-			>
-				<FilesView />
-			</div>
+			{rightSidebarTab === RightSidebarTab.Files && (
+				<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+					<FilesView />
+				</div>
+			)}
 		</aside>
 	);
 }

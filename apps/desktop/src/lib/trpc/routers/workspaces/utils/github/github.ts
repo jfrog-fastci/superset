@@ -351,11 +351,13 @@ export async function fetchPRReviewComments(
 
 		// Normalize and group into threads
 		const rootComments = new Map<number, PRCommentThread>();
-		const replyMap = new Map<number, number>(); // commentId → rootId
+		const parentOf = new Map<number, number>(); // commentId → in_reply_to_id
+		const rootCache = new Map<number, number>(); // commentId → resolved rootId
 
-		// First pass: identify root comments
+		// First pass: identify root comments and build parent map
 		for (const c of comments) {
 			if (!c.in_reply_to_id) {
+				rootCache.set(c.id, c.id);
 				rootComments.set(c.id, {
 					rootId: c.id,
 					path: c.path,
@@ -381,19 +383,25 @@ export async function fetchPRReviewComments(
 					],
 				});
 			} else {
-				replyMap.set(c.id, c.in_reply_to_id);
+				parentOf.set(c.id, c.in_reply_to_id);
 			}
+		}
+
+		// Resolve root via parent map with path compression (O(n) total)
+		function findRoot(id: number): number {
+			const cached = rootCache.get(id);
+			if (cached !== undefined) return cached;
+			const parent = parentOf.get(id);
+			if (parent === undefined) return id;
+			const root = findRoot(parent);
+			rootCache.set(id, root);
+			return root;
 		}
 
 		// Second pass: attach replies to root threads
 		for (const c of comments) {
 			if (c.in_reply_to_id) {
-				// Walk up the reply chain to find root
-				let rootId = c.in_reply_to_id;
-				while (replyMap.has(rootId)) {
-					// biome-ignore lint/style/noNonNullAssertion: guarded by has() check
-					rootId = replyMap.get(rootId)!;
-				}
+				const rootId = findRoot(c.id);
 				const thread = rootComments.get(rootId);
 				if (thread) {
 					thread.comments.push({
