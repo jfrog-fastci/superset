@@ -13,7 +13,7 @@ export function CloneRepoTab({ onError, parentDir }: CloneRepoTabProps) {
 	const [url, setUrl] = useState("");
 	const cloneRepo = electronTrpc.projects.cloneRepo.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError, { parentDir });
+		useProjectCreationHandler(onError);
 
 	const isLoading = cloneRepo.isPending || isCreatingWorkspace;
 

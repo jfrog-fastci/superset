@@ -1,1 +1,0 @@
-ALTER TABLE `settings` ADD `default_project_path` text;

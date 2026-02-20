@@ -13,7 +13,7 @@ export function EmptyRepoTab({ onError, parentDir }: EmptyRepoTabProps) {
 	const [name, setName] = useState("");
 	const createEmptyRepo = electronTrpc.projects.createEmptyRepo.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError, { parentDir });
+		useProjectCreationHandler(onError);
 
 	const isLoading = createEmptyRepo.isPending || isCreatingWorkspace;
 

@@ -26,18 +26,12 @@ function NewProjectPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [parentDir, setParentDir] = useState("");
 
-	const { data: savedPath } =
-		electronTrpc.settings.getDefaultProjectPath.useQuery();
 	const { data: homeDir } = electronTrpc.window.getHomeDir.useQuery();
 
 	useEffect(() => {
-		if (parentDir) return;
-		if (savedPath) {
-			setParentDir(savedPath);
-		} else if (homeDir) {
-			setParentDir(`${homeDir}/Projects`);
-		}
-	}, [savedPath, homeDir, parentDir]);
+		if (parentDir || !homeDir) return;
+		setParentDir(`${homeDir}/.superset/projects`);
+	}, [homeDir, parentDir]);
 
 	return (
 		<div className="flex flex-1 items-center justify-center">

@@ -19,7 +19,7 @@ export function TemplateRepoTab({ onError, parentDir }: TemplateRepoTabProps) {
 	const createFromTemplate =
 		electronTrpc.projects.createFromTemplate.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError, { parentDir });
+		useProjectCreationHandler(onError);
 
 	const isLoading = createFromTemplate.isPending || isCreatingWorkspace;
 
