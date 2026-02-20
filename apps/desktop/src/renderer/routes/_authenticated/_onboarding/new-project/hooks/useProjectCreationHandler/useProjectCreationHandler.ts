@@ -1,9 +1,14 @@
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useCreateWorkspace } from "renderer/react-query/workspaces";
 
-export function useProjectCreationHandler(onError: (error: string) => void) {
+export function useProjectCreationHandler(
+	onError: (error: string) => void,
+	options?: { parentDir?: string },
+) {
 	const utils = electronTrpc.useUtils();
 	const createWorkspace = useCreateWorkspace();
+	const setDefaultProjectPath =
+		electronTrpc.settings.setDefaultProjectPath.useMutation();
 
 	const handleResult = (
 		result: {
@@ -18,6 +23,9 @@ export function useProjectCreationHandler(onError: (error: string) => void) {
 		if (result.success && result.project) {
 			utils.projects.getRecents.invalidate();
 			createWorkspace.mutate({ projectId: result.project.id });
+			if (options?.parentDir) {
+				setDefaultProjectPath.mutate({ path: options.parentDir });
+			}
 			resetState?.();
 		} else if (!result.success && result.error) {
 			onError(result.error);

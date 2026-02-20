@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LuArrowLeft } from "react-icons/lu";
+import { electronTrpc } from "renderer/lib/electron-trpc";
 import { CloneRepoTab } from "./components/CloneRepoTab";
 import { EmptyRepoTab } from "./components/EmptyRepoTab";
+import { PathSelector } from "./components/PathSelector";
 import { TemplateRepoTab } from "./components/TemplateRepoTab";
 import type { NewProjectMode } from "./constants";
 
@@ -22,6 +24,20 @@ function NewProjectPage() {
 	const navigate = useNavigate();
 	const [mode, setMode] = useState<NewProjectMode>("empty");
 	const [error, setError] = useState<string | null>(null);
+	const [parentDir, setParentDir] = useState("");
+
+	const { data: savedPath } =
+		electronTrpc.settings.getDefaultProjectPath.useQuery();
+	const { data: homeDir } = electronTrpc.window.getHomeDir.useQuery();
+
+	useEffect(() => {
+		if (parentDir) return;
+		if (savedPath) {
+			setParentDir(savedPath);
+		} else if (homeDir) {
+			setParentDir(`${homeDir}/Projects`);
+		}
+	}, [savedPath, homeDir, parentDir]);
 
 	return (
 		<div className="flex flex-1 items-center justify-center">
@@ -59,9 +75,19 @@ function NewProjectPage() {
 					</div>
 				</div>
 
-				{mode === "empty" && <EmptyRepoTab onError={setError} />}
-				{mode === "clone" && <CloneRepoTab onError={setError} />}
-				{mode === "template" && <TemplateRepoTab onError={setError} />}
+				<div className="mb-4">
+					<PathSelector value={parentDir} onChange={setParentDir} />
+				</div>
+
+				{mode === "empty" && (
+					<EmptyRepoTab onError={setError} parentDir={parentDir} />
+				)}
+				{mode === "clone" && (
+					<CloneRepoTab onError={setError} parentDir={parentDir} />
+				)}
+				{mode === "template" && (
+					<TemplateRepoTab onError={setError} parentDir={parentDir} />
+				)}
 
 				{error && (
 					<div className="mt-4 rounded-md px-4 py-3 bg-destructive/10 border border-destructive/20">

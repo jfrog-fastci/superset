@@ -550,6 +550,26 @@ export const createSettingsRouter = () => {
 				return { success: true };
 			}),
 
+		getDefaultProjectPath: publicProcedure.query(() => {
+			const row = getSettings();
+			return row.defaultProjectPath ?? null;
+		}),
+
+		setDefaultProjectPath: publicProcedure
+			.input(z.object({ path: z.string() }))
+			.mutation(({ input }) => {
+				localDb
+					.insert(settings)
+					.values({ id: 1, defaultProjectPath: input.path })
+					.onConflictDoUpdate({
+						target: settings.id,
+						set: { defaultProjectPath: input.path },
+					})
+					.run();
+
+				return { success: true };
+			}),
+
 		getNotificationSoundsMuted: publicProcedure.query(() => {
 			const row = getSettings();
 			return row.notificationSoundsMuted ?? false;

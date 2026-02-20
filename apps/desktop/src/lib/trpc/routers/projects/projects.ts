@@ -335,6 +335,28 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				.all();
 		}),
 
+		selectDirectory: publicProcedure
+			.input(
+				z.object({
+					defaultPath: z.string().optional(),
+				}),
+			)
+			.mutation(async ({ input }) => {
+				const window = getWindow();
+				if (!window) {
+					return { canceled: true as const, path: null };
+				}
+				const result = await dialog.showOpenDialog(window, {
+					properties: ["openDirectory", "createDirectory"],
+					title: "Select Directory",
+					defaultPath: input.defaultPath,
+				});
+				if (result.canceled || result.filePaths.length === 0) {
+					return { canceled: true as const, path: null };
+				}
+				return { canceled: false as const, path: result.filePaths[0] };
+			}),
+
 		getBranches: publicProcedure
 			.input(z.object({ projectId: z.string() }))
 			.query(
@@ -807,29 +829,35 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 							message:
 								"Name can only contain letters, numbers, dots, underscores, hyphens, and spaces",
 						}),
+					parentDir: z.string().min(1).optional(),
 				}),
 			)
 			.mutation(async ({ input }) => {
 				try {
-					const window = getWindow();
-					if (!window) {
-						return {
-							canceled: false as const,
-							success: false as const,
-							error: "No window available",
-						};
+					let parentDir = input.parentDir;
+
+					if (!parentDir) {
+						const window = getWindow();
+						if (!window) {
+							return {
+								canceled: false as const,
+								success: false as const,
+								error: "No window available",
+							};
+						}
+
+						const result = await dialog.showOpenDialog(window, {
+							properties: ["openDirectory", "createDirectory"],
+							title: "Select Location for New Repository",
+						});
+
+						if (result.canceled || result.filePaths.length === 0) {
+							return { canceled: true as const, success: false as const };
+						}
+
+						parentDir = result.filePaths[0];
 					}
 
-					const result = await dialog.showOpenDialog(window, {
-						properties: ["openDirectory", "createDirectory"],
-						title: "Select Location for New Repository",
-					});
-
-					if (result.canceled || result.filePaths.length === 0) {
-						return { canceled: true as const, success: false as const };
-					}
-
-					const parentDir = result.filePaths[0];
 					const repoPath = join(parentDir, input.name);
 
 					if (existsSync(repoPath)) {
@@ -889,29 +917,35 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						.trim()
 						.optional()
 						.transform((v) => (v && v.length > 0 ? v : undefined)),
+					parentDir: z.string().min(1).optional(),
 				}),
 			)
 			.mutation(async ({ input }) => {
 				try {
-					const window = getWindow();
-					if (!window) {
-						return {
-							canceled: false as const,
-							success: false as const,
-							error: "No window available",
-						};
+					let parentDir = input.parentDir;
+
+					if (!parentDir) {
+						const window = getWindow();
+						if (!window) {
+							return {
+								canceled: false as const,
+								success: false as const,
+								error: "No window available",
+							};
+						}
+
+						const result = await dialog.showOpenDialog(window, {
+							properties: ["openDirectory", "createDirectory"],
+							title: "Select Location for New Project",
+						});
+
+						if (result.canceled || result.filePaths.length === 0) {
+							return { canceled: true as const, success: false as const };
+						}
+
+						parentDir = result.filePaths[0];
 					}
 
-					const result = await dialog.showOpenDialog(window, {
-						properties: ["openDirectory", "createDirectory"],
-						title: "Select Location for New Project",
-					});
-
-					if (result.canceled || result.filePaths.length === 0) {
-						return { canceled: true as const, success: false as const };
-					}
-
-					const parentDir = result.filePaths[0];
 					const repoName = input.name || extractRepoName(input.templateUrl);
 
 					if (!repoName) {

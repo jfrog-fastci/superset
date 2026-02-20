@@ -6,13 +6,14 @@ import { useProjectCreationHandler } from "../../hooks/useProjectCreationHandler
 
 interface CloneRepoTabProps {
 	onError: (error: string) => void;
+	parentDir: string;
 }
 
-export function CloneRepoTab({ onError }: CloneRepoTabProps) {
+export function CloneRepoTab({ onError, parentDir }: CloneRepoTabProps) {
 	const [url, setUrl] = useState("");
 	const cloneRepo = electronTrpc.projects.cloneRepo.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError);
+		useProjectCreationHandler(onError, { parentDir });
 
 	const isLoading = cloneRepo.isPending || isCreatingWorkspace;
 
@@ -21,9 +22,13 @@ export function CloneRepoTab({ onError }: CloneRepoTabProps) {
 			onError("Please enter a repository URL");
 			return;
 		}
+		if (!parentDir.trim()) {
+			onError("Please select a project location");
+			return;
+		}
 
 		cloneRepo.mutate(
-			{ url: url.trim() },
+			{ url: url.trim(), targetDirectory: parentDir.trim() },
 			{
 				onSuccess: (result) => handleResult(result, () => setUrl("")),
 				onError: handleError,

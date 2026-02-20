@@ -8,9 +8,10 @@ import { useProjectCreationHandler } from "../../hooks/useProjectCreationHandler
 
 interface TemplateRepoTabProps {
 	onError: (error: string) => void;
+	parentDir: string;
 }
 
-export function TemplateRepoTab({ onError }: TemplateRepoTabProps) {
+export function TemplateRepoTab({ onError, parentDir }: TemplateRepoTabProps) {
 	const [selectedTemplate, setSelectedTemplate] =
 		useState<ProjectTemplate | null>(null);
 	const [customUrl, setCustomUrl] = useState("");
@@ -18,7 +19,7 @@ export function TemplateRepoTab({ onError }: TemplateRepoTabProps) {
 	const createFromTemplate =
 		electronTrpc.projects.createFromTemplate.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError);
+		useProjectCreationHandler(onError, { parentDir });
 
 	const isLoading = createFromTemplate.isPending || isCreatingWorkspace;
 
@@ -28,11 +29,16 @@ export function TemplateRepoTab({ onError }: TemplateRepoTabProps) {
 			onError("Please select a template or enter a custom URL");
 			return;
 		}
+		if (!parentDir.trim()) {
+			onError("Please select a project location");
+			return;
+		}
 
 		createFromTemplate.mutate(
 			{
 				templateUrl,
 				name: nameOverride.trim() || undefined,
+				parentDir: parentDir.trim(),
 			},
 			{
 				onSuccess: (result) =>

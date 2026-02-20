@@ -6,13 +6,14 @@ import { useProjectCreationHandler } from "../../hooks/useProjectCreationHandler
 
 interface EmptyRepoTabProps {
 	onError: (error: string) => void;
+	parentDir: string;
 }
 
-export function EmptyRepoTab({ onError }: EmptyRepoTabProps) {
+export function EmptyRepoTab({ onError, parentDir }: EmptyRepoTabProps) {
 	const [name, setName] = useState("");
 	const createEmptyRepo = electronTrpc.projects.createEmptyRepo.useMutation();
 	const { handleResult, handleError, isCreatingWorkspace } =
-		useProjectCreationHandler(onError);
+		useProjectCreationHandler(onError, { parentDir });
 
 	const isLoading = createEmptyRepo.isPending || isCreatingWorkspace;
 
@@ -22,9 +23,13 @@ export function EmptyRepoTab({ onError }: EmptyRepoTabProps) {
 			onError("Please enter a repository name");
 			return;
 		}
+		if (!parentDir.trim()) {
+			onError("Please select a project location");
+			return;
+		}
 
 		createEmptyRepo.mutate(
-			{ name: trimmed },
+			{ name: trimmed, parentDir: parentDir.trim() },
 			{
 				onSuccess: (result) => handleResult(result, () => setName("")),
 				onError: handleError,

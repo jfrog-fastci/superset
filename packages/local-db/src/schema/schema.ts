@@ -171,6 +171,7 @@ export const settings = sqliteTable("settings", {
 	editorFontFamily: text("editor_font_family"),
 	editorFontSize: integer("editor_font_size"),
 	showResourceMonitor: integer("show_resource_monitor", { mode: "boolean" }),
+	defaultProjectPath: text("default_project_path"),
 });
 
 export type InsertSettings = typeof settings.$inferInsert;
