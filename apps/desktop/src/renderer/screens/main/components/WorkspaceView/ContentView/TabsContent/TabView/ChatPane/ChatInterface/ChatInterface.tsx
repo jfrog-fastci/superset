@@ -85,6 +85,7 @@ async function uploadFile(
 
 export function ChatInterface({
 	sessionId,
+	sessionTitle,
 	organizationId,
 	deviceId,
 	workspaceId,
@@ -158,26 +159,15 @@ export function ChatInterface({
 		sentPendingRef.current = false;
 	}, [sessionId]);
 
-	// --- Auto-generate chat session title (once) ---
-	const titleGeneratedRef = useRef(false);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: sessionId resets tracking
-	useEffect(() => {
-		titleGeneratedRef.current = false;
-	}, [sessionId]);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: fire-and-forget title generation after first assistant response
 	useEffect(() => {
 		if (chat.isLoading) return;
 		if (!sessionId) return;
-		if (titleGeneratedRef.current) return;
+		if (sessionTitle) return;
 
 		const hasAssistantMessage = chat.messages.some(
 			(m) => m.role === "assistant",
 		);
 		if (!hasAssistantMessage) return;
-
-		titleGeneratedRef.current = true;
 
 		const digest = chat.messages.slice(-20).map((m) => {
 			const text = m.parts
@@ -193,7 +183,7 @@ export function ChatInterface({
 				setTabAutoTitle(tabId, title);
 			})
 			.catch(console.error);
-	}, [chat.isLoading]);
+	}, [chat.isLoading, chat.messages, sessionId, sessionTitle, tabId, setTabAutoTitle]);
 
 	// --- Display messages: show synthetic pending while useChat preloads ---
 	const displayMessages =

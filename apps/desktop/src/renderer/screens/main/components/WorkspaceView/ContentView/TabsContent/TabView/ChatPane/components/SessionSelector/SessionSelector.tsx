@@ -22,7 +22,7 @@ import { useCollections } from "renderer/routes/_authenticated/providers/Collect
 interface SessionSelectorProps {
 	currentSessionId: string | null;
 	workspaceId: string;
-	onSelectSession: (sessionId: string) => void;
+	onSelectSession: (sessionId: string, title: string | null) => void;
 	onNewChat: () => void;
 	onDeleteSession: (sessionId: string) => Promise<void>;
 }
@@ -42,7 +42,8 @@ export function SessionSelector({
 			q
 				.from({ chatSessions: collections.chatSessions })
 				.where(({ chatSessions }) => eq(chatSessions.workspaceId, workspaceId))
-				.orderBy(({ chatSessions }) => chatSessions.lastActiveAt, "desc"),
+				.orderBy(({ chatSessions }) => chatSessions.lastActiveAt, "desc")
+				.select(({ chatSessions }) => ({ ...chatSessions })),
 		[collections, workspaceId],
 	);
 
@@ -72,7 +73,7 @@ export function SessionSelector({
 								key={session.id}
 								className="group flex items-center justify-between gap-2"
 								onSelect={() => {
-									onSelectSession(session.id);
+									onSelectSession(session.id, session.title);
 									setIsOpen(false);
 								}}
 							>

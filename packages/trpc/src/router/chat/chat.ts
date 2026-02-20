@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { db } from "@superset/db/client";
 import { chatSessions } from "@superset/db/schema";
 import type { TRPCRouterRecord } from "@trpc/server";
@@ -25,6 +26,14 @@ const AVAILABLE_MODELS = [
 	},
 ];
 
+const titleSchema = z.object({
+	title: z
+		.string()
+		.describe(
+			"A concise 2-5 word title for a coding chat session. Examples: 'Fix Auth Middleware', 'Drizzle Schema Migration', 'React State Refactor', 'WebSocket Setup'",
+		),
+});
+
 export const chatRouter = {
 	getModels: protectedProcedure.query(() => {
 		return { models: AVAILABLE_MODELS };
@@ -45,18 +54,16 @@ export const chatRouter = {
 				.join("\n");
 
 			const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-			const response = await client.messages.create({
+			const response = await client.messages.parse({
 				model: "claude-haiku-4-5-20251001",
-				max_tokens: 30,
+				max_tokens: 50,
 				system:
-					"Generate a concise 3-6 word title for this conversation. Return only the title, no quotes or punctuation.",
+					"You are a title generator for a coding assistant chat. Generate a concise 2-5 word title summarizing the conversation topic.",
 				messages: [{ role: "user", content: digest }],
+				output_config: { format: zodOutputFormat(titleSchema) },
 			});
 
-			const title =
-				response.content[0]?.type === "text"
-					? response.content[0].text.trim()
-					: "Untitled Chat";
+			const title = response.parsed_output?.title ?? "Untitled Chat";
 
 			await db
 				.update(chatSessions)

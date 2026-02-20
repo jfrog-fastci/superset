@@ -41,6 +41,14 @@ export function useCollectionData<
 		data: [],
 	});
 
+	// Invalidate snapshot cache when collection identity changes so stale
+	// data from the previous collection is never returned.
+	const prevCollectionRef = useRef(collection);
+	if (prevCollectionRef.current !== collection) {
+		prevCollectionRef.current = collection;
+		versionRef.current++;
+	}
+
 	// Subscribe callback — increments version to signal data changed.
 	const subscribeRef = useRef(NOOP_SUBSCRIBE);
 
