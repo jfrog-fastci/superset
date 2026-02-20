@@ -61,13 +61,13 @@ describe("shell-wrappers", () => {
 		expect(rcfile).toContain("hash -r 2>/dev/null || true");
 	});
 
-	it("uses non-login zsh command args when wrappers exist", () => {
+	it("uses login zsh command args when wrappers exist", () => {
 		createZshWrapper();
 
 		const args = getCommandShellArgs("/bin/zsh", "echo ok");
 		expect(args).toEqual([
-			"-c",
-			`source "${path.join(TEST_ZSH_DIR, ".zprofile")}" && source "${path.join(TEST_ZSH_DIR, ".zshrc")}" && echo ok`,
+			"-lc",
+			`source "${path.join(TEST_ZSH_DIR, ".zshrc")}" && echo ok`,
 		]);
 	});
 

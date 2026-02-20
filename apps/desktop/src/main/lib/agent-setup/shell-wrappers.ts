@@ -4,7 +4,6 @@ import path from "node:path";
 import { BASH_DIR, BIN_DIR, ZSH_DIR } from "./paths";
 
 const ZSH_RC = path.join(ZSH_DIR, ".zshrc");
-const ZSH_PROFILE = path.join(ZSH_DIR, ".zprofile");
 const BASH_RCFILE = path.join(BASH_DIR, "rcfile");
 
 /** Agent binaries that get wrapper shims to guarantee resolution. */
@@ -137,10 +136,7 @@ export function getShellArgs(shell: string): string[] {
  */
 export function getCommandShellArgs(shell: string, command: string): string[] {
 	if (shell.includes("zsh") && fs.existsSync(ZSH_RC)) {
-		const profileSource = fs.existsSync(ZSH_PROFILE)
-			? `source "${ZSH_PROFILE}" && `
-			: "";
-		return ["-c", `${profileSource}source "${ZSH_RC}" && ${command}`];
+		return ["-lc", `source "${ZSH_RC}" && ${command}`];
 	}
 	if (shell.includes("bash") && fs.existsSync(BASH_RCFILE)) {
 		return ["-c", `source "${BASH_RCFILE}" && ${command}`];
