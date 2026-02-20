@@ -22,10 +22,14 @@ type CollectionItem<C> =
  * SSR-safe hook for subscribing to TanStack DB collection data.
  * Workaround for useLiveQuery not yet supporting SSR.
  */
+const EMPTY: never[] = [];
+const NOOP_SUBSCRIBE = (_onStoreChange: () => void) => () => {};
+const NOOP_SNAPSHOT = () => EMPTY;
+
 export function useCollectionData<
 	// biome-ignore lint/suspicious/noExplicitAny: TanStack DB Collection generic constraint
 	C extends Collection<any, any, any, any, any>,
->(collection: C): CollectionItem<C>[] {
+>(collection: C | null): CollectionItem<C>[] {
 	type T = CollectionItem<C>;
 
 	// Track version to know when to create a new snapshot.
@@ -38,50 +42,37 @@ export function useCollectionData<
 	});
 
 	// Subscribe callback — increments version to signal data changed.
-	const subscribeRef = useRef((onStoreChange: () => void): (() => void) => {
-		const subscription = collection.subscribeChanges(() => {
-			versionRef.current++;
-			onStoreChange();
-		});
-		return () => subscription.unsubscribe();
-	});
+	const subscribeRef = useRef(NOOP_SUBSCRIBE);
 
 	// Update subscribe ref when collection changes
-	subscribeRef.current = (onStoreChange: () => void): (() => void) => {
-		const subscription = collection.subscribeChanges(() => {
-			versionRef.current++;
-			onStoreChange();
-		});
-		return () => subscription.unsubscribe();
-	};
+	subscribeRef.current = collection
+		? (onStoreChange: () => void): (() => void) => {
+				const subscription = collection.subscribeChanges(() => {
+					versionRef.current++;
+					onStoreChange();
+				});
+				return () => subscription.unsubscribe();
+			}
+		: NOOP_SUBSCRIBE;
 
 	// Snapshot callback — returns cached data unless version changed.
-	const getSnapshotRef = useRef((): T[] => {
-		const currentVersion = versionRef.current;
-		const cached = snapshotRef.current;
-
-		if (cached.version === currentVersion) {
-			return cached.data;
-		}
-
-		const data = [...collection.values()] as T[];
-		snapshotRef.current = { version: currentVersion, data };
-		return data;
-	});
+	const getSnapshotRef = useRef(NOOP_SNAPSHOT as () => T[]);
 
 	// Update getSnapshot ref when collection changes
-	getSnapshotRef.current = (): T[] => {
-		const currentVersion = versionRef.current;
-		const cached = snapshotRef.current;
+	getSnapshotRef.current = collection
+		? (): T[] => {
+				const currentVersion = versionRef.current;
+				const cached = snapshotRef.current;
 
-		if (cached.version === currentVersion) {
-			return cached.data;
-		}
+				if (cached.version === currentVersion) {
+					return cached.data;
+				}
 
-		const data = [...collection.values()] as T[];
-		snapshotRef.current = { version: currentVersion, data };
-		return data;
-	};
+				const data = [...collection.values()] as T[];
+				snapshotRef.current = { version: currentVersion, data };
+				return data;
+			}
+		: (NOOP_SNAPSHOT as () => T[]);
 
 	return useSyncExternalStore(
 		subscribeRef.current,

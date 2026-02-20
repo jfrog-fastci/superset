@@ -34,9 +34,9 @@ export interface ChatAgentPresence {
 }
 
 export interface UseChatMetadataOptions {
-	sessionDB: SessionDB;
+	sessionDB: SessionDB | null;
 	proxyUrl: string;
-	sessionId: string;
+	sessionId: string | null;
 	getHeaders?: () => Record<string, string>;
 }
 
@@ -84,7 +84,9 @@ export function useChatMetadata(
 	// Config + Title — derived from config-type chunks
 	// -----------------------------------------------------------------------
 
-	const chunks = useCollectionData(sessionDB.collections.chunks) as ChunkRow[];
+	const chunks = useCollectionData(
+		sessionDB?.collections.chunks ?? null,
+	) as ChunkRow[];
 
 	const { title, config } = useMemo(() => {
 		let title: string | null = null;
@@ -112,13 +114,14 @@ export function useChatMetadata(
 
 	const updateConfig = useCallback(
 		(newConfig: SessionConfig) => {
+			if (!sessionId) return;
 			fetch(configUrl, {
 				method: "POST",
 				headers: { "Content-Type": "application/json", ...authHeaders() },
 				body: JSON.stringify(newConfig),
 			}).catch(console.error);
 		},
-		[configUrl, authHeaders],
+		[configUrl, authHeaders, sessionId],
 	);
 
 	// -----------------------------------------------------------------------
@@ -126,7 +129,7 @@ export function useChatMetadata(
 	// -----------------------------------------------------------------------
 
 	const presenceRows = useCollectionData(
-		sessionDB.collections.presence,
+		sessionDB?.collections.presence ?? null,
 	) as RawPresenceRow[];
 
 	const users = useMemo(
@@ -150,7 +153,7 @@ export function useChatMetadata(
 	// -----------------------------------------------------------------------
 
 	const agentRows = useCollectionData(
-		sessionDB.collections.agents,
+		sessionDB?.collections.agents ?? null,
 	) as AgentValue[];
 
 	const agents = useMemo(
@@ -174,6 +177,7 @@ export function useChatMetadata(
 
 	const updateStatus = useCallback(
 		(userId: string, deviceId: string, status: ChatUserPresence["status"]) => {
+			if (!sessionId) return;
 			const endpoint = status === "offline" ? "logout" : "login";
 			fetch(`${basePresenceUrl}/${endpoint}`, {
 				method: "POST",
@@ -181,7 +185,7 @@ export function useChatMetadata(
 				body: JSON.stringify({ userId, deviceId, status }),
 			}).catch(console.error);
 		},
-		[basePresenceUrl, authHeaders],
+		[basePresenceUrl, authHeaders, sessionId],
 	);
 
 	const updateDraft = useCallback(
@@ -191,6 +195,7 @@ export function useChatMetadata(
 			text: string,
 			cursorPosition?: number,
 		) => {
+			if (!sessionId) return;
 			fetch(`${basePresenceUrl}/login`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -203,7 +208,7 @@ export function useChatMetadata(
 				}),
 			}).catch(console.error);
 		},
-		[basePresenceUrl, authHeaders],
+		[basePresenceUrl, authHeaders, sessionId],
 	);
 
 	const drafts = useMemo(

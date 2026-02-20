@@ -22,7 +22,7 @@ import { useCollectionData } from "./hooks/useCollectionData";
 import { acquireSessionDB, releaseSessionDB } from "./utils/session-db-cache";
 
 export interface UseChatOptions {
-	sessionId: string;
+	sessionId: string | null;
 	proxyUrl: string;
 	getHeaders?: () => Record<string, string>;
 }
@@ -49,31 +49,30 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 	const { sessionId, proxyUrl, getHeaders } = options;
 
 	// --- SessionDB lifecycle (cached, ref-counted) ---
+	// When sessionId is null we skip acquiring a SessionDB entirely.
 	// messagesCollection is cached alongside the SessionDB so on remount
 	// the already-computed derived collection is reused (avoids empty state
 	// from creating a new live query against a pre-populated source).
-	const {
-		db: sessionDB,
-		messagesCollection,
-		preloadPromise,
-		preloaded,
-	} = useMemo(
-		() =>
-			acquireSessionDB({
-				sessionId,
-				baseUrl: `${proxyUrl}/api/chat`,
-				headers: getHeaders?.(),
-			}),
-		[sessionId, proxyUrl, getHeaders],
-	);
+	const session = useMemo(() => {
+		if (!sessionId) return null;
+		return acquireSessionDB({
+			sessionId,
+			baseUrl: `${proxyUrl}/api/chat`,
+			headers: getHeaders?.(),
+		});
+	}, [sessionId, proxyUrl, getHeaders]);
 
 	// For cached (already-preloaded) sessions, start ready immediately so
 	// messages render on the very first frame — no "Connecting…" flash.
-	const [ready, setReady] = useState(preloaded);
+	const [ready, setReady] = useState(session?.preloaded ?? false);
 
 	useEffect(() => {
+		if (!session || !sessionId) {
+			setReady(false);
+			return;
+		}
 		let cancelled = false;
-		preloadPromise
+		session.preloadPromise
 			.then(() => {
 				if (!cancelled) setReady(true);
 			})
@@ -83,7 +82,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 			setReady(false);
 			releaseSessionDB(sessionId);
 		};
-	}, [sessionId, preloadPromise]);
+	}, [sessionId, session]);
 
 	// --- URL + headers helpers ---
 	const headers = useCallback(
@@ -99,8 +98,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 		[proxyUrl, sessionId],
 	);
 
-	// --- Messages via collection pipeline ---
-	const rows = useCollectionData(messagesCollection);
+	// --- Messages via collection pipeline (null-safe) ---
+	const rows = useCollectionData(session?.messagesCollection ?? null);
 
 	const messages = useMemo(() => rows.map(messageRowToUIMessage), [rows]);
 
@@ -121,9 +120,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 		);
 	}, [rows]);
 
-	// --- Metadata (title, config, presence, agents) ---
+	// --- Metadata (title, config, presence, agents) — null-safe ---
 	const metadata = useChatMetadata({
-		sessionDB,
+		sessionDB: session?.db ?? null,
 		proxyUrl,
 		sessionId,
 		getHeaders,
@@ -134,8 +133,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
 	// --- Optimistic sendMessage action ---
 	// Stable ref to avoid recreating the optimistic action on every render.
-	const depsRef = useRef({ url, headers, sessionDB, setError });
-	depsRef.current = { url, headers, sessionDB, setError };
+	const depsRef = useRef({ url, headers, sessionDB: session?.db, setError });
+	depsRef.current = { url, headers, sessionDB: session?.db, setError };
 
 	const optimisticSend = useMemo(
 		() =>
@@ -146,6 +145,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 				txid: string;
 			}>({
 				onMutate: ({ text, files, messageId }) => {
+					const { sessionDB } = depsRef.current;
+					if (!sessionDB) return;
 					const now = new Date().toISOString();
 					const parts: ({ type: "text"; text: string } | FileUIPart)[] = [];
 					if (text) parts.push({ type: "text", text });
@@ -167,7 +168,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 						seq: 0,
 						createdAt: now,
 					};
-					depsRef.current.sessionDB.collections.chunks.insert(chunk);
+					sessionDB.collections.chunks.insert(chunk);
 				},
 				mutationFn: async ({ text, files, messageId, txid }) => {
 					const { url, headers, sessionDB } = depsRef.current;
@@ -185,7 +186,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 						throw new Error(`Failed to send message: ${res.status}`);
 					}
 					// Wait for the write to sync back through SSE
-					await sessionDB.utils.awaitTxId(txid, 10_000);
+					await sessionDB?.utils.awaitTxId(txid, 10_000);
 				},
 			}),
 		[],
@@ -193,6 +194,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
 	const sendMessage = useCallback(
 		async (text: string, files?: FileUIPart[]) => {
+			if (!sessionId) return;
 			setError(null);
 			const messageId = crypto.randomUUID();
 			const txid = crypto.randomUUID();
@@ -203,19 +205,21 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 				setError(err instanceof Error ? err.message : "Failed to send message");
 			}
 		},
-		[optimisticSend],
+		[optimisticSend, sessionId],
 	);
 
 	const stop = useCallback(() => {
+		if (!sessionId) return;
 		fetch(url("/control"), {
 			method: "POST",
 			headers: headers(),
 			body: JSON.stringify({ action: "abort" }),
 		}).catch(console.error);
-	}, [url, headers]);
+	}, [url, headers, sessionId]);
 
 	const submitToolResult = useCallback(
 		async (toolCallId: string, output: unknown, err?: string) => {
+			if (!sessionId) return;
 			setError(null);
 			try {
 				const res = await fetch(url("/tool-results"), {
@@ -236,11 +240,12 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 				);
 			}
 		},
-		[url, headers],
+		[url, headers, sessionId],
 	);
 
 	const submitApproval = useCallback(
 		async (approvalId: string, approved: boolean) => {
+			if (!sessionId) return;
 			setError(null);
 			try {
 				const res = await fetch(url(`/approvals/${approvalId}`), {
@@ -255,7 +260,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 				setError(e instanceof Error ? e.message : "Failed to submit approval");
 			}
 		},
-		[url, headers],
+		[url, headers, sessionId],
 	);
 
 	return {

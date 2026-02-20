@@ -123,4 +123,3 @@ export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 
 	return null;
 }
-

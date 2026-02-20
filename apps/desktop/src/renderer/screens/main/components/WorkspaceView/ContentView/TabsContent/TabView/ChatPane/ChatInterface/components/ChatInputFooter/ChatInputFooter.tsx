@@ -2,21 +2,26 @@ import {
 	PromptInput,
 	PromptInputAttachment,
 	PromptInputAttachments,
-	PromptInputButton,
 	PromptInputFooter,
 	type PromptInputMessage,
 	PromptInputSubmit,
 	PromptInputTextarea,
 	PromptInputTools,
 	usePromptInputAttachments,
+	usePromptInputController,
 } from "@superset/ui/ai-elements/prompt-input";
 import { ThinkingToggle } from "@superset/ui/ai-elements/thinking-toggle";
 import { UploadIcon } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HiMiniPaperClip } from "react-icons/hi2";
+import {
+	getCurrentPlatform,
+	HOTKEYS,
+	matchesHotkeyEvent,
+} from "shared/hotkeys";
 import type { SlashCommand } from "../../hooks/useSlashCommands";
 import type { ModelOption, PermissionMode } from "../../types";
+import { IssueLinkCommand } from "../IssueLinkCommand";
 import {
 	MentionAnchor,
 	MentionProvider,
@@ -24,11 +29,11 @@ import {
 } from "../MentionPopover";
 import { ModelPicker } from "../ModelPicker";
 import { PermissionModePicker } from "../PermissionModePicker";
+import { PlusMenu } from "../PlusMenu";
 import { SlashCommandInput } from "../SlashCommandInput";
 
 interface ChatInputFooterProps {
 	cwd: string;
-	organizationId: string | null;
 	error: string | null;
 	isStreaming: boolean;
 	availableModels: ModelOption[];
@@ -81,18 +86,71 @@ function useDocumentDrag() {
 	return isDragging;
 }
 
-function PaperclipButton() {
+function ChatShortcuts({
+	setIssueLinkOpen,
+}: {
+	setIssueLinkOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
 	const attachments = usePromptInputAttachments();
+	const platform = getCurrentPlatform();
+	const attachKey = HOTKEYS.CHAT_ADD_ATTACHMENT.defaults[platform];
+	const linkKey = HOTKEYS.CHAT_LINK_ISSUE.defaults[platform];
+	const focusKey = HOTKEYS.FOCUS_CHAT_INPUT.defaults[platform];
+
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			if (attachKey && matchesHotkeyEvent(e, attachKey)) {
+				e.preventDefault();
+				attachments.openFileDialog();
+			}
+			if (linkKey && matchesHotkeyEvent(e, linkKey)) {
+				e.preventDefault();
+				setIssueLinkOpen((prev) => !prev);
+			}
+			if (focusKey && matchesHotkeyEvent(e, focusKey)) {
+				e.preventDefault();
+				const textarea = document.querySelector<HTMLTextAreaElement>(
+					"[data-slot=input-group-control]",
+				);
+				textarea?.focus();
+			}
+		};
+		document.addEventListener("keydown", handler);
+		return () => document.removeEventListener("keydown", handler);
+	}, [attachKey, linkKey, focusKey, attachments, setIssueLinkOpen]);
+
+	return null;
+}
+
+function IssueLinkInserter({
+	issueLinkOpen,
+	setIssueLinkOpen,
+}: {
+	issueLinkOpen: boolean;
+	setIssueLinkOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+	const { textInput } = usePromptInputController();
+
+	const handleSelectTask = useCallback(
+		(slug: string) => {
+			const current = textInput.value;
+			const needsSpace = current.length > 0 && !current.endsWith(" ");
+			textInput.setInput(`${current}${needsSpace ? " " : ""}@task:${slug} `);
+		},
+		[textInput],
+	);
+
 	return (
-		<PromptInputButton onClick={() => attachments.openFileDialog()}>
-			<HiMiniPaperClip className="size-4" />
-		</PromptInputButton>
+		<IssueLinkCommand
+			open={issueLinkOpen}
+			onOpenChange={setIssueLinkOpen}
+			onSelect={handleSelectTask}
+		/>
 	);
 }
 
 export function ChatInputFooter({
 	cwd,
-	organizationId,
 	error,
 	isStreaming,
 	availableModels,
@@ -110,6 +168,7 @@ export function ChatInputFooter({
 	onSlashCommandSend,
 }: ChatInputFooterProps) {
 	const isDragging = useDocumentDrag();
+	const [issueLinkOpen, setIssueLinkOpen] = useState(false);
 
 	return (
 		<div className="border-t bg-background px-4 py-3">
@@ -119,19 +178,30 @@ export function ChatInputFooter({
 						{error}
 					</div>
 				)}
-				<MentionProvider cwd={cwd} organizationId={organizationId}>
-					<SlashCommandInput
-						onCommandSend={onSlashCommandSend}
-						commands={slashCommands}
-					>
+				<SlashCommandInput
+					onCommandSend={onSlashCommandSend}
+					commands={slashCommands}
+				>
+					<MentionProvider cwd={cwd}>
 						<MentionAnchor>
-							<PromptInput
-								onSubmit={onSend}
-								multiple
-								maxFiles={5}
-								maxFileSize={10 * 1024 * 1024}
-								globalDrop
-							>
+							<div className="relative">
+								<span className="pointer-events-none absolute top-3 right-3 z-10 text-xs text-muted-foreground/50 [:focus-within>&]:hidden">
+									⌘F to focus
+								</span>
+								<PromptInput
+									onSubmit={onSend}
+									multiple
+									maxFiles={5}
+									maxFileSize={10 * 1024 * 1024}
+									globalDrop
+								>
+								<ChatShortcuts
+									setIssueLinkOpen={setIssueLinkOpen}
+								/>
+								<IssueLinkInserter
+									issueLinkOpen={issueLinkOpen}
+									setIssueLinkOpen={setIssueLinkOpen}
+								/>
 								{isDragging && (
 									<div className="mx-3 mt-3 flex self-stretch flex-col items-center gap-2 bg-muted py-6">
 										<div className="flex size-8 items-center justify-center rounded-full bg-muted-foreground/20">
@@ -151,12 +221,6 @@ export function ChatInputFooter({
 								<PromptInputTextarea placeholder="Ask to make changes, @mention files, run /commands" />
 								<PromptInputFooter>
 									<PromptInputTools>
-										<PaperclipButton />
-										<MentionTrigger />
-										<ThinkingToggle
-											enabled={thinkingEnabled}
-											onToggle={setThinkingEnabled}
-										/>
 										<ModelPicker
 											models={availableModels}
 											selectedModel={selectedModel}
@@ -164,20 +228,28 @@ export function ChatInputFooter({
 											open={modelSelectorOpen}
 											onOpenChange={setModelSelectorOpen}
 										/>
+										<ThinkingToggle
+											enabled={thinkingEnabled}
+											onToggle={setThinkingEnabled}
+										/>
 										<PermissionModePicker
 											selectedMode={permissionMode}
 											onSelectMode={setPermissionMode}
 										/>
 									</PromptInputTools>
-									<PromptInputSubmit
-										status={isStreaming ? "streaming" : undefined}
-										onClick={isStreaming ? onStop : undefined}
-									/>
+									<div className="flex items-center space-x-2">
+										<PlusMenu onLinkIssue={() => setIssueLinkOpen(true)} />
+										<PromptInputSubmit
+											status={isStreaming ? "streaming" : undefined}
+											onClick={isStreaming ? onStop : undefined}
+										/>
+									</div>
 								</PromptInputFooter>
 							</PromptInput>
+							</div>
 						</MentionAnchor>
-					</SlashCommandInput>
-				</MentionProvider>
+					</MentionProvider>
+				</SlashCommandInput>
 			</div>
 		</div>
 	);

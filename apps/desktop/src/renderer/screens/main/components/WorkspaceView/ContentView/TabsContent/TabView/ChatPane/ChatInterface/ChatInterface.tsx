@@ -5,15 +5,29 @@ import type { FileUIPart } from "ai";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "renderer/env.renderer";
+import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { getAuthToken } from "renderer/lib/auth-client";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { ChatInputFooter } from "./components/ChatInputFooter";
 import { MessageList } from "./components/MessageList";
-import { DEFAULT_MODEL } from "./constants";
+import { DEFAULT_AVAILABLE_MODELS, DEFAULT_MODEL } from "./constants";
 import type { SlashCommand } from "./hooks/useSlashCommands";
 import type { ChatInterfaceProps, ModelOption, PermissionMode } from "./types";
 
 const apiUrl = env.NEXT_PUBLIC_API_URL;
+
+function useAvailableModels(): ModelOption[] {
+	const [models, setModels] = useState<ModelOption[]>(DEFAULT_AVAILABLE_MODELS);
+	useEffect(() => {
+		apiTrpcClient.chat.getModels
+			.query()
+			.then((data) => {
+				if (data.models.length) setModels(data.models);
+			})
+			.catch(() => {});
+	}, []);
+	return models;
+}
 
 function getAuthHeaders(): Record<string, string> {
 	const token = getAuthToken();
@@ -45,7 +59,6 @@ async function uploadFile(
 	sessionId: string,
 	file: FileUIPart,
 ): Promise<FileUIPart> {
-	// Convert the data URL to a File object for upload
 	const response = await fetch(file.url);
 	const blob = await response.blob();
 	const filename = file.filename || "attachment";
@@ -70,185 +83,18 @@ async function uploadFile(
 	return { type: "file", ...result };
 }
 
-export function ChatInterface(props: ChatInterfaceProps) {
-	const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-	const [pendingFiles, setPendingFiles] = useState<FileUIPart[]>([]);
-
-	if (props.sessionId) {
-		return (
-			<ActiveChatInterface
-				{...props}
-				sessionId={props.sessionId}
-				pendingMessage={pendingMessage}
-				pendingFiles={pendingFiles}
-				clearPendingMessage={() => {
-					setPendingMessage(null);
-					setPendingFiles([]);
-				}}
-			/>
-		);
-	}
-	return (
-		<EmptyChatInterface
-			{...props}
-			onMessageSent={(text, files) => {
-				setPendingMessage(text);
-				setPendingFiles(files);
-			}}
-		/>
-	);
-}
-
-function EmptyChatInterface({
+export function ChatInterface({
+	sessionId,
 	organizationId,
 	deviceId,
 	workspaceId,
 	cwd,
 	paneId,
-	onMessageSent,
-}: ChatInterfaceProps & {
-	onMessageSent: (text: string, files: FileUIPart[]) => void;
-}) {
+}: ChatInterfaceProps) {
 	const switchChatSession = useTabsStore((s) => s.switchChatSession);
-	const [selectedModel, setSelectedModel] =
-		useState<ModelOption>(DEFAULT_MODEL);
-	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-	const [thinkingEnabled, setThinkingEnabled] = useState(false);
-	const [permissionMode, setPermissionMode] =
-		useState<PermissionMode>("bypassPermissions");
-	const [error, setError] = useState<string | null>(null);
-	const [sentMessage, setSentMessage] = useState<{
-		text: string;
-		files: FileUIPart[];
-	} | null>(null);
+	const availableModels = useAvailableModels();
 
-	const handleSend = useCallback(
-		(message: PromptInputMessage) => {
-			const text = message.text.trim();
-			const files = message.files ?? [];
-			if (!text && files.length === 0) return;
-			if (!organizationId) return;
-
-			setError(null);
-			setSentMessage({ text, files });
-
-			const newSessionId = crypto.randomUUID();
-			createSession(newSessionId, organizationId, deviceId, workspaceId)
-				.then(async () => {
-					// Config is fire-and-forget
-					fetch(`${apiUrl}/api/chat/${newSessionId}/stream/config`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...getAuthHeaders(),
-						},
-						body: JSON.stringify({
-							model: selectedModel.id,
-							permissionMode,
-							thinkingEnabled,
-							cwd,
-						}),
-					});
-
-					// Upload files immediately
-					let uploadedFiles: FileUIPart[] = [];
-					if (files.length > 0) {
-						const results = await Promise.all(
-							files.map((f) => uploadFile(newSessionId, f)),
-						);
-						uploadedFiles = results;
-					}
-
-					onMessageSent(text, uploadedFiles);
-					switchChatSession(paneId, newSessionId);
-				})
-				.catch((err) => {
-					setSentMessage(null);
-					setError(
-						err instanceof Error ? err.message : "Failed to create session",
-					);
-				});
-		},
-		[
-			organizationId,
-			deviceId,
-			workspaceId,
-			paneId,
-			switchChatSession,
-			onMessageSent,
-			selectedModel.id,
-			permissionMode,
-			thinkingEnabled,
-			cwd,
-		],
-	);
-
-	const displayMessages = sentMessage
-		? [
-				{
-					id: "pending",
-					role: "user" as const,
-					parts: [
-						...(sentMessage.text
-							? [{ type: "text" as const, text: sentMessage.text }]
-							: []),
-						...sentMessage.files,
-					],
-					createdAt: new Date(),
-				},
-			]
-		: [];
-
-	return (
-		<PromptInputProvider>
-			<div className="flex h-full flex-col bg-background">
-				<MessageList
-					messages={displayMessages}
-					isStreaming={!!sentMessage}
-					workspaceId={workspaceId}
-				/>
-				<ChatInputFooter
-					cwd={cwd}
-					organizationId={organizationId}
-					error={error}
-					isStreaming={!!sentMessage}
-					availableModels={[]}
-					selectedModel={selectedModel}
-					setSelectedModel={setSelectedModel}
-					modelSelectorOpen={modelSelectorOpen}
-					setModelSelectorOpen={setModelSelectorOpen}
-					permissionMode={permissionMode}
-					setPermissionMode={setPermissionMode}
-					thinkingEnabled={thinkingEnabled}
-					setThinkingEnabled={setThinkingEnabled}
-					slashCommands={[]}
-					onSend={handleSend}
-					onStop={() => {}}
-					onSlashCommandSend={() => {}}
-				/>
-			</div>
-		</PromptInputProvider>
-	);
-}
-
-// ---------------------------------------------------------------------------
-// ActiveChatInterface — self-contained via useChat
-// ---------------------------------------------------------------------------
-
-function ActiveChatInterface({
-	sessionId,
-	organizationId,
-	workspaceId,
-	cwd,
-	pendingMessage,
-	pendingFiles,
-	clearPendingMessage,
-}: Omit<ChatInterfaceProps, "sessionId"> & {
-	sessionId: string;
-	pendingMessage: string | null;
-	pendingFiles: FileUIPart[];
-	clearPendingMessage: () => void;
-}) {
+	// --- Shared UI state (declared once) ---
 	const [selectedModel, setSelectedModel] =
 		useState<ModelOption>(DEFAULT_MODEL);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -256,71 +102,65 @@ function ActiveChatInterface({
 	const [permissionMode, setPermissionMode] =
 		useState<PermissionMode>("bypassPermissions");
 
-	const {
-		ready,
-		messages,
-		isLoading: isStreaming,
-		sendMessage,
-		stop,
-		error,
-		metadata,
-	} = useChat({
+	// --- Pending message bridge (no-session → session) ---
+	const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+	const [pendingFiles, setPendingFiles] = useState<FileUIPart[]>([]);
+
+	// --- useChat — always called, inert when sessionId is null ---
+	const chat = useChat({
 		sessionId,
 		proxyUrl: apiUrl,
 		getHeaders: getAuthHeaders,
 	});
 
-	// Once ready, send the pending message through useChat's optimistic
-	// path — the optimistic insert replaces the synthetic message seamlessly.
+	// --- Slash commands (always active) ---
+	const { data: slashCommands = [] } =
+		chatServiceTrpc.workspace.getSlashCommands.useQuery({ cwd });
+
+	const activateMutation = chatServiceTrpc.session.activate.useMutation();
+
+	// --- Send pending message once the session is ready ---
 	const sentPendingRef = useRef(false);
 	useEffect(() => {
-		if (!ready || sentPendingRef.current) return;
+		if (!chat.ready || sentPendingRef.current) return;
 		if (!pendingMessage && pendingFiles.length === 0) return;
 		sentPendingRef.current = true;
-		sendMessage(
+		chat.sendMessage(
 			pendingMessage ?? "",
 			pendingFiles.length > 0 ? pendingFiles : undefined,
 		);
-		clearPendingMessage();
-	}, [ready, pendingMessage, pendingFiles, sendMessage, clearPendingMessage]);
+		setPendingMessage(null);
+		setPendingFiles([]);
+	}, [chat.ready, chat.sendMessage, pendingMessage, pendingFiles]);
 
-	// Show pending message immediately while useChat preloads.
-	const displayMessages =
-		messages.length === 0 && (pendingMessage || pendingFiles.length > 0)
-			? [
-					{
-						id: "pending",
-						role: "user" as const,
-						parts: [
-							...(pendingMessage
-								? [{ type: "text" as const, text: pendingMessage }]
-								: []),
-							...pendingFiles,
-						],
-						createdAt: new Date(),
-					},
-				]
-			: messages;
-
+	// --- Push initial config once session is ready ---
 	const registeredRef = useRef(false);
 	useEffect(() => {
-		if (!ready || registeredRef.current) return;
+		if (!chat.ready || registeredRef.current) return;
 		registeredRef.current = true;
-		metadata.updateConfig({
+		chat.metadata.updateConfig({
 			model: selectedModel.id,
 			permissionMode,
 			thinkingEnabled,
 			cwd,
 		});
 	}, [
-		ready,
+		chat.ready,
 		cwd,
-		metadata.updateConfig,
+		chat.metadata.updateConfig,
 		permissionMode,
 		selectedModel.id,
 		thinkingEnabled,
 	]);
 
+	// Reset refs when sessionId changes so pending/config are re-sent for new sessions
+	// biome-ignore lint/correctness/useExhaustiveDependencies: sessionId triggers the reset intentionally
+	useEffect(() => {
+		sentPendingRef.current = false;
+		registeredRef.current = false;
+	}, [sessionId]);
+
+	// --- Push config changes after initial registration ---
 	const prevConfigRef = useRef({
 		modelId: selectedModel.id,
 		permissionMode,
@@ -340,7 +180,7 @@ function ActiveChatInterface({
 			permissionMode,
 			thinkingEnabled,
 		};
-		metadata.updateConfig({
+		chat.metadata.updateConfig({
 			model: selectedModel.id,
 			permissionMode,
 			thinkingEnabled,
@@ -351,42 +191,113 @@ function ActiveChatInterface({
 		permissionMode,
 		thinkingEnabled,
 		cwd,
-		metadata.updateConfig,
+		chat.metadata.updateConfig,
 	]);
 
-	const { data: slashCommands = [] } =
-		chatServiceTrpc.workspace.getSlashCommands.useQuery({ cwd });
+	// --- Display messages: show synthetic pending while useChat preloads ---
+	const displayMessages =
+		chat.messages.length === 0 && (pendingMessage || pendingFiles.length > 0)
+			? [
+					{
+						id: "pending",
+						role: "user" as const,
+						parts: [
+							...(pendingMessage
+								? [{ type: "text" as const, text: pendingMessage }]
+								: []),
+							...pendingFiles,
+						],
+						createdAt: new Date(),
+					},
+				]
+			: chat.messages;
 
-	const activateMutation = chatServiceTrpc.session.activate.useMutation();
-
+	// --- Send handler: creates session if needed, otherwise sends directly ---
 	const handleSend = useCallback(
 		async (message: PromptInputMessage) => {
 			const text = message.text.trim();
 			const files = message.files ?? [];
 			if (!text && files.length === 0) return;
 
-			activateMutation.mutate({ sessionId });
+			if (sessionId) {
+				// Active session — send directly
+				activateMutation.mutate({ sessionId });
 
-			// Upload files immediately before sending the message
-			let uploadedFiles: FileUIPart[] | undefined;
-			if (files.length > 0) {
-				const results = await Promise.all(
-					files.map((f) => uploadFile(sessionId, f)),
-				);
-				uploadedFiles = results;
+				let uploadedFiles: FileUIPart[] | undefined;
+				if (files.length > 0) {
+					const results = await Promise.all(
+						files.map((f) => uploadFile(sessionId, f)),
+					);
+					uploadedFiles = results;
+				}
+
+				chat.sendMessage(text, uploadedFiles);
+			} else {
+				// No session — create one, then switch (re-renders with sessionId)
+				if (!organizationId) return;
+
+				const newSessionId = crypto.randomUUID();
+				try {
+					await createSession(
+						newSessionId,
+						organizationId,
+						deviceId,
+						workspaceId,
+					);
+
+					// Config is fire-and-forget
+					fetch(`${apiUrl}/api/chat/${newSessionId}/stream/config`, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							...getAuthHeaders(),
+						},
+						body: JSON.stringify({
+							model: selectedModel.id,
+							permissionMode,
+							thinkingEnabled,
+							cwd,
+						}),
+					});
+
+					// Upload files immediately
+					let uploadedFiles: FileUIPart[] = [];
+					if (files.length > 0) {
+						uploadedFiles = await Promise.all(
+							files.map((f) => uploadFile(newSessionId, f)),
+						);
+					}
+
+					setPendingMessage(text);
+					setPendingFiles(uploadedFiles);
+					switchChatSession(paneId, newSessionId);
+				} catch {
+					// Session creation failed — don't navigate
+				}
 			}
-
-			sendMessage(text, uploadedFiles);
 		},
-		[sendMessage, activateMutation, sessionId],
+		[
+			sessionId,
+			organizationId,
+			deviceId,
+			workspaceId,
+			paneId,
+			switchChatSession,
+			activateMutation,
+			chat.sendMessage,
+			selectedModel.id,
+			permissionMode,
+			thinkingEnabled,
+			cwd,
+		],
 	);
 
 	const handleStop = useCallback(
 		(e: React.MouseEvent) => {
 			e.preventDefault();
-			stop();
+			chat.stop();
 		},
-		[stop],
+		[chat.stop],
 	);
 
 	const handleSlashCommandSend = useCallback(
@@ -396,20 +307,21 @@ function ActiveChatInterface({
 		[handleSend],
 	);
 
+	const isStreaming = chat.isLoading || !!pendingMessage;
+
 	return (
 		<PromptInputProvider>
 			<div className="flex h-full flex-col bg-background">
 				<MessageList
 					messages={displayMessages}
-					isStreaming={isStreaming || !!pendingMessage}
+					isStreaming={isStreaming}
 					workspaceId={workspaceId}
 				/>
 				<ChatInputFooter
 					cwd={cwd}
-					organizationId={organizationId}
-					error={error}
-					isStreaming={isStreaming || !!pendingMessage}
-					availableModels={[]}
+					error={chat.error}
+					isStreaming={isStreaming}
+					availableModels={availableModels}
 					selectedModel={selectedModel}
 					setSelectedModel={setSelectedModel}
 					modelSelectorOpen={modelSelectorOpen}

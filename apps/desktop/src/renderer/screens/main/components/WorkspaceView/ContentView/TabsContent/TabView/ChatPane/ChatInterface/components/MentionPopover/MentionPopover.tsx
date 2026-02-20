@@ -18,22 +18,18 @@ import {
 	PopoverTrigger,
 } from "@superset/ui/popover";
 import { cn } from "@superset/ui/utils";
-import Fuse from "fuse.js";
 import {
 	createContext,
 	type ReactNode,
 	useContext,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { HiMiniAtSymbol } from "react-icons/hi2";
-import { LuSquareCheck } from "react-icons/lu";
-import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { getFileIcon } from "renderer/screens/main/components/WorkspaceView/RightSidebar/FilesView/utils";
 
-const MENTION_SEARCH_LIMIT = 20;
+const MAX_RESULTS = 20;
 
 function findAtTriggerIndex(value: string, prevValue: string): number {
 	if (value.length !== prevValue.length + 1) return -1;
@@ -67,19 +63,11 @@ interface MentionContextValue {
 
 const MentionContext = createContext<MentionContextValue | null>(null);
 
-interface TaskItem {
-	id: string;
-	slug: string;
-	title: string;
-}
-
 export function MentionProvider({
 	cwd,
-	organizationId,
 	children,
 }: {
 	cwd: string;
-	organizationId: string | null;
 	children: ReactNode;
 }) {
 	const [open, setOpen] = useState(false);
@@ -94,88 +82,41 @@ export function MentionProvider({
 		const idx = findAtTriggerIndex(textInput.value, prev);
 		if (idx !== -1) {
 			setTriggerIndex(idx);
+			setSearchQuery("");
 			setOpen(true);
 		}
 	}, [textInput.value]);
-
-	// Detect @task: prefix for task search mode
-	const isTaskSearch = searchQuery.startsWith("task:");
-	const taskQuery = isTaskSearch ? searchQuery.slice(5) : "";
-	const fileQuery = isTaskSearch ? "" : searchQuery;
 
 	// File search via chatService (IPC to main process)
 	const { data: fileResults } = chatServiceTrpc.workspace.searchFiles.useQuery(
 		{
 			rootPath: cwd,
-			query: fileQuery,
+			query: searchQuery,
 			includeHidden: false,
-			limit: MENTION_SEARCH_LIMIT,
+			limit: MAX_RESULTS,
 		},
 		{
-			enabled: open && fileQuery.length > 0 && !!cwd,
+			enabled: open && searchQuery.length > 0 && !!cwd,
 			staleTime: 1000,
 			placeholderData: (previous) => previous ?? [],
 		},
 	);
 
-	// Task search — client-side with fuse.js over org tasks
-	const [orgTasks, setOrgTasks] = useState<TaskItem[]>([]);
-	useEffect(() => {
-		if (!organizationId) return;
-		apiTrpcClient.task.byOrganization
-			.query(organizationId)
-			.then((result) => {
-				setOrgTasks(
-					result.map((t) => ({ id: t.id, slug: t.slug, title: t.title })),
-				);
-			})
-			.catch(() => {});
-	}, [organizationId]);
-
-	const taskResults = useMemo(() => {
-		if (!isTaskSearch || !orgTasks.length) return [];
-		if (!taskQuery) return orgTasks.slice(0, MENTION_SEARCH_LIMIT);
-		const fuse = new Fuse(orgTasks, {
-			keys: [
-				{ name: "slug", weight: 3 },
-				{ name: "title", weight: 2 },
-			],
-			threshold: 0.4,
-			ignoreLocation: true,
-		});
-		return fuse
-			.search(taskQuery, { limit: MENTION_SEARCH_LIMIT })
-			.map((r) => r.item);
-	}, [orgTasks, taskQuery, isTaskSearch]);
+	const files = fileResults ?? [];
 
 	const handleSelectFile = (relativePath: string) => {
 		const current = textInput.value;
 		const before = current.slice(0, triggerIndex);
 		const after = current.slice(triggerIndex + 1);
 		textInput.setInput(`${before}@${relativePath} ${after}`);
-		setSearchQuery("");
-		setTriggerIndex(-1);
-		setOpen(false);
-	};
-
-	const handleSelectTask = (slug: string) => {
-		const current = textInput.value;
-		const before = current.slice(0, triggerIndex);
-		const after = current.slice(triggerIndex + 1);
-		textInput.setInput(`${before}@task:${slug} ${after}`);
-		setSearchQuery("");
 		setTriggerIndex(-1);
 		setOpen(false);
 	};
 
 	const handleOpenChange = (nextOpen: boolean) => {
+		if (nextOpen) setSearchQuery("");
 		setOpen(nextOpen);
-		if (!nextOpen) setSearchQuery("");
 	};
-
-	const hasFileResults = (fileResults ?? []).length > 0;
-	const hasTaskResults = taskResults.length > 0;
-	const hasResults = hasFileResults || hasTaskResults;
 
 	return (
 		<MentionContext.Provider value={{ open, setOpen }}>
@@ -189,21 +130,21 @@ export function MentionProvider({
 				>
 					<Command shouldFilter={false}>
 						<CommandInput
-							placeholder="Search files or type task:SLUG..."
+							placeholder="Search files..."
 							value={searchQuery}
 							onValueChange={setSearchQuery}
 						/>
 						<CommandList className="max-h-[200px] [&::-webkit-scrollbar]:hidden">
-							{!hasResults && (
+							{files.length === 0 && (
 								<CommandEmpty className="px-2 py-3 text-left text-xs text-muted-foreground">
 									{searchQuery.length === 0
-										? "Type to search files, or task: for tasks..."
+										? "Type to search files..."
 										: "No results found."}
 								</CommandEmpty>
 							)}
-							{hasFileResults && (
+							{files.length > 0 && (
 								<CommandGroup heading="Files">
-									{(fileResults ?? []).map((file) => {
+									{files.map((file) => {
 										const dirPath = getDirectoryPath(file.relativePath);
 										const { icon: Icon, color } = getFileIcon(
 											file.name,
@@ -226,25 +167,6 @@ export function MentionProvider({
 											</CommandItem>
 										);
 									})}
-								</CommandGroup>
-							)}
-							{hasTaskResults && (
-								<CommandGroup heading="Tasks">
-									{taskResults.map((task) => (
-										<CommandItem
-											key={task.id}
-											value={task.slug}
-											onSelect={() => handleSelectTask(task.slug)}
-										>
-											<LuSquareCheck className="size-3.5 shrink-0 text-muted-foreground" />
-											<span className="truncate text-xs font-medium">
-												{task.slug}
-											</span>
-											<span className="min-w-0 truncate text-xs text-muted-foreground">
-												{task.title}
-											</span>
-										</CommandItem>
-									))}
 								</CommandGroup>
 							)}
 						</CommandList>

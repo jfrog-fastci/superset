@@ -1,1 +1,4 @@
-export { getCredentialsFromConfig, getCredentialsFromKeychain } from "./anthropic";
+export {
+	getCredentialsFromConfig,
+	getCredentialsFromKeychain,
+} from "./anthropic";
