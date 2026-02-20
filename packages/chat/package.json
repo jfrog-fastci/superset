@@ -17,6 +17,10 @@
 			"default": "./src/client/index.ts"
 		}
 	},
+	"scripts": {
+		"typecheck": "tsc --noEmit --emitDeclarationOnly false",
+		"test": "bun test"
+	},
 	"dependencies": {
 		"@durable-streams/client": "^0.2.1",
 		"@durable-streams/state": "^0.2.0",
@@ -39,6 +43,7 @@
 	},
 	"devDependencies": {
 		"@superset/typescript": "workspace:*",
+		"@types/bun": "^1.2.17",
 		"@types/node": "^24.9.1",
 		"@types/react": "~19.2.2",
 		"typescript": "^5.9.3"
