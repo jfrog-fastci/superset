@@ -37,8 +37,8 @@ interface ChatInputFooterProps {
 	error: string | null;
 	isStreaming: boolean;
 	availableModels: ModelOption[];
-	selectedModel: ModelOption;
-	setSelectedModel: React.Dispatch<React.SetStateAction<ModelOption>>;
+	selectedModel: ModelOption | null;
+	setSelectedModel: React.Dispatch<React.SetStateAction<ModelOption | null>>;
 	modelSelectorOpen: boolean;
 	setModelSelectorOpen: React.Dispatch<React.SetStateAction<boolean>>;
 	permissionMode: PermissionMode;

@@ -10,14 +10,16 @@ import { getAuthToken } from "renderer/lib/auth-client";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { ChatInputFooter } from "./components/ChatInputFooter";
 import { MessageList } from "./components/MessageList";
-import { DEFAULT_AVAILABLE_MODELS, DEFAULT_MODEL } from "./constants";
 import type { SlashCommand } from "./hooks/useSlashCommands";
 import type { ChatInterfaceProps, ModelOption, PermissionMode } from "./types";
 
 const apiUrl = env.NEXT_PUBLIC_API_URL;
 
-function useAvailableModels(): ModelOption[] {
-	const [models, setModels] = useState<ModelOption[]>(DEFAULT_AVAILABLE_MODELS);
+function useAvailableModels(): {
+	models: ModelOption[];
+	defaultModel: ModelOption | null;
+} {
+	const [models, setModels] = useState<ModelOption[]>([]);
 	useEffect(() => {
 		apiTrpcClient.chat.getModels
 			.query()
@@ -26,7 +28,7 @@ function useAvailableModels(): ModelOption[] {
 			})
 			.catch(() => {});
 	}, []);
-	return models;
+	return { models, defaultModel: models[0] ?? null };
 }
 
 function getAuthHeaders(): Record<string, string> {
@@ -92,11 +94,11 @@ export function ChatInterface({
 	paneId,
 }: ChatInterfaceProps) {
 	const switchChatSession = useTabsStore((s) => s.switchChatSession);
-	const availableModels = useAvailableModels();
+	const { models: availableModels, defaultModel } = useAvailableModels();
 
 	// --- Shared UI state (declared once) ---
-	const [selectedModel, setSelectedModel] =
-		useState<ModelOption>(DEFAULT_MODEL);
+	const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
+	const activeModel = selectedModel ?? defaultModel;
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 	const [thinkingEnabled, setThinkingEnabled] = useState(false);
 	const [permissionMode, setPermissionMode] =
@@ -139,7 +141,7 @@ export function ChatInterface({
 		if (!chat.ready || registeredRef.current) return;
 		registeredRef.current = true;
 		chat.metadata.updateConfig({
-			model: selectedModel.id,
+			model: activeModel?.id,
 			permissionMode,
 			thinkingEnabled,
 			cwd,
@@ -149,7 +151,7 @@ export function ChatInterface({
 		cwd,
 		chat.metadata.updateConfig,
 		permissionMode,
-		selectedModel.id,
+		activeModel?.id,
 		thinkingEnabled,
 	]);
 
@@ -162,32 +164,32 @@ export function ChatInterface({
 
 	// --- Push config changes after initial registration ---
 	const prevConfigRef = useRef({
-		modelId: selectedModel.id,
+		modelId: activeModel?.id,
 		permissionMode,
 		thinkingEnabled,
 	});
 	useEffect(() => {
 		const prev = prevConfigRef.current;
 		if (
-			prev.modelId === selectedModel.id &&
+			prev.modelId === activeModel?.id &&
 			prev.permissionMode === permissionMode &&
 			prev.thinkingEnabled === thinkingEnabled
 		) {
 			return;
 		}
 		prevConfigRef.current = {
-			modelId: selectedModel.id,
+			modelId: activeModel?.id,
 			permissionMode,
 			thinkingEnabled,
 		};
 		chat.metadata.updateConfig({
-			model: selectedModel.id,
+			model: activeModel?.id,
 			permissionMode,
 			thinkingEnabled,
 			cwd,
 		});
 	}, [
-		selectedModel.id,
+		activeModel?.id,
 		permissionMode,
 		thinkingEnabled,
 		cwd,
@@ -253,7 +255,7 @@ export function ChatInterface({
 							...getAuthHeaders(),
 						},
 						body: JSON.stringify({
-							model: selectedModel.id,
+							model: activeModel?.id,
 							permissionMode,
 							thinkingEnabled,
 							cwd,
@@ -285,7 +287,7 @@ export function ChatInterface({
 			switchChatSession,
 			activateMutation,
 			chat.sendMessage,
-			selectedModel.id,
+			activeModel?.id,
 			permissionMode,
 			thinkingEnabled,
 			cwd,
@@ -322,7 +324,7 @@ export function ChatInterface({
 					error={chat.error}
 					isStreaming={isStreaming}
 					availableModels={availableModels}
-					selectedModel={selectedModel}
+					selectedModel={activeModel}
 					setSelectedModel={setSelectedModel}
 					modelSelectorOpen={modelSelectorOpen}
 					setModelSelectorOpen={setModelSelectorOpen}
