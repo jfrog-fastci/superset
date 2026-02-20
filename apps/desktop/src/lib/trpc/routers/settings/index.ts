@@ -550,26 +550,6 @@ export const createSettingsRouter = () => {
 				return { success: true };
 			}),
 
-		getDefaultProjectPath: publicProcedure.query(() => {
-			const row = getSettings();
-			return row.defaultProjectPath ?? null;
-		}),
-
-		setDefaultProjectPath: publicProcedure
-			.input(z.object({ path: z.string() }))
-			.mutation(({ input }) => {
-				localDb
-					.insert(settings)
-					.values({ id: 1, defaultProjectPath: input.path })
-					.onConflictDoUpdate({
-						target: settings.id,
-						set: { defaultProjectPath: input.path },
-					})
-					.run();
-
-				return { success: true };
-			}),
-
 		getNotificationSoundsMuted: publicProcedure.query(() => {
 			const row = getSettings();
 			return row.notificationSoundsMuted ?? false;
@@ -635,6 +615,26 @@ export const createSettingsRouter = () => {
 					.onConflictDoUpdate({
 						target: settings.id,
 						set: { showResourceMonitor: input.enabled },
+					})
+					.run();
+
+				return { success: true };
+			}),
+
+		getWorktreeBaseDir: publicProcedure.query(() => {
+			const row = getSettings();
+			return row.worktreeBaseDir ?? null;
+		}),
+
+		setWorktreeBaseDir: publicProcedure
+			.input(z.object({ path: z.string().nullable() }))
+			.mutation(({ input }) => {
+				localDb
+					.insert(settings)
+					.values({ id: 1, worktreeBaseDir: input.path })
+					.onConflictDoUpdate({
+						target: settings.id,
+						set: { worktreeBaseDir: input.path },
 					})
 					.run();
 
