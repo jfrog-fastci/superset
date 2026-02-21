@@ -37,37 +37,33 @@ describe("shell-wrappers", () => {
 		rmSync(TEST_ROOT, { recursive: true, force: true });
 	});
 
-	it("creates zsh wrappers with interactive .zlogin sourcing and command shims", () => {
+	it("creates zsh wrappers with function shims in .zshrc and clean .zlogin", () => {
 		createZshWrapper();
 
 		const zshrc = readFileSync(path.join(TEST_ZSH_DIR, ".zshrc"), "utf-8");
 		const zlogin = readFileSync(path.join(TEST_ZSH_DIR, ".zlogin"), "utf-8");
 
-		expect(zshrc).toContain("_superset_prepend_bin()");
+		// .zshrc defines function shims (absolute paths, override PATH lookup)
 		expect(zshrc).toContain(`claude() { "${TEST_BIN_DIR}/claude" "$@"; }`);
 		expect(zshrc).toContain(`codex() { "${TEST_BIN_DIR}/codex" "$@"; }`);
 		expect(zshrc).toContain(`opencode() { "${TEST_BIN_DIR}/opencode" "$@"; }`);
 		expect(zshrc).toContain(`copilot() { "${TEST_BIN_DIR}/copilot" "$@"; }`);
-		expect(zshrc).toContain("rehash 2>/dev/null || true");
 
+		// .zlogin sources user's .zlogin and resets ZDOTDIR — no shims needed
+		// (function shims from .zshrc persist across rc files)
 		expect(zlogin).toContain("if [[ -o interactive ]]; then");
 		expect(zlogin).toContain('source "$_superset_home/.zlogin"');
-		expect(zlogin).toContain("_superset_prepend_bin()");
-		expect(zlogin).toContain(`claude() { "${TEST_BIN_DIR}/claude" "$@"; }`);
-		expect(zlogin).toContain(`copilot() { "${TEST_BIN_DIR}/copilot" "$@"; }`);
-		expect(zlogin).toContain("rehash 2>/dev/null || true");
+		expect(zlogin).not.toContain("claude()");
 	});
 
-	it("creates bash wrapper with command shims and idempotent PATH prepend", () => {
+	it("creates bash wrapper with function shims", () => {
 		createBashWrapper();
 
 		const rcfile = readFileSync(path.join(TEST_BASH_DIR, "rcfile"), "utf-8");
-		expect(rcfile).toContain("_superset_prepend_bin()");
 		expect(rcfile).toContain(`claude() { "${TEST_BIN_DIR}/claude" "$@"; }`);
 		expect(rcfile).toContain(`codex() { "${TEST_BIN_DIR}/codex" "$@"; }`);
 		expect(rcfile).toContain(`opencode() { "${TEST_BIN_DIR}/opencode" "$@"; }`);
 		expect(rcfile).toContain(`copilot() { "${TEST_BIN_DIR}/copilot" "$@"; }`);
-		expect(rcfile).toContain("hash -r 2>/dev/null || true");
 	});
 
 	it("uses login zsh command args when wrappers exist", () => {
