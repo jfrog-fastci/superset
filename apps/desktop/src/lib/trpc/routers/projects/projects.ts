@@ -13,6 +13,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, isNull, not } from "drizzle-orm";
 import type { BrowserWindow } from "electron";
 import { dialog } from "electron";
+import { resolveDefaultEditor } from "../external";
 import { track } from "main/lib/analytics";
 import { localDb } from "main/lib/local-db";
 import {
@@ -278,13 +279,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 		getDefaultApp: publicProcedure
 			.input(z.object({ projectId: z.string() }))
 			.query(({ input }) => {
-				const project = localDb
-					.select()
-					.from(projects)
-					.where(eq(projects.id, input.projectId))
-					.get();
-
-				return project?.defaultApp ?? "cursor";
+				return resolveDefaultEditor(input.projectId);
 			}),
 
 		getRecents: publicProcedure.query((): Project[] => {

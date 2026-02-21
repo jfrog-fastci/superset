@@ -300,7 +300,7 @@ function WorkspacePage() {
 
 	// Open in last used app shortcut
 	const projectId = workspace?.projectId;
-	const { data: defaultApp = "cursor" } =
+	const { data: defaultApp } =
 		electronTrpc.projects.getDefaultApp.useQuery(
 			{ projectId: projectId as string },
 			{ enabled: !!projectId },
@@ -316,7 +316,7 @@ function WorkspacePage() {
 	useAppHotkey(
 		"OPEN_IN_APP",
 		() => {
-			if (workspace?.worktreePath) {
+			if (workspace?.worktreePath && defaultApp) {
 				openInApp.mutate({
 					path: workspace.worktreePath,
 					app: defaultApp,

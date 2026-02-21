@@ -100,7 +100,7 @@ const ALL_APP_OPTIONS = [
 ];
 
 export const getAppOption = (id: ExternalApp) =>
-	ALL_APP_OPTIONS.find((app) => app.id === id) ?? APP_OPTIONS[1];
+	ALL_APP_OPTIONS.find((app) => app.id === id);
 
 export interface OpenInButtonProps {
 	path: string | undefined;
@@ -126,7 +126,7 @@ export function OpenInButton({
 	const showCopyPathShortcut =
 		showShortcuts && copyPathShortcut !== "Unassigned";
 
-	const { data: defaultApp = "cursor" } =
+	const { data: defaultApp } =
 		electronTrpc.projects.getDefaultApp.useQuery(
 			{ projectId: projectId as string },
 			{ enabled: !!projectId },
@@ -141,7 +141,7 @@ export function OpenInButton({
 	});
 	const copyPath = electronTrpc.external.copyPath.useMutation();
 
-	const currentApp = getAppOption(defaultApp);
+	const currentApp = defaultApp ? getAppOption(defaultApp) ?? null : null;
 
 	const handleOpenIn = (app: ExternalApp) => {
 		if (!path) return;
@@ -156,13 +156,13 @@ export function OpenInButton({
 	};
 
 	const handleOpenLastUsed = () => {
-		if (!path) return;
+		if (!path || !defaultApp) return;
 		openInApp.mutate({ path, app: defaultApp, projectId });
 	};
 
 	return (
 		<ButtonGroup>
-			{label && (
+			{label && currentApp && (
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button
