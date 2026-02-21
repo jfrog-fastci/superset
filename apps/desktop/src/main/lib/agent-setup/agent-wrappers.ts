@@ -14,6 +14,34 @@ export const WRAPPER_MARKER = "# Superset agent-wrapper v1";
 export const CLAUDE_SETTINGS_FILE = "claude-settings.json";
 export const OPENCODE_PLUGIN_FILE = "superset-notify.js";
 
+/**
+ * Write a file only if its content has changed, avoiding unnecessary
+ * filesystem writes/events on every app startup.
+ */
+export function writeIfChanged(
+	filePath: string,
+	content: string,
+	mode: number,
+): void {
+	try {
+		const existing = fs.readFileSync(filePath, "utf-8");
+		if (existing === content) {
+			// Ensure correct permissions for executable files
+			if ((mode & 0o111) !== 0) {
+				try {
+					fs.accessSync(filePath, fs.constants.X_OK);
+				} catch {
+					fs.chmodSync(filePath, mode);
+				}
+			}
+			return;
+		}
+	} catch {
+		// File doesn't exist or can't be read — write below
+	}
+	fs.writeFileSync(filePath, content, { mode });
+}
+
 const OPENCODE_PLUGIN_SIGNATURE = "// Superset opencode plugin";
 const OPENCODE_PLUGIN_VERSION = "v8";
 export const OPENCODE_PLUGIN_MARKER = `${OPENCODE_PLUGIN_SIGNATURE} ${OPENCODE_PLUGIN_VERSION}`;
@@ -120,13 +148,12 @@ function createClaudeSettings(): string {
 	const notifyPath = getNotifyScriptPath();
 	const settings = getClaudeSettingsContent(notifyPath);
 
-	fs.writeFileSync(settingsPath, settings, { mode: 0o644 });
+	writeIfChanged(settingsPath, settings, 0o644);
 	return settingsPath;
 }
 
 function createWrapper(binaryName: string, script: string): void {
-	fs.writeFileSync(getWrapperPath(binaryName), script, { mode: 0o755 });
-	console.log(`[agent-setup] Created ${binaryName} wrapper`);
+	writeIfChanged(getWrapperPath(binaryName), script, 0o755);
 }
 
 export function createClaudeWrapper(): void {
@@ -155,8 +182,7 @@ export function createOpenCodePlugin(): void {
 	const pluginPath = getOpenCodePluginPath();
 	const notifyPath = getNotifyScriptPath();
 	const content = getOpenCodePluginContent(notifyPath);
-	fs.writeFileSync(pluginPath, content, { mode: 0o644 });
-	console.log("[agent-setup] Created OpenCode plugin");
+	writeIfChanged(pluginPath, content, 0o644);
 }
 
 /**
@@ -287,8 +313,7 @@ export function getCursorHooksJsonContent(hookScriptPath: string): string {
 export function createCursorHookScript(): void {
 	const scriptPath = getCursorHookScriptPath();
 	const content = getCursorHookScriptContent();
-	fs.writeFileSync(scriptPath, content, { mode: 0o755 });
-	console.log("[agent-setup] Created Cursor hook script");
+	writeIfChanged(scriptPath, content, 0o755);
 }
 
 export function createCursorAgentWrapper(): void {
@@ -303,8 +328,7 @@ export function createCursorHooksJson(): void {
 
 	const dir = path.dirname(globalPath);
 	fs.mkdirSync(dir, { recursive: true });
-	fs.writeFileSync(globalPath, content, { mode: 0o644 });
-	console.log("[agent-setup] Created Cursor hooks.json");
+	writeIfChanged(globalPath, content, 0o644);
 }
 
 // --- Gemini CLI support ---
@@ -405,8 +429,7 @@ export function getGeminiSettingsJsonContent(hookScriptPath: string): string {
 export function createGeminiHookScript(): void {
 	const scriptPath = getGeminiHookScriptPath();
 	const content = getGeminiHookScriptContent();
-	fs.writeFileSync(scriptPath, content, { mode: 0o755 });
-	console.log("[agent-setup] Created Gemini hook script");
+	writeIfChanged(scriptPath, content, 0o755);
 }
 
 export function createGeminiWrapper(): void {
@@ -421,8 +444,7 @@ export function createGeminiSettingsJson(): void {
 
 	const dir = path.dirname(globalPath);
 	fs.mkdirSync(dir, { recursive: true });
-	fs.writeFileSync(globalPath, content, { mode: 0o644 });
-	console.log("[agent-setup] Created Gemini settings.json");
+	writeIfChanged(globalPath, content, 0o644);
 }
 
 // --- GitHub Copilot CLI support ---
@@ -453,8 +475,7 @@ export function getCopilotHookScriptContent(): string {
 export function createCopilotHookScript(): void {
 	const scriptPath = getCopilotHookScriptPath();
 	const content = getCopilotHookScriptContent();
-	fs.writeFileSync(scriptPath, content, { mode: 0o755 });
-	console.log("[agent-setup] Created Copilot hook script");
+	writeIfChanged(scriptPath, content, 0o755);
 }
 
 export function getCopilotHooksJsonContent(hookScriptPath: string): string {

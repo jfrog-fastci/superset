@@ -26,5 +26,19 @@ export function getNotifyScriptContent(): string {
 export function createNotifyScript(): void {
 	const notifyPath = getNotifyScriptPath();
 	const script = getNotifyScriptContent();
+
+	// Skip write if content is unchanged (avoid unnecessary filesystem events)
+	try {
+		if (fs.readFileSync(notifyPath, "utf-8") === script) {
+			try {
+				fs.accessSync(notifyPath, fs.constants.X_OK);
+			} catch {
+				fs.chmodSync(notifyPath, 0o755);
+			}
+			return;
+		}
+	} catch {
+		// File doesn't exist — write below
+	}
 	fs.writeFileSync(notifyPath, script, { mode: 0o755 });
 }

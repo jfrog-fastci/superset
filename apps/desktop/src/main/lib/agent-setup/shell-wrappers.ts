@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { writeIfChanged } from "./agent-wrappers";
 import { BASH_DIR, BIN_DIR, ZSH_DIR } from "./paths";
 
 const ZSH_RC = path.join(ZSH_DIR, ".zshrc");
@@ -38,7 +39,7 @@ export function createZshWrapper(): void {
 _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
 [[ -f "$_superset_home/.zprofile" ]] && source "$_superset_home/.zprofile"
 `;
-	fs.writeFileSync(zprofilePath, zprofileScript, { mode: 0o644 });
+	writeIfChanged(zprofilePath, zprofileScript, 0o644);
 
 	// Reset ZDOTDIR before sourcing so Oh My Zsh works correctly
 	const zshrcPath = path.join(ZSH_DIR, ".zshrc");
@@ -52,7 +53,7 @@ rehash 2>/dev/null || true
 # Restore ZDOTDIR so our .zlogin runs after user's .zlogin
 export ZDOTDIR="${ZSH_DIR}"
 `;
-	fs.writeFileSync(zshrcPath, zshrcScript, { mode: 0o644 });
+	writeIfChanged(zshrcPath, zshrcScript, 0o644);
 
 	// .zlogin runs AFTER .zshrc in login shells. By restoring ZDOTDIR above,
 	// zsh sources our .zlogin instead of the user's directly. We source the
@@ -70,9 +71,7 @@ ${buildShimFunctions()}
 rehash 2>/dev/null || true
 export ZDOTDIR="$_superset_home"
 `;
-	fs.writeFileSync(zloginPath, zloginScript, { mode: 0o644 });
-
-	console.log("[agent-setup] Created zsh wrapper");
+	writeIfChanged(zloginPath, zloginScript, 0o644);
 }
 
 export function createBashWrapper(): void {
@@ -101,8 +100,7 @@ hash -r 2>/dev/null || true
 # Minimal prompt (path/env shown in toolbar) - emerald to match app theme
 export PS1=$'\\[\\e[1;38;2;52;211;153m\\]❯\\[\\e[0m\\] '
 `;
-	fs.writeFileSync(rcfilePath, script, { mode: 0o644 });
-	console.log("[agent-setup] Created bash wrapper");
+	writeIfChanged(rcfilePath, script, 0o644);
 }
 
 export function getShellEnv(shell: string): Record<string, string> {
