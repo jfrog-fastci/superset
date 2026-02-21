@@ -55,6 +55,10 @@ export function useGitChangesStatus({
 	);
 
 	// Phase 2: Detailed status (slow — numstat, untracked line counts, against-base diff)
+	// Polls at 2x the quick interval to stay reasonably fresh without doubling load
+	const detailedRefetchInterval = refetchInterval
+		? refetchInterval * 2
+		: undefined;
 	const {
 		data: detailedStatus,
 		isLoading: isDetailedLoading,
@@ -67,6 +71,7 @@ export function useGitChangesStatus({
 		{
 			enabled:
 				!quickOnly && enabled && !!worktreePath && !!branchData && !!quickStatus,
+			refetchInterval: detailedRefetchInterval,
 			staleTime: staleTime ?? 10_000,
 			refetchOnWindowFocus,
 		},

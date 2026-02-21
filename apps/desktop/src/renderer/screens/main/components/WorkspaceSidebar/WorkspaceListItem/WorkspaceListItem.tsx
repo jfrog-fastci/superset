@@ -139,7 +139,6 @@ export function WorkspaceListItem({
 		worktreePath,
 		enabled: hasHovered && !!worktreePath,
 		staleTime: GITHUB_STATUS_STALE_TIME,
-		quickOnly: true,
 	});
 
 	const { data: aheadBehind } = electronTrpc.workspaces.getAheadBehind.useQuery(
@@ -167,9 +166,16 @@ export function WorkspaceListItem({
 						...localChanges.unstaged,
 						...localChanges.untracked,
 					];
+		if (allFiles.length === 0) return null;
 		const additions = allFiles.reduce((sum, f) => sum + (f.additions || 0), 0);
 		const deletions = allFiles.reduce((sum, f) => sum + (f.deletions || 0), 0);
-		if (additions === 0 && deletions === 0) return null;
+		if (additions === 0 && deletions === 0) {
+			if (localChanges.truncated) {
+				// Stats permanently unavailable due to large changeset — show file count
+				return { additions: allFiles.length, deletions: 0 };
+			}
+			return null;
+		}
 		return { additions, deletions };
 	}, [localChanges]);
 
