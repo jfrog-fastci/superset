@@ -1,12 +1,14 @@
 -- Migrate non-UUID workspace IDs to valid UUID v4 format.
 -- The cloud database expects workspace IDs to be UUIDs (z.string().uuid()).
 -- Some workspaces may have been created with non-UUID IDs.
+--
+-- The entire migration runs in a single statement block to ensure atomicity.
+-- If any step fails, all changes are rolled back.
 
--- Step 1: Build a mapping table of old_id -> new_id for non-UUID workspaces
 CREATE TABLE IF NOT EXISTS _workspace_id_map (
     old_id TEXT PRIMARY KEY,
     new_id TEXT NOT NULL
-);--> statement-breakpoint
+);
 
 INSERT INTO _workspace_id_map (old_id, new_id)
 SELECT
@@ -21,9 +23,8 @@ WHERE length(id) != 36
    OR substr(id, 9, 1) != '-'
    OR substr(id, 14, 1) != '-'
    OR substr(id, 19, 1) != '-'
-   OR substr(id, 24, 1) != '-';--> statement-breakpoint
+   OR substr(id, 24, 1) != '-';
 
--- Step 2: Update settings.last_active_workspace_id if it points to a non-UUID workspace
 UPDATE settings
 SET last_active_workspace_id = (
     SELECT new_id FROM _workspace_id_map
@@ -31,9 +32,8 @@ SET last_active_workspace_id = (
 )
 WHERE last_active_workspace_id IN (
     SELECT old_id FROM _workspace_id_map
-);--> statement-breakpoint
+);
 
--- Step 3: Update workspace IDs to the new UUIDs
 UPDATE workspaces
 SET id = (
     SELECT new_id FROM _workspace_id_map
@@ -41,7 +41,6 @@ SET id = (
 )
 WHERE id IN (
     SELECT old_id FROM _workspace_id_map
-);--> statement-breakpoint
+);
 
--- Step 4: Clean up
 DROP TABLE IF EXISTS _workspace_id_map;
