@@ -23,15 +23,18 @@ export function createZshWrapper(): void {
 	const zshenvPath = path.join(ZSH_DIR, ".zshenv");
 	const zshenvScript = `# Superset zsh env wrapper
 _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
+export ZDOTDIR="$_superset_home"
 [[ -f "$_superset_home/.zshenv" ]] && source "$_superset_home/.zshenv"
+export ZDOTDIR="${ZSH_DIR}"
 `;
 	writeIfChanged(zshenvPath, zshenvScript, 0o644);
 
-	// .zprofile must NOT reset ZDOTDIR — our .zshrc needs to run after it
 	const zprofilePath = path.join(ZSH_DIR, ".zprofile");
 	const zprofileScript = `# Superset zsh profile wrapper
 _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
+export ZDOTDIR="$_superset_home"
 [[ -f "$_superset_home/.zprofile" ]] && source "$_superset_home/.zprofile"
+export ZDOTDIR="${ZSH_DIR}"
 `;
 	writeIfChanged(zprofilePath, zprofileScript, 0o644);
 
