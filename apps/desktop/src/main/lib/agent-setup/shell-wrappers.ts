@@ -7,22 +7,26 @@ import { BASH_DIR, BIN_DIR, ZSH_DIR } from "./paths";
 const ZSH_RC = path.join(ZSH_DIR, ".zshrc");
 const BASH_RCFILE = path.join(BASH_DIR, "rcfile");
 
-/** Agent binaries that get wrapper shims to guarantee resolution. */
-const SHIMMED_BINARIES = ["claude", "codex", "opencode", "gemini", "copilot"];
-
 /**
- * Shell function shims that override PATH-based lookup.
- * Functions take precedence over PATH in both zsh and bash,
- * so even if a precmd hook or .zlogin re-orders PATH, the
- * wrapped binary is always invoked via absolute path.
+ * Idempotent PATH prepend — ensures wrapper dir is on PATH so `which claude`
+ * resolves to our wrapper (standard behavior matching iTerm2 / Terminal.app).
  */
-function buildShimFunctions(): string {
-	return SHIMMED_BINARIES.map(
-		(name) => `${name}() { "${BIN_DIR}/${name}" "$@"; }`,
-	).join("\n");
+function buildPathEnsure(): string {
+	return `case ":$PATH:" in *:"${BIN_DIR}":*) ;; *) export PATH="${BIN_DIR}:$PATH" ;; esac`;
 }
 
 export function createZshWrapper(): void {
+	const pathEnsure = buildPathEnsure();
+
+	// .zshenv runs for ALL shell types (login, interactive, scripts).
+	// Without this wrapper, ZDOTDIR redirect causes zsh to skip ~/.zshenv.
+	const zshenvPath = path.join(ZSH_DIR, ".zshenv");
+	const zshenvScript = `# Superset zsh env wrapper
+_superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
+[[ -f "$_superset_home/.zshenv" ]] && source "$_superset_home/.zshenv"
+`;
+	writeIfChanged(zshenvPath, zshenvScript, 0o644);
+
 	// .zprofile must NOT reset ZDOTDIR — our .zshrc needs to run after it
 	const zprofilePath = path.join(ZSH_DIR, ".zprofile");
 	const zprofileScript = `# Superset zsh profile wrapper
@@ -37,7 +41,7 @@ _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
 _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
 export ZDOTDIR="$_superset_home"
 [[ -f "$_superset_home/.zshrc" ]] && source "$_superset_home/.zshrc"
-${buildShimFunctions()}
+${pathEnsure}
 # Restore ZDOTDIR so our .zlogin runs after user's .zlogin
 export ZDOTDIR="${ZSH_DIR}"
 `;
@@ -45,17 +49,25 @@ export ZDOTDIR="${ZSH_DIR}"
 
 	// .zlogin runs AFTER .zshrc in login shells. By restoring ZDOTDIR above,
 	// zsh sources our .zlogin instead of the user's directly. We source the
-	// user's .zlogin only for interactive shells, then reset ZDOTDIR.
-	// Function shims from .zshrc persist — no need to re-define them here.
+	// user's .zlogin only for interactive shells, re-ensure PATH, then reset ZDOTDIR.
 	const zloginPath = path.join(ZSH_DIR, ".zlogin");
 	const zloginScript = `# Superset zsh login wrapper
 _superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
 if [[ -o interactive ]]; then
   [[ -f "$_superset_home/.zlogin" ]] && source "$_superset_home/.zlogin"
 fi
+${pathEnsure}
 export ZDOTDIR="$_superset_home"
 `;
 	writeIfChanged(zloginPath, zloginScript, 0o644);
+
+	// .zlogout runs when a login shell exits
+	const zlogoutPath = path.join(ZSH_DIR, ".zlogout");
+	const zlogoutScript = `# Superset zsh logout wrapper
+_superset_home="\${SUPERSET_ORIG_ZDOTDIR:-$HOME}"
+[[ -f "$_superset_home/.zlogout" ]] && source "$_superset_home/.zlogout"
+`;
+	writeIfChanged(zlogoutPath, zlogoutScript, 0o644);
 }
 
 export function createBashWrapper(): void {
@@ -77,7 +89,7 @@ fi
 # Source bashrc if separate
 [[ -f "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
 
-${buildShimFunctions()}
+${buildPathEnsure()}
 # Minimal prompt (path/env shown in toolbar) - emerald to match app theme
 export PS1=$'\\[\\e[1;38;2;52;211;153m\\]❯\\[\\e[0m\\] '
 `;
@@ -100,6 +112,9 @@ export function getShellArgs(shell: string): string[] {
 	}
 	if (shell.includes("bash")) {
 		return ["--rcfile", BASH_RCFILE];
+	}
+	if (shell.includes("fish")) {
+		return ["-l"];
 	}
 	return [];
 }

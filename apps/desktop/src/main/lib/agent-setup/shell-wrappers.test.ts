@@ -37,33 +37,38 @@ describe("shell-wrappers", () => {
 		rmSync(TEST_ROOT, { recursive: true, force: true });
 	});
 
-	it("creates zsh wrappers with function shims in .zshrc and clean .zlogin", () => {
+	it("creates zsh wrappers for all profile files with PATH prepend", () => {
 		createZshWrapper();
 
+		const zshenv = readFileSync(path.join(TEST_ZSH_DIR, ".zshenv"), "utf-8");
+		const zprofile = readFileSync(
+			path.join(TEST_ZSH_DIR, ".zprofile"),
+			"utf-8",
+		);
 		const zshrc = readFileSync(path.join(TEST_ZSH_DIR, ".zshrc"), "utf-8");
 		const zlogin = readFileSync(path.join(TEST_ZSH_DIR, ".zlogin"), "utf-8");
+		const zlogout = readFileSync(
+			path.join(TEST_ZSH_DIR, ".zlogout"),
+			"utf-8",
+		);
 
-		// .zshrc defines function shims (absolute paths, override PATH lookup)
-		expect(zshrc).toContain(`claude() { "${TEST_BIN_DIR}/claude" "$@"; }`);
-		expect(zshrc).toContain(`codex() { "${TEST_BIN_DIR}/codex" "$@"; }`);
-		expect(zshrc).toContain(`opencode() { "${TEST_BIN_DIR}/opencode" "$@"; }`);
-		expect(zshrc).toContain(`copilot() { "${TEST_BIN_DIR}/copilot" "$@"; }`);
-
-		// .zlogin sources user's .zlogin and resets ZDOTDIR — no shims needed
-		// (function shims from .zshrc persist across rc files)
-		expect(zlogin).toContain("if [[ -o interactive ]]; then");
+		// All profile files source their user equivalents
+		expect(zshenv).toContain('source "$_superset_home/.zshenv"');
+		expect(zprofile).toContain('source "$_superset_home/.zprofile"');
+		expect(zshrc).toContain('source "$_superset_home/.zshrc"');
 		expect(zlogin).toContain('source "$_superset_home/.zlogin"');
-		expect(zlogin).not.toContain("claude()");
+		expect(zlogout).toContain('source "$_superset_home/.zlogout"');
+
+		// PATH prepend ensures `which claude` resolves to our wrapper
+		expect(zshrc).toContain(`PATH="${TEST_BIN_DIR}:$PATH"`);
+		expect(zlogin).toContain(`PATH="${TEST_BIN_DIR}:$PATH"`);
 	});
 
-	it("creates bash wrapper with function shims", () => {
+	it("creates bash wrapper with PATH prepend", () => {
 		createBashWrapper();
 
 		const rcfile = readFileSync(path.join(TEST_BASH_DIR, "rcfile"), "utf-8");
-		expect(rcfile).toContain(`claude() { "${TEST_BIN_DIR}/claude" "$@"; }`);
-		expect(rcfile).toContain(`codex() { "${TEST_BIN_DIR}/codex" "$@"; }`);
-		expect(rcfile).toContain(`opencode() { "${TEST_BIN_DIR}/opencode" "$@"; }`);
-		expect(rcfile).toContain(`copilot() { "${TEST_BIN_DIR}/copilot" "$@"; }`);
+		expect(rcfile).toContain(`PATH="${TEST_BIN_DIR}:$PATH"`);
 	});
 
 	it("uses login zsh command args when wrappers exist", () => {
