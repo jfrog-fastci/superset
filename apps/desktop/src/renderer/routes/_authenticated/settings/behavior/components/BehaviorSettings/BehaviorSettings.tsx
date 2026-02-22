@@ -248,8 +248,8 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 
 	const { data: openLinksInApp, isLoading: isOpenLinksInAppLoading } =
 		electronTrpc.settings.getOpenLinksInApp.useQuery();
-	const setOpenLinksInApp =
-		electronTrpc.settings.setOpenLinksInApp.useMutation({
+	const setOpenLinksInApp = electronTrpc.settings.setOpenLinksInApp.useMutation(
+		{
 			onMutate: async ({ enabled }) => {
 				await utils.settings.getOpenLinksInApp.cancel();
 				const previous = utils.settings.getOpenLinksInApp.getData();
@@ -258,16 +258,14 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 			},
 			onError: (_err, _vars, context) => {
 				if (context?.previous !== undefined) {
-					utils.settings.getOpenLinksInApp.setData(
-						undefined,
-						context.previous,
-					);
+					utils.settings.getOpenLinksInApp.setData(undefined, context.previous);
 				}
 			},
 			onSettled: () => {
 				utils.settings.getOpenLinksInApp.invalidate();
 			},
-		});
+		},
+	);
 
 	const previewPrefix =
 		resolveBranchPrefix({
@@ -444,8 +442,8 @@ export function BehaviorSettings({ visibleItems }: BehaviorSettingsProps) {
 								Open links in app browser
 							</Label>
 							<p className="text-xs text-muted-foreground">
-								Open links from chat and terminal in the built-in browser instead
-								of your default browser
+								Open links from chat and terminal in the built-in browser
+								instead of your default browser
 							</p>
 						</div>
 						<Switch

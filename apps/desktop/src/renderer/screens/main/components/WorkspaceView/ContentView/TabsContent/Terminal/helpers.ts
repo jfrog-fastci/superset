@@ -181,8 +181,12 @@ export function createTerminalInstance(
 	renderer: TerminalRendererRef;
 	cleanup: () => void;
 } {
-	const { cwd, initialTheme, onFileLinkClick, onUrlClickRef: urlClickRef } =
-		options;
+	const {
+		cwd,
+		initialTheme,
+		onFileLinkClick,
+		onUrlClickRef: urlClickRef,
+	} = options;
 
 	// Use provided theme, or fall back to localStorage-based default to prevent flash
 	const theme = initialTheme ?? getDefaultTerminalTheme();

@@ -39,16 +39,16 @@ export function MessagePartsRenderer({
 	const theme = useTheme();
 	const { data: openLinksInApp } =
 		electronTrpc.settings.getOpenLinksInApp.useQuery();
-	const addBrowserTab = useTabsStore((s) => s.addBrowserTab);
+	const openInBrowserPane = useTabsStore((s) => s.openInBrowserPane);
 
 	const handleLinkClick = useCallback(
 		(e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
 			if (openLinksInApp && workspaceId) {
 				e.preventDefault();
-				addBrowserTab(workspaceId, href);
+				openInBrowserPane(workspaceId, href);
 			}
 		},
-		[openLinksInApp, workspaceId, addBrowserTab],
+		[openLinksInApp, workspaceId, openInBrowserPane],
 	);
 
 	const components = useMemo(() => {

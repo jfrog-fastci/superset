@@ -125,12 +125,12 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	// URL click handler - opens in app browser or system browser based on setting
 	const { data: openLinksInApp } =
 		electronTrpc.settings.getOpenLinksInApp.useQuery();
-	const addBrowserTab = useTabsStore((s) => s.addBrowserTab);
+	const openInBrowserPane = useTabsStore((s) => s.openInBrowserPane);
 	const handleUrlClickRef = useRef<((url: string) => void) | undefined>(
 		undefined,
 	);
 	handleUrlClickRef.current = openLinksInApp
-		? (url: string) => addBrowserTab(workspaceId, url)
+		? (url: string) => openInBrowserPane(workspaceId, url)
 		: undefined;
 
 	// Refs for stream event handlers (populated after useTerminalStream)
