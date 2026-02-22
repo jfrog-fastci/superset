@@ -32,7 +32,8 @@ export function ClickablePath({ path, className }: ClickablePathProps) {
 	const utils = electronTrpc.useUtils();
 	// Uses global default editor (no project context on the settings page).
 	// No projectId is passed to openInApp, so per-project defaults are not affected.
-	const { data: defaultApp } = electronTrpc.settings.getDefaultEditor.useQuery();
+	const { data: defaultApp } =
+		electronTrpc.settings.getDefaultEditor.useQuery();
 
 	const openInApp = electronTrpc.external.openInApp.useMutation({
 		onSuccess: () => {

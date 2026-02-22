@@ -671,12 +671,9 @@ export const createSettingsRouter = () => {
 					editor: z
 						.enum(EXTERNAL_APPS)
 						.nullable()
-						.refine(
-							(val) =>
-								val === null ||
-								!NON_EDITOR_APPS.includes(val),
-							{ message: "Non-editor apps cannot be set as the global default" },
-						),
+						.refine((val) => val === null || !NON_EDITOR_APPS.includes(val), {
+							message: "Non-editor apps cannot be set as the global default",
+						}),
 				}),
 			)
 			.mutation(({ input }) => {

@@ -126,11 +126,10 @@ export function OpenInButton({
 	const showCopyPathShortcut =
 		showShortcuts && copyPathShortcut !== "Unassigned";
 
-	const { data: defaultApp } =
-		electronTrpc.projects.getDefaultApp.useQuery(
-			{ projectId: projectId as string },
-			{ enabled: !!projectId },
-		);
+	const { data: defaultApp } = electronTrpc.projects.getDefaultApp.useQuery(
+		{ projectId: projectId as string },
+		{ enabled: !!projectId },
+	);
 
 	const openInApp = electronTrpc.external.openInApp.useMutation({
 		onSuccess: () => {
@@ -141,7 +140,7 @@ export function OpenInButton({
 	});
 	const copyPath = electronTrpc.external.copyPath.useMutation();
 
-	const currentApp = defaultApp ? getAppOption(defaultApp) ?? null : null;
+	const currentApp = defaultApp ? (getAppOption(defaultApp) ?? null) : null;
 
 	const handleOpenIn = (app: ExternalApp) => {
 		if (!path) return;

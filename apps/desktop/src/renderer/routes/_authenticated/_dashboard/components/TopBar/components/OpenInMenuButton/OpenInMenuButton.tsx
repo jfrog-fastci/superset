@@ -39,11 +39,10 @@ export const OpenInMenuButton = memo(function OpenInMenuButton({
 	projectId,
 }: OpenInMenuButtonProps) {
 	const utils = electronTrpc.useUtils();
-	const { data: defaultApp } =
-		electronTrpc.projects.getDefaultApp.useQuery(
-			{ projectId: projectId as string },
-			{ enabled: !!projectId, staleTime: 30000 },
-		);
+	const { data: defaultApp } = electronTrpc.projects.getDefaultApp.useQuery(
+		{ projectId: projectId as string },
+		{ enabled: !!projectId, staleTime: 30000 },
+	);
 	const openInApp = electronTrpc.external.openInApp.useMutation({
 		onSuccess: () => {
 			if (projectId) {
@@ -58,7 +57,7 @@ export const OpenInMenuButton = memo(function OpenInMenuButton({
 	});
 
 	const currentApp = useMemo(
-		() => (defaultApp ? getAppOption(defaultApp) ?? null : null),
+		() => (defaultApp ? (getAppOption(defaultApp) ?? null) : null),
 		[defaultApp],
 	);
 	const openInShortcut = useHotkeyText("OPEN_IN_APP");
@@ -71,8 +70,7 @@ export const OpenInMenuButton = memo(function OpenInMenuButton({
 		if (openInApp.isPending || copyPath.isPending) return;
 		if (!defaultApp) {
 			toast.error("No default editor configured", {
-				description:
-					"Open a project in an editor first to set a default.",
+				description: "Open a project in an editor first to set a default.",
 			});
 			return;
 		}
@@ -113,7 +111,7 @@ export const OpenInMenuButton = memo(function OpenInMenuButton({
 							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 							"active:scale-[0.98]",
 							isLoading && "opacity-50 pointer-events-none",
-						!currentApp && "opacity-50",
+							!currentApp && "opacity-50",
 						)}
 					>
 						{currentApp ? (

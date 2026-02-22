@@ -132,7 +132,10 @@ export const createExternalRouter = () => {
 				try {
 					ensureGlobalDefaultEditor(input.app);
 				} catch (err) {
-					console.warn("[external/openInApp] Failed to persist global default editor:", err);
+					console.warn(
+						"[external/openInApp] Failed to persist global default editor:",
+						err,
+					);
 				}
 			}),
 
