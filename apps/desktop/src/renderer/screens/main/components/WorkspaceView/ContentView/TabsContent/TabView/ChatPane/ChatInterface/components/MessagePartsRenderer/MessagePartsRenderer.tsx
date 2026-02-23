@@ -1,5 +1,4 @@
 import { ExploringGroup } from "@superset/ui/ai-elements/exploring-group";
-import { MessageResponse } from "@superset/ui/ai-elements/message";
 import type { UIMessage } from "ai";
 import { getToolName, isToolUIPart } from "ai";
 import {
@@ -10,19 +9,23 @@ import {
 	SearchIcon,
 } from "lucide-react";
 import type React from "react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { electronTrpc } from "renderer/lib/electron-trpc";
 import { useTheme } from "renderer/stores";
+import { useTabsStore } from "renderer/stores/tabs/store";
 import { READ_ONLY_TOOLS } from "../../constants";
 import type { ToolPart } from "../../utils/tool-helpers";
 import { getArgs } from "../../utils/tool-helpers";
 import { MastraToolCallBlock } from "../MastraToolCallBlock";
 import { ReadOnlyToolCall } from "../ReadOnlyToolCall";
 import { ReasoningBlock } from "../ReasoningBlock";
+import { StreamingMessageText } from "./components/StreamingMessageText";
 
 interface MessagePartsRendererProps {
 	parts: UIMessage["parts"];
 	isLastAssistant: boolean;
 	isStreaming: boolean;
+	workspaceId?: string;
 	onAnswer?: (toolCallId: string, answers: Record<string, string>) => void;
 }
 
@@ -30,9 +33,44 @@ export function MessagePartsRenderer({
 	parts,
 	isLastAssistant,
 	isStreaming,
+	workspaceId,
 	onAnswer,
 }: MessagePartsRendererProps): React.ReactNode[] {
 	const theme = useTheme();
+	const { data: openLinksInApp } =
+		electronTrpc.settings.getOpenLinksInApp.useQuery();
+	const openInBrowserPane = useTabsStore((s) => s.openInBrowserPane);
+
+	const handleLinkClick = useCallback(
+		(e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+			if (openLinksInApp && workspaceId) {
+				e.preventDefault();
+				openInBrowserPane(workspaceId, href);
+			}
+		},
+		[openLinksInApp, workspaceId, openInBrowserPane],
+	);
+
+	const components = useMemo(() => {
+		if (!openLinksInApp || !workspaceId) return undefined;
+		return {
+			a: ({
+				href,
+				children,
+				...props
+			}: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+				<a
+					{...props}
+					href={href}
+					onClick={(e) => {
+						if (href) handleLinkClick(e, href);
+					}}
+				>
+					{children}
+				</a>
+			),
+		};
+	}, [openLinksInApp, workspaceId, handleLinkClick]);
 	const mermaidConfig = useMemo(
 		() => ({
 			config: {
@@ -58,13 +96,13 @@ export function MessagePartsRenderer({
 
 			if (part.type === "text") {
 				nodes.push(
-					<MessageResponse
+					<StreamingMessageText
 						key={i}
+						text={part.text}
 						isAnimating={isLastAssistant && isStreaming}
 						mermaid={mermaidConfig}
-					>
-						{part.text}
-					</MessageResponse>,
+						components={components}
+					/>,
 				);
 				i++;
 				continue;

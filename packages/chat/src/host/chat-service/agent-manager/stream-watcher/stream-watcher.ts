@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { GetHeaders } from "../../../lib/auth/auth";
 import { sessionAbortControllers, sessionRunIds } from "../session-state";
 import { resumeAgent, runAgent } from "./run-agent";
 import { SessionHost } from "./session-host";
@@ -14,12 +15,14 @@ export class StreamWatcher {
 	private host: SessionHost;
 	private readonly sessionId: string;
 	private readonly cwd: string;
+	private status: "idle" | "starting" | "ready" = "idle";
+	private startPromise: Promise<void> | null = null;
 
 	constructor(options: {
 		sessionId: string;
-		authToken: string;
 		apiUrl: string;
 		cwd: string;
+		getHeaders: GetHeaders;
 	}) {
 		this.sessionId = options.sessionId;
 		this.cwd = options.cwd;
@@ -27,7 +30,7 @@ export class StreamWatcher {
 		this.host = new SessionHost({
 			sessionId: options.sessionId,
 			baseUrl: `${options.apiUrl}/api/chat`,
-			headers: { Authorization: `Bearer ${options.authToken}` },
+			getHeaders: options.getHeaders,
 		});
 
 		this.host.on("message", ({ message, metadata }) => {
@@ -44,8 +47,8 @@ export class StreamWatcher {
 				cwd: this.cwd,
 				permissionMode: metadata?.permissionMode ?? "bypassPermissions",
 				thinkingEnabled: metadata?.thinkingEnabled ?? false,
-				authToken: options.authToken,
 				apiUrl: options.apiUrl,
+				getHeaders: options.getHeaders,
 			});
 		});
 
@@ -88,12 +91,68 @@ export class StreamWatcher {
 		return this.host;
 	}
 
-	start(): void {
-		this.host.start();
+	start(): Promise<void> {
+		if (this.status === "ready") {
+			return Promise.resolve();
+		}
+		if (this.startPromise) return this.startPromise;
+
+		this.status = "starting";
+		this.startPromise = new Promise<void>((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				cleanup();
+				this.status = "idle";
+				reject(
+					new Error(
+						`Timed out waiting for stream watcher readiness: ${this.sessionId}`,
+					),
+				);
+			}, 10_000);
+
+			const onConnected = () => {
+				cleanup();
+				this.status = "ready";
+				resolve();
+			};
+
+			const onError = (err: Error) => {
+				cleanup();
+				this.status = "idle";
+				reject(err);
+			};
+
+			const onDisconnected = ({ reason }: { reason?: string }) => {
+				cleanup();
+				this.status = "idle";
+				reject(
+					new Error(
+						`Stream watcher disconnected before readiness for ${this.sessionId}${reason ? `: ${reason}` : ""}`,
+					),
+				);
+			};
+
+			const cleanup = () => {
+				clearTimeout(timeout);
+				this.host.off("connected", onConnected);
+				this.host.off("error", onError);
+				this.host.off("disconnected", onDisconnected);
+			};
+
+			this.host.on("connected", onConnected);
+			this.host.on("error", onError);
+			this.host.on("disconnected", onDisconnected);
+			this.host.start();
+		}).finally(() => {
+			this.startPromise = null;
+		});
+
+		return this.startPromise;
 	}
 
 	stop(): void {
 		this.host.stop();
+		this.status = "idle";
+		this.startPromise = null;
 	}
 }
 

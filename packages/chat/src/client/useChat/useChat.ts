@@ -33,6 +33,12 @@ export interface MessageMetadata {
 	thinkingEnabled?: boolean;
 }
 
+export interface SendMessageOptions {
+	messageId?: string;
+	txid?: string;
+	signal?: AbortSignal;
+}
+
 export interface UseChatReturn {
 	ready: boolean;
 	messages: (UIMessage & { actorId: string; createdAt: Date })[];
@@ -41,6 +47,7 @@ export interface UseChatReturn {
 		text: string,
 		files?: FileUIPart[],
 		metadata?: MessageMetadata,
+		options?: SendMessageOptions,
 	) => Promise<void>;
 	stop: () => void;
 	submitToolResult: (
@@ -112,24 +119,44 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 	// --- Messages via collection pipeline (null-safe) ---
 	const rows = useCollectionData(session?.messagesCollection ?? null);
 
-	const messages = useMemo(() => rows.map(messageRowToUIMessage), [rows]);
+	const [dismissedIncompleteMessageIds, setDismissedIncompleteMessageIds] =
+		useState<string[]>([]);
+
+	// Hide orphaned partial assistant rows after recovery/retry.
+	// Valid in-progress assistant output is expected to be the latest row and fresh.
+	const visibleRows = (() => {
+		const now = Date.now();
+		const dismissed = new Set(dismissedIncompleteMessageIds);
+		return rows.filter((row, index) => {
+			if (row.role !== "assistant" || row.isComplete) return true;
+			if (dismissed.has(row.id)) return false;
+			const isLatest = index === rows.length - 1;
+			const isStale = now - row.lastChunkAt.getTime() >= STALE_THRESHOLD_MS;
+			if (isStale) return false;
+			return isLatest;
+		});
+	})();
+
+	const messages = useMemo(
+		() => visibleRows.map(messageRowToUIMessage),
+		[visibleRows],
+	);
 
 	// --- Staleness-aware isLoading ---
 	// Tick forces re-evaluation so time-based staleness actually triggers.
 	const [_tick, setTick] = useState(0);
 	useEffect(() => {
-		if (!rows.some((r) => !r.isComplete)) return;
+		if (!visibleRows.some((r) => !r.isComplete)) return;
 		const timer = setInterval(() => setTick((t) => t + 1), 5_000);
 		return () => clearInterval(timer);
-	}, [rows]);
+	}, [visibleRows]);
 
-	const isLoading = useMemo(() => {
+	const isLoading = visibleRows.some((row) => {
 		const now = Date.now();
-		return rows.some(
-			(row) =>
-				!row.isComplete && now - row.lastChunkAt.getTime() < STALE_THRESHOLD_MS,
+		return (
+			!row.isComplete && now - row.lastChunkAt.getTime() < STALE_THRESHOLD_MS
 		);
-	}, [rows]);
+	});
 
 	// --- Metadata (title, config, presence, agents) — null-safe ---
 	const metadata = useChatMetadata({
@@ -155,6 +182,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 				metadata?: MessageMetadata;
 				messageId: string;
 				txid: string;
+				signal?: AbortSignal;
 			}>({
 				onMutate: ({ text, files, metadata, messageId }) => {
 					const { sessionDB } = depsRef.current;
@@ -183,10 +211,18 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 					};
 					sessionDB.collections.chunks.insert(chunk);
 				},
-				mutationFn: async ({ text, files, metadata, messageId, txid }) => {
+				mutationFn: async ({
+					text,
+					files,
+					metadata,
+					messageId,
+					txid,
+					signal,
+				}) => {
 					const { url, headers, sessionDB } = depsRef.current;
 					const res = await fetch(url("/messages"), {
 						method: "POST",
+						signal,
 						headers: headers(),
 						body: JSON.stringify({
 							content: text || undefined,
@@ -207,15 +243,29 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 	);
 
 	const sendMessage = useCallback(
-		async (text: string, files?: FileUIPart[], metadata?: MessageMetadata) => {
+		async (
+			text: string,
+			files?: FileUIPart[],
+			metadata?: MessageMetadata,
+			options?: SendMessageOptions,
+		) => {
 			if (!sessionId) return;
 			setError(null);
-			const messageId = crypto.randomUUID();
-			const txid = crypto.randomUUID();
+			if (options?.signal?.aborted) return;
+			const messageId = options?.messageId ?? crypto.randomUUID();
+			const txid = options?.txid ?? crypto.randomUUID();
 			try {
-				const tx = optimisticSend({ text, files, metadata, messageId, txid });
+				const tx = optimisticSend({
+					text,
+					files,
+					metadata,
+					messageId,
+					txid,
+					signal: options?.signal,
+				});
 				await tx.isPersisted.promise;
 			} catch (err) {
+				if (err instanceof Error && err.name === "AbortError") return;
 				setError(err instanceof Error ? err.message : "Failed to send message");
 			}
 		},
@@ -224,12 +274,22 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
 	const stop = useCallback(() => {
 		if (!sessionId) return;
+
+		const incompleteAssistantIds = rows
+			.filter((row) => row.role === "assistant" && !row.isComplete)
+			.map((row) => row.id);
+		if (incompleteAssistantIds.length > 0) {
+			setDismissedIncompleteMessageIds((prev) =>
+				Array.from(new Set([...prev, ...incompleteAssistantIds])),
+			);
+		}
+
 		fetch(url("/control"), {
 			method: "POST",
 			headers: headers(),
 			body: JSON.stringify({ action: "abort" }),
 		}).catch(console.error);
-	}, [url, headers, sessionId]);
+	}, [url, headers, sessionId, rows]);
 
 	const submitToolResult = useCallback(
 		async (toolCallId: string, output: unknown, err?: string) => {

@@ -2,7 +2,7 @@ import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { z } from "zod";
 import type { ChatService } from "../chat-service";
-import { getSlashCommands } from "../slash-commands";
+import { getSlashCommands, resolveSlashCommand } from "../slash-commands";
 import { searchFiles } from "./file-search";
 
 const t = initTRPC.create({ transformer: superjson });
@@ -18,14 +18,29 @@ export const getSlashCommandsInput = z.object({
 	cwd: z.string(),
 });
 
+export const resolveSlashCommandInput = z.object({
+	cwd: z.string(),
+	text: z.string(),
+});
+export const previewSlashCommandInput = resolveSlashCommandInput;
+
 export const sessionIdInput = z.object({
 	sessionId: z.string().uuid(),
 });
 
+export const ensureRuntimeInput = z.object({
+	sessionId: z.string().uuid(),
+	cwd: z.string().optional(),
+});
+
+function resolveWorkspaceSlashCommand(input: { cwd: string; text: string }) {
+	return resolveSlashCommand(input.cwd, input.text);
+}
+
 export function createChatServiceRouter(service: ChatService) {
 	return t.router({
 		start: t.procedure
-			.input(z.object({ organizationId: z.string(), authToken: z.string() }))
+			.input(z.object({ organizationId: z.string() }))
 			.mutation(async ({ input }) => {
 				await service.start(input);
 				return { success: true };
@@ -53,6 +68,18 @@ export function createChatServiceRouter(service: ChatService) {
 				.query(async ({ input }) => {
 					return getSlashCommands(input.cwd);
 				}),
+
+			resolveSlashCommand: t.procedure
+				.input(resolveSlashCommandInput)
+				.mutation(async ({ input }) => {
+					return resolveWorkspaceSlashCommand(input);
+				}),
+
+			previewSlashCommand: t.procedure
+				.input(resolveSlashCommandInput)
+				.query(async ({ input }) => {
+					return resolveWorkspaceSlashCommand(input);
+				}),
 		}),
 
 		session: t.router({
@@ -62,10 +89,11 @@ export function createChatServiceRouter(service: ChatService) {
 				};
 			}),
 
-			activate: t.procedure.input(sessionIdInput).mutation(({ input }) => {
-				service.ensureWatcher(input.sessionId);
-				return { active: true };
-			}),
+			ensureRuntime: t.procedure
+				.input(ensureRuntimeInput)
+				.mutation(async ({ input }) => {
+					return service.ensureWatcher(input.sessionId, input.cwd);
+				}),
 
 			config: t.procedure
 				.input(

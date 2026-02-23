@@ -3,6 +3,7 @@ import { DurableStream, IdempotentProducer } from "@durable-streams/client";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { type ChunkRow, sessionStateSchema } from "../../../../../schema";
 import { createSessionDB, type SessionDB } from "../../../../../session-db";
+import type { GetHeaders } from "../../../../lib/auth/auth";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -12,7 +13,7 @@ export interface SessionHostOptions {
 	sessionId: string;
 	/** Proxy base URL (e.g. "https://api.example.com/api/chat"). All reads and writes go through the proxy. */
 	baseUrl: string;
-	headers?: Record<string, string>;
+	getHeaders: GetHeaders;
 	signal?: AbortSignal;
 }
 
@@ -55,8 +56,12 @@ export interface SessionHostEventMap {
 export class SessionHost {
 	private readonly sessionId: string;
 	private readonly baseUrl: string;
-	private readonly headers: Record<string, string>;
+	private readonly getHeaders: GetHeaders;
 	private readonly externalSignal?: AbortSignal;
+	private readonly fetchWithAuth: (
+		input: RequestInfo | URL,
+		init?: RequestInit,
+	) => Promise<Response>;
 
 	private sessionDB: SessionDB | null = null;
 	private readonly seenMessageIds = new Set<string>();
@@ -67,8 +72,22 @@ export class SessionHost {
 	constructor(options: SessionHostOptions) {
 		this.sessionId = options.sessionId;
 		this.baseUrl = options.baseUrl;
-		this.headers = options.headers ?? {};
+		this.getHeaders = options.getHeaders;
 		this.externalSignal = options.signal;
+		this.fetchWithAuth = async (
+			input: RequestInfo | URL,
+			init?: RequestInit,
+		) => {
+			const authHeaders = await this.getHeaders();
+			const headers = new Headers(init?.headers);
+			for (const [key, value] of Object.entries(authHeaders)) {
+				headers.set(key, value);
+			}
+			return fetch(input, {
+				...init,
+				headers,
+			});
+		};
 	}
 
 	// -- Typed event methods --------------------------------------------------
@@ -112,7 +131,7 @@ export class SessionHost {
 		this.sessionDB = createSessionDB({
 			sessionId: this.sessionId,
 			baseUrl: this.baseUrl,
-			headers: this.headers,
+			fetch: this.fetchWithAuth as typeof fetch,
 			signal: this.abortController.signal,
 		});
 
@@ -238,29 +257,23 @@ export class SessionHost {
 		const streamUrl = `${this.baseUrl}/${this.sessionId}/stream`;
 		const durableStream = new DurableStream({
 			url: streamUrl,
-			headers: this.headers,
 			contentType: "application/json",
+			fetch: this.fetchWithAuth as typeof fetch,
 		});
 
-		// Auth headers must be injected via custom fetch since
-		// IdempotentProducer doesn't forward DurableStream.headers on POSTs.
-		const authFetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-			fetch(input, {
-				...init,
-				headers: { ...this.headers, ...init?.headers },
-			})) as typeof fetch;
-
+		let producerError: Error | null = null;
 		const producer = new IdempotentProducer(
 			durableStream,
-			`agent-${this.sessionId}`,
+			`agent-${this.sessionId}-${messageId}`,
 			{
 				autoClaim: true,
 				lingerMs: 250,
 				maxInFlight: 20,
 				signal: options?.signal,
-				fetch: authFetch,
+				fetch: this.fetchWithAuth as typeof fetch,
 				onError: (err) => {
 					if (options?.signal?.aborted) return;
+					producerError = err;
 					this.emit("error", err);
 				},
 			},
@@ -268,6 +281,7 @@ export class SessionHost {
 
 		let seq = 0;
 		const reader = stream.getReader();
+		let writeError: Error | null = null;
 
 		try {
 			while (true) {
@@ -290,6 +304,41 @@ export class SessionHost {
 				seq++;
 			}
 
+			// Some provider/tool-approval edge-cases can yield an empty stream.
+			// Emit a terminal assistant error chunk so the UI doesn't appear stuck.
+			if (!options?.signal?.aborted && seq === 0) {
+				const emptyEvent = sessionStateSchema.chunks.insert({
+					key: `${messageId}:${seq}`,
+					value: {
+						messageId,
+						actorId: "agent",
+						role: "assistant",
+						chunk: JSON.stringify({
+							type: "error",
+							errorText: "Agent returned no response",
+						}),
+						seq,
+						createdAt: new Date().toISOString(),
+					},
+				});
+				producer.append(JSON.stringify(emptyEvent));
+				seq++;
+
+				const abortEvent = sessionStateSchema.chunks.insert({
+					key: `${messageId}:${seq}`,
+					value: {
+						messageId,
+						actorId: "agent",
+						role: "assistant",
+						chunk: JSON.stringify({ type: "abort" }),
+						seq,
+						createdAt: new Date().toISOString(),
+					},
+				});
+				producer.append(JSON.stringify(abortEvent));
+				seq++;
+			}
+
 			// Write abort chunk so clients see isComplete = true
 			if (options?.signal?.aborted) {
 				const abortEvent = sessionStateSchema.chunks.insert({
@@ -306,30 +355,44 @@ export class SessionHost {
 				producer.append(JSON.stringify(abortEvent));
 				seq++;
 			}
+
+			if (producerError) {
+				throw producerError;
+			}
+		} catch (err) {
+			writeError = err instanceof Error ? err : new Error(String(err));
 		} finally {
 			try {
 				await producer.flush();
 				await producer.detach();
 			} catch (err) {
 				if (!options?.signal?.aborted) {
-					this.emit(
-						"error",
-						err instanceof Error ? err : new Error(String(err)),
-					);
+					const producerCleanupError =
+						err instanceof Error ? err : new Error(String(err));
+					this.emit("error", producerCleanupError);
+					if (!writeError) {
+						writeError = producerCleanupError;
+					}
 				}
 			}
+		}
+
+		if (writeError && !options?.signal?.aborted) {
+			throw writeError;
 		}
 	}
 
 	async postTitle(title: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/${this.sessionId}`, {
-			method: "PATCH",
-			headers: {
-				...this.headers,
-				"Content-Type": "application/json",
+		const response = await this.fetchWithAuth(
+			`${this.baseUrl}/${this.sessionId}`,
+			{
+				method: "PATCH",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ title }),
 			},
-			body: JSON.stringify({ title }),
-		});
+		);
 		if (!response.ok) {
 			throw new Error(`Failed to post title: ${response.status}`);
 		}

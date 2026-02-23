@@ -4,16 +4,20 @@ import {
 } from "@superset/chat/host";
 import { env } from "main/env.main";
 import { getHashedDeviceId } from "main/lib/device-info";
+import { loadToken } from "../auth/utils/auth-functions";
 
 const service = new ChatService({
 	deviceId: getHashedDeviceId(),
-	electricUrl: env.NEXT_PUBLIC_ELECTRIC_URL,
 	apiUrl: env.NEXT_PUBLIC_API_URL,
+	getHeaders: async () => {
+		const { token } = await loadToken();
+		const headers: Record<string, string> = {};
+		if (token) {
+			headers.Authorization = `Bearer ${token}`;
+		}
+		return headers;
+	},
 });
-
-if (env.NODE_ENV === "development") {
-	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
 
 export const createChatServiceRouter = () => buildRouter(service);
 
