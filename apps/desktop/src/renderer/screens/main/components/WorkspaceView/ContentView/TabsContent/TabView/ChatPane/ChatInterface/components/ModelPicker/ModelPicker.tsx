@@ -10,8 +10,8 @@ import {
 	ModelSelectorName,
 	ModelSelectorTrigger,
 } from "@superset/ui/ai-elements/model-selector";
-import { claudeIcon } from "@superset/ui/icons/preset-icons";
 import { PromptInputButton } from "@superset/ui/ai-elements/prompt-input";
+import { claudeIcon } from "@superset/ui/icons/preset-icons";
 import { ChevronDownIcon } from "lucide-react";
 import { useMemo } from "react";
 import { PILL_BUTTON_CLASS } from "../../styles";
@@ -60,7 +60,9 @@ export function ModelPicker({
 	return (
 		<ModelSelector open={open} onOpenChange={onOpenChange}>
 			<ModelSelectorTrigger asChild>
-				<PromptInputButton className={`${PILL_BUTTON_CLASS} px-2 gap-1.5 text-xs text-foreground`}>
+				<PromptInputButton
+					className={`${PILL_BUTTON_CLASS} px-2 gap-1.5 text-xs text-foreground`}
+				>
 					{selectedLogo === "anthropic" ? (
 						<img alt="Claude" className="size-3" src={claudeIcon} />
 					) : selectedLogo ? (

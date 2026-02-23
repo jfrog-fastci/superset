@@ -178,7 +178,10 @@ export function ChatInputFooter({
 											cwd={cwd}
 											slashCommands={slashCommands}
 										/>
-										<PromptInputTextarea placeholder="Ask anything..." className="min-h-10" />
+										<PromptInputTextarea
+											placeholder="Ask anything..."
+											className="min-h-10"
+										/>
 										<ChatComposerControls
 											availableModels={availableModels}
 											selectedModel={selectedModel}

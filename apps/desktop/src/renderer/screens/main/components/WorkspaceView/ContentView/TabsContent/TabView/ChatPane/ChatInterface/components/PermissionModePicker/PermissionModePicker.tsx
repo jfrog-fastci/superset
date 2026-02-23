@@ -59,7 +59,9 @@ export function PermissionModePicker({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<PromptInputButton className={`${PILL_BUTTON_CLASS} px-2 gap-1 text-xs text-foreground`}>
+				<PromptInputButton
+					className={`${PILL_BUTTON_CLASS} px-2 gap-1 text-xs text-foreground`}
+				>
 					<ActiveIcon className="size-3.5 opacity-60" />
 					<span>{active.label}</span>
 					<ChevronDownIcon className="size-2.5 opacity-50" />
