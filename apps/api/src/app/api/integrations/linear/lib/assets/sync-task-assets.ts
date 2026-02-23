@@ -11,6 +11,16 @@ interface SyncTaskAssetsOptions {
 	organizationId: string;
 	taskId: string;
 	sources: AssetSource[];
+	linearAccessToken?: string;
+}
+
+function isLinearUploadUrl(url: string): boolean {
+	try {
+		const parsed = new URL(url);
+		return parsed.host === "uploads.linear.app";
+	} catch {
+		return false;
+	}
 }
 
 export async function syncTaskAssets(
@@ -19,7 +29,7 @@ export async function syncTaskAssets(
 	const sourceKindByUrl = new Map<string, string>();
 
 	for (const source of options.sources) {
-		if (source.url) {
+		if (source.url && isLinearUploadUrl(source.url)) {
 			sourceKindByUrl.set(source.url, source.sourceKind);
 		}
 
@@ -39,6 +49,7 @@ export async function syncTaskAssets(
 				taskId: options.taskId,
 				sourceUrl,
 				sourceKind,
+				linearAccessToken: options.linearAccessToken,
 			});
 			if (mirrored) {
 				urlMap.set(sourceUrl, mirrored.blobUrl);

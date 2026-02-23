@@ -1,7 +1,7 @@
 import { Button } from "@superset/ui/button";
 import { ScrollArea } from "@superset/ui/scroll-area";
 import { Separator } from "@superset/ui/separator";
-import { eq, or } from "@tanstack/db";
+import { and, eq, isNull, or } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
@@ -67,23 +67,24 @@ function TaskDetailPage() {
 		(q) =>
 			q
 				.from({ comments: collections.taskComments })
+				.innerJoin({ tasks: collections.tasks }, ({ comments, tasks }) =>
+					eq(comments.taskId, tasks.id),
+				)
 				.select(({ comments }) => ({
-					id: comments.id,
-					taskId: comments.taskId,
-					body: comments.body,
-					authorName: comments.authorName,
-					authorAvatarUrl: comments.authorAvatarUrl,
-					externalUrl: comments.externalUrl,
-					createdAt: comments.createdAt,
-					deletedAt: comments.deletedAt,
+					...comments,
 				}))
-				.where(({ comments }) => eq(comments.taskId, task?.id ?? taskId)),
-		[collections.taskComments, task?.id, taskId],
+				.where(({ comments, tasks }) =>
+					and(
+						or(eq(tasks.id, taskId), eq(tasks.slug, taskId)),
+						isNull(tasks.deletedAt),
+						isNull(comments.deletedAt),
+					),
+				),
+		[collections.taskComments, collections.tasks, taskId],
 	);
 
 	const taskComments = useMemo(() => {
 		return (commentData ?? [])
-			.filter((comment) => !comment.deletedAt)
 			.map((comment) => ({
 				id: comment.id,
 				body: comment.body,

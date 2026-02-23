@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { extname } from "node:path";
-import { put } from "@vercel/blob";
 import { db } from "@superset/db/client";
 import { taskAssets } from "@superset/db/schema";
+import { put } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 
 const MAX_ASSET_BYTES = 20 * 1024 * 1024;
@@ -46,6 +46,7 @@ interface MirrorLinearAssetOptions {
 	taskId: string;
 	sourceUrl: string;
 	sourceKind: string;
+	linearAccessToken?: string;
 }
 
 interface MirroredAsset {
@@ -87,7 +88,13 @@ export async function mirrorLinearAsset(
 		};
 	}
 
-	const response = await fetch(options.sourceUrl);
+	const source = new URL(options.sourceUrl);
+	const response = await fetch(options.sourceUrl, {
+		headers:
+			source.host === "uploads.linear.app" && options.linearAccessToken
+				? { Authorization: `Bearer ${options.linearAccessToken}` }
+				: undefined,
+	});
 	if (!response.ok) {
 		console.warn(
 			`[linear/assets] Failed to fetch ${options.sourceUrl}: ${response.status}`,

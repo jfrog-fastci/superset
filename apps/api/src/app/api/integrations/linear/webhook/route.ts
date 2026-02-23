@@ -55,10 +55,16 @@ export async function POST(request: Request) {
 		return Response.json({ error: "Missing signature" }, { status: 401 });
 	}
 
-	const payload = webhookClient.parseData(
-		Buffer.from(body),
-		signature,
-	) as LinearWebhookPayload;
+	let payload: LinearWebhookPayload;
+	try {
+		payload = webhookClient.parseData(
+			Buffer.from(body),
+			signature,
+		) as LinearWebhookPayload;
+	} catch (error) {
+		console.warn("[linear/webhook] Invalid signature payload", error);
+		return Response.json({ error: "Invalid signature" }, { status: 401 });
+	}
 
 	// Store event with idempotent handling
 	const eventId = `${payload.organizationId}-${payload.webhookTimestamp}`;
@@ -170,5 +176,6 @@ async function processWebhookEvent(
 		organizationId: connection.organizationId,
 		creatorUserId: connection.connectedByUserId,
 		issueId,
+		linearAccessToken: connection.accessToken,
 	});
 }

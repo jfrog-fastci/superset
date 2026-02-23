@@ -7,8 +7,8 @@ import { replaceAssetUrls } from "../assets/extract-asset-urls";
 import { syncTaskAssets } from "../assets/sync-task-assets";
 import { syncTaskComments } from "../comments/sync-task-comments";
 import {
-	type LinearIssueDetails,
 	fetchIssueDetails,
+	type LinearIssueDetails,
 } from "./fetch-issue-details";
 
 interface SyncLinearIssueByIdOptions {
@@ -16,18 +16,29 @@ interface SyncLinearIssueByIdOptions {
 	organizationId: string;
 	creatorUserId: string;
 	issueId: string;
+	linearAccessToken?: string;
 }
 
 interface SyncLinearIssueByPayloadOptions {
 	organizationId: string;
 	creatorUserId: string;
 	issue: LinearIssueDetails;
+	linearAccessToken?: string;
 }
 
 export async function syncLinearIssueById(
 	options: SyncLinearIssueByIdOptions,
 ): Promise<"processed" | "skipped"> {
-	const issue = await fetchIssueDetails(options.client, options.issueId);
+	let issue: LinearIssueDetails | null = null;
+	try {
+		issue = await fetchIssueDetails(options.client, options.issueId);
+	} catch (error) {
+		console.warn(
+			`[linear/issues] Failed to fetch issue details for ${options.issueId}:`,
+			error,
+		);
+		return "skipped";
+	}
 	if (!issue) {
 		return "skipped";
 	}
@@ -36,6 +47,7 @@ export async function syncLinearIssueById(
 		organizationId: options.organizationId,
 		creatorUserId: options.creatorUserId,
 		issue,
+		linearAccessToken: options.linearAccessToken,
 	});
 }
 
@@ -110,6 +122,7 @@ export async function syncLinearIssueByPayload(
 	const assetUrlMap = await syncTaskAssets({
 		organizationId: options.organizationId,
 		taskId: task.id,
+		linearAccessToken: options.linearAccessToken,
 		sources: [
 			{
 				sourceKind: "description",
