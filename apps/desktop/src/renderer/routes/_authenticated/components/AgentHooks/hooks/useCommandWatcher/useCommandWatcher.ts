@@ -14,6 +14,29 @@ import { executeTool, type ToolContext } from "./tools";
 /** Tracks command IDs that have been or are being processed to prevent duplicate execution. */
 const handledCommands = new Set<string>();
 
+function parseCommandTimestamp(
+	value: Date | string | null | undefined,
+): Date | null {
+	if (!value) return null;
+
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+
+	// Defensive handling for stale Electric schema/cache paths that can surface
+	// timezone-naive timestamp strings. Treat naive values as UTC.
+	const normalizedBase = trimmed.includes("T")
+		? trimmed
+		: trimmed.replace(" ", "T");
+	const hasOffset = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalizedBase);
+	const normalized = hasOffset ? normalizedBase : `${normalizedBase}Z`;
+	const parsed = new Date(normalized);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function useCommandWatcher() {
 	const { data: deviceInfo } = electronTrpc.auth.getDeviceInfo.useQuery();
 	const { data: session } = authClient.useSession();
@@ -146,7 +169,10 @@ export function useCommandWatcher() {
 			if (cmd.targetDeviceId !== deviceInfo.deviceId) continue;
 			if (cmd.organizationId !== organizationId) continue;
 			if (handledCommands.has(cmd.id)) continue;
-			if (cmd.timeoutAt && new Date(cmd.timeoutAt) < now) {
+			const timeoutAt = parseCommandTimestamp(
+				cmd.timeoutAt as Date | string | null | undefined,
+			);
+			if (timeoutAt && timeoutAt < now) {
 				collections.agentCommands.update(cmd.id, (draft) => {
 					draft.status = "timeout";
 					draft.error = "Command expired before execution";
