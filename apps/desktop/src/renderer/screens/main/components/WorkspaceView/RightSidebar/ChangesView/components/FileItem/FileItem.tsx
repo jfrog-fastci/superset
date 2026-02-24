@@ -93,7 +93,7 @@ export function FileItem({
 	const showStatsDisplay =
 		showStats && (file.additions > 0 || file.deletions > 0);
 	const hasIndent = level > 0;
-	const hasAction = onStage || onUnstage;
+	const hasAction = onStage || onUnstage || onDiscard;
 
 	const isScrollSyncActive =
 		category && activeFileKey === createFileKey(file, category, commitHash);
@@ -169,7 +169,7 @@ export function FileItem({
 			{...fileDragProps}
 			className={cn(
 				"group w-full flex items-stretch gap-1 px-1.5 text-left rounded-sm",
-				"hover:bg-accent/50 cursor-pointer transition-colors overflow-hidden",
+				"hover:bg-accent/50 cursor-pointer transition-colors",
 				isHighlighted && "bg-accent",
 			)}
 		>
@@ -179,7 +179,7 @@ export function FileItem({
 				onClick={handleClick}
 				onDoubleClick={handleDoubleClick}
 				className={cn(
-					"flex items-center gap-1.5 flex-1 min-w-0",
+					"flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden",
 					hasIndent ? "py-0.5" : "py-1",
 				)}
 			>
@@ -215,7 +215,30 @@ export function FileItem({
 			</button>
 
 			{hasAction && (
-				<div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+				<div className="flex items-center shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+					{onDiscard && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="size-5 hover:bg-accent hover:text-destructive"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleDiscardClick();
+									}}
+									disabled={isActioning}
+								>
+									{isDeleteAction ? (
+										<LuTrash2 className="size-3" />
+									) : (
+										<LuUndo2 className="size-3" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{discardLabel}</TooltipContent>
+						</Tooltip>
+					)}
 					{onStage && (
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -232,7 +255,7 @@ export function FileItem({
 									<HiMiniPlus className="size-3" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="right">Stage</TooltipContent>
+							<TooltipContent side="bottom">Stage</TooltipContent>
 						</Tooltip>
 					)}
 					{onUnstage && (
@@ -251,7 +274,7 @@ export function FileItem({
 									<HiMiniMinus className="size-3" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="right">Unstage</TooltipContent>
+							<TooltipContent side="bottom">Unstage</TooltipContent>
 						</Tooltip>
 					)}
 				</div>

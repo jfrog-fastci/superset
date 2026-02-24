@@ -101,6 +101,22 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 		},
 	});
 
+	const stageFilesMutation = electronTrpc.changes.stageFiles.useMutation({
+		onSuccess: () => refetch(),
+		onError: (error) => {
+			console.error("Failed to stage files:", error);
+			toast.error(`Failed to stage files: ${error.message}`);
+		},
+	});
+
+	const unstageFilesMutation = electronTrpc.changes.unstageFiles.useMutation({
+		onSuccess: () => refetch(),
+		onError: (error) => {
+			console.error("Failed to unstage files:", error);
+			toast.error(`Failed to unstage files: ${error.message}`);
+		},
+	});
+
 	const discardChangesMutation =
 		electronTrpc.changes.discardChanges.useMutation({
 			onSuccess: () => refetch(),
@@ -452,7 +468,13 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 									filePath: file.path,
 								})
 							}
-							isActioning={unstageFileMutation.isPending}
+							onUnstageFiles={(files) =>
+								unstageFilesMutation.mutate({
+									worktreePath: worktreePath || "",
+									filePaths: files.map((f) => f.path),
+								})
+							}
+							isActioning={unstageFileMutation.isPending || unstageFilesMutation.isPending}
 							worktreePath={worktreePath}
 							projectId={projectId}
 							category="staged"
@@ -516,8 +538,15 @@ export function ChangesView({ onFileOpen, isExpandedView }: ChangesViewProps) {
 									filePath: file.path,
 								})
 							}
+							onStageFiles={(files) =>
+								stageFilesMutation.mutate({
+									worktreePath: worktreePath || "",
+									filePaths: files.map((f) => f.path),
+								})
+							}
 							isActioning={
 								stageFileMutation.isPending ||
+								stageFilesMutation.isPending ||
 								discardChangesMutation.isPending ||
 								deleteUntrackedMutation.isPending
 							}

@@ -10,9 +10,11 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@superset/ui/context-menu";
+import { Button } from "@superset/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import type { ReactNode } from "react";
-import { HiChevronRight } from "react-icons/hi2";
+import { HiChevronRight, HiMiniMinus, HiMiniPlus } from "react-icons/hi2";
 import {
 	LuClipboard,
 	LuExternalLink,
@@ -118,6 +120,7 @@ export function FolderRow({
 	const isGrouped = variant === "grouped";
 	const isRoot = folderPath === "";
 	const absolutePath = isRoot ? worktreePath : `${worktreePath}/${folderPath}`;
+	const hasAction = onStageAll || onUnstageAll || onDiscardAll;
 
 	const { copyPath, copyRelativePath, revealInFinder, openInEditor } =
 		usePathActions({
@@ -129,8 +132,7 @@ export function FolderRow({
 	const triggerContent = (
 		<CollapsibleTrigger
 			className={cn(
-				"w-full flex items-center gap-1.5 px-1.5 py-1 text-left rounded-sm",
-				"hover:bg-accent/50 cursor-pointer transition-colors",
+				"flex-1 min-w-0 flex gap-1.5 text-left overflow-hidden",
 				"text-xs items-stretch py-0.5",
 				isGrouped && "text-muted-foreground",
 			)}
@@ -203,7 +205,77 @@ export function FolderRow({
 			className={cn("min-w-0", isGrouped && "overflow-hidden")}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger asChild>{triggerContent}</ContextMenuTrigger>
+				<ContextMenuTrigger asChild>
+					<div
+						className={cn(
+							"group flex items-center min-w-0 rounded-sm px-1.5",
+							"hover:bg-accent/50 cursor-pointer transition-colors",
+						)}
+					>
+						{triggerContent}
+						{hasAction && (
+							<div className="flex items-center shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+								{onDiscardAll && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-5 hover:bg-accent hover:text-destructive"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDiscardAll();
+												}}
+												disabled={isActioning}
+											>
+												<LuUndo2 className="size-3" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">Discard All</TooltipContent>
+									</Tooltip>
+								)}
+								{onStageAll && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-5 hover:bg-accent"
+												onClick={(e) => {
+													e.stopPropagation();
+													onStageAll();
+												}}
+												disabled={isActioning}
+											>
+												<HiMiniPlus className="size-3" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">Stage All</TooltipContent>
+									</Tooltip>
+								)}
+								{onUnstageAll && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-5 hover:bg-accent"
+												onClick={(e) => {
+													e.stopPropagation();
+													onUnstageAll();
+												}}
+												disabled={isActioning}
+											>
+												<HiMiniMinus className="size-3" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">Unstage All</TooltipContent>
+									</Tooltip>
+								)}
+							</div>
+						)}
+					</div>
+				</ContextMenuTrigger>
 				{contextMenuContent}
 			</ContextMenu>
 			<CollapsibleContent
