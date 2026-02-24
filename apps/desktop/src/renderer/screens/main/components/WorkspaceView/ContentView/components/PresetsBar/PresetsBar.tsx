@@ -85,10 +85,18 @@ export function PresetsBar() {
 			},
 		},
 	);
-	const presetByName = useMemo(
-		() => new Map(presets.map((preset) => [preset.name, preset])),
-		[presets],
-	);
+	const presetsByName = useMemo(() => {
+		const map = new Map<string, typeof presets>();
+		for (const preset of presets) {
+			const existing = map.get(preset.name);
+			if (existing) {
+				existing.push(preset);
+				continue;
+			}
+			map.set(preset.name, [preset]);
+		}
+		return map;
+	}, [presets]);
 	const pinnedPresets = useMemo(
 		() =>
 			presets.flatMap((preset, index) =>
@@ -104,15 +112,25 @@ export function PresetsBar() {
 		const templateNames = new Set(
 			QUICK_ADD_PRESET_TEMPLATES.map((t) => t.name),
 		);
+		const primaryTemplatePresetIds = new Set(
+			QUICK_ADD_PRESET_TEMPLATES.flatMap((template) => {
+				const match = presetsByName.get(template.name)?.[0];
+				return match ? [match.id] : [];
+			}),
+		);
 		const fromTemplates = QUICK_ADD_PRESET_TEMPLATES.map((template) => ({
 			key: `template:${template.name}`,
 			name: template.name,
-			preset: presetByName.get(template.name),
+			preset: presetsByName.get(template.name)?.[0],
 			template,
 			iconName: template.name,
 		}));
 		const customExisting = presets
-			.filter((preset) => !templateNames.has(preset.name))
+			.filter(
+				(preset) =>
+					!templateNames.has(preset.name) ||
+					!primaryTemplatePresetIds.has(preset.id),
+			)
 			.map((preset) => ({
 				key: `preset:${preset.id}`,
 				name: preset.name || "default",
@@ -121,7 +139,7 @@ export function PresetsBar() {
 				iconName: preset.name,
 			}));
 		return [...fromTemplates, ...customExisting];
-	}, [presetByName, presets]);
+	}, [presetsByName, presets]);
 
 	return (
 		<div
