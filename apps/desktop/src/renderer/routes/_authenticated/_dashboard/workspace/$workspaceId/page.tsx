@@ -163,7 +163,7 @@ function WorkspacePage() {
 		(presetIndex: number) => {
 			const preset = presets[presetIndex];
 			if (preset) {
-				openPreset(workspaceId, preset);
+				openPreset(workspaceId, preset, { target: "active-tab" });
 			} else {
 				addTab(workspaceId);
 			}
@@ -302,11 +302,10 @@ function WorkspacePage() {
 
 	// Open in last used app shortcut
 	const projectId = workspace?.projectId;
-	const { data: defaultApp = "cursor" } =
-		electronTrpc.projects.getDefaultApp.useQuery(
-			{ projectId: projectId as string },
-			{ enabled: !!projectId },
-		);
+	const { data: defaultApp } = electronTrpc.projects.getDefaultApp.useQuery(
+		{ projectId: projectId as string },
+		{ enabled: !!projectId },
+	);
 	const utils = electronTrpc.useUtils();
 	const openInApp = electronTrpc.external.openInApp.useMutation({
 		onSuccess: () => {
@@ -318,7 +317,7 @@ function WorkspacePage() {
 	useAppHotkey(
 		"OPEN_IN_APP",
 		() => {
-			if (workspace?.worktreePath) {
+			if (workspace?.worktreePath && defaultApp) {
 				openInApp.mutate({
 					path: workspace.worktreePath,
 					app: defaultApp,

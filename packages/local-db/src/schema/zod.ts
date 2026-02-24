@@ -49,7 +49,7 @@ export const gitHubStatusSchema = z.object({
 
 export type GitHubStatus = z.infer<typeof gitHubStatusSchema>;
 
-export const EXECUTION_MODES = ["sequential", "parallel"] as const;
+export const EXECUTION_MODES = ["split-pane", "new-tab"] as const;
 
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
@@ -110,6 +110,15 @@ export const EXTERNAL_APPS = [
 ] as const;
 
 export type ExternalApp = (typeof EXTERNAL_APPS)[number];
+
+/** Apps that are not editors/IDEs and should not be set as the global default editor. */
+export const NON_EDITOR_APPS: readonly ExternalApp[] = [
+	"finder",
+	"iterm",
+	"warp",
+	"terminal",
+	"ghostty",
+] as const;
 
 /**
  * Terminal link behavior options
