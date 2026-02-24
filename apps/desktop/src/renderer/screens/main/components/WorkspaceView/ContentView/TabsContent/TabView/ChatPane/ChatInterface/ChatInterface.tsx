@@ -1,14 +1,17 @@
 import { chatServiceTrpc, useChat } from "@superset/chat/client";
+import type { AiModelConfigEntry } from "@superset/db/schema";
 import {
 	type PromptInputMessage,
 	PromptInputProvider,
 } from "@superset/ui/ai-elements/prompt-input";
-import { useQuery } from "@tanstack/react-query";
+import { eq } from "@tanstack/db";
+import { useLiveQuery } from "@tanstack/react-db";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { env } from "renderer/env.renderer";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { getAuthToken } from "renderer/lib/auth-client";
+import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { ChatInputFooter } from "./components/ChatInputFooter";
 import { MessageList } from "./components/MessageList";
@@ -28,12 +31,19 @@ function useAvailableModels(): {
 	models: ModelOption[];
 	defaultModel: ModelOption | null;
 } {
-	const { data } = useQuery({
-		queryKey: ["chat", "models"],
-		queryFn: () => apiTrpcClient.chat.getModels.query(),
-		staleTime: Number.POSITIVE_INFINITY,
-	});
-	const models = data?.models ?? [];
+	const collections = useCollections();
+	const { data } = useLiveQuery(
+		(q) =>
+			q
+				.from({ c: collections.appConfig })
+				.where(({ c }) => eq(c.key, "ai_models"))
+				.select(({ c }) => ({ value: c.value })),
+		[collections.appConfig],
+	);
+	const raw = (data?.[0]?.value ?? []) as AiModelConfigEntry[];
+	const models: ModelOption[] = raw
+		.filter((m) => m.isEnabled)
+		.map((m) => ({ id: m.modelId, name: m.displayName, provider: m.provider }));
 	return { models, defaultModel: models[0] ?? null };
 }
 

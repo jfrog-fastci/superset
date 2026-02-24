@@ -33,7 +33,8 @@ export type AllowedTable =
 	| "subscriptions"
 	| "workspaces"
 	| "chat_sessions"
-	| "session_hosts";
+	| "session_hosts"
+	| "app_config";
 
 interface WhereClause {
 	fragment: string;
@@ -137,6 +138,9 @@ export async function buildWhereClause(
 
 		case "session_hosts":
 			return build(sessionHosts, sessionHosts.organizationId, organizationId);
+
+		case "app_config":
+			return { fragment: `1 = 1`, params: [] };
 
 		default:
 			return null;

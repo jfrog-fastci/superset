@@ -1,6 +1,7 @@
 import { snakeCamelMapper } from "@electric-sql/client";
 import type {
 	SelectAgentCommand,
+	SelectAppConfig,
 	SelectChatSession,
 	SelectDevicePresence,
 	SelectIntegrationConnection,
@@ -95,6 +96,19 @@ const organizationsCollection = createCollection(
 			columnMapper,
 		},
 		getKey: (item) => item.id,
+	}),
+);
+
+const appConfigCollection = createCollection(
+	electricCollectionOptions<SelectAppConfig>({
+		id: "app-config",
+		shapeOptions: {
+			url: electricUrl,
+			params: { table: "app_config" },
+			headers: electricHeaders,
+			columnMapper,
+		},
+		getKey: (item) => item.key,
 	}),
 );
 
@@ -375,7 +389,8 @@ function createOrgCollections(organizationId: string): OrgCollections {
 export async function preloadCollections(
 	organizationId: string,
 ): Promise<void> {
-	const { organizations, ...orgCollections } = getCollections(organizationId);
+	const { organizations, appConfig, ...orgCollections } =
+		getCollections(organizationId);
 	await Promise.allSettled(
 		Object.values(orgCollections).map((c) =>
 			(c as Collection<object>).preload(),
@@ -402,5 +417,6 @@ export function getCollections(organizationId: string) {
 	return {
 		...orgCollections,
 		organizations: organizationsCollection,
+		appConfig: appConfigCollection,
 	};
 }

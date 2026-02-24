@@ -1,5 +1,7 @@
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sandboxStatusEnum } from "./enums";
+import { appConfig } from "./schema";
 
 export const localWorkspaceConfigSchema = z.object({
 	path: z.string(),
@@ -32,3 +34,17 @@ export const sandboxImageSchema = z.object({
 	systemPackages: z.array(z.string()).default([]),
 });
 export type SandboxImageInput = z.infer<typeof sandboxImageSchema>;
+
+export const aiModelConfigEntrySchema = z.object({
+	modelId: z.string(),
+	displayName: z.string(),
+	provider: z.string(),
+	isEnabled: z.boolean(),
+});
+export type AiModelConfigEntry = z.infer<typeof aiModelConfigEntrySchema>;
+
+export const aiModelConfigSchema = z.array(aiModelConfigEntrySchema);
+export type AiModelConfig = z.infer<typeof aiModelConfigSchema>;
+
+export const selectAppConfigSchema = createSelectSchema(appConfig);
+export const insertAppConfigSchema = createInsertSchema(appConfig);

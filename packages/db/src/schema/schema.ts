@@ -509,3 +509,15 @@ export const sessionHosts = pgTable(
 
 export type InsertSessionHost = typeof sessionHosts.$inferInsert;
 export type SelectSessionHost = typeof sessionHosts.$inferSelect;
+
+export const appConfig = pgTable("app_config", {
+	key: text().primaryKey(),
+	value: jsonb().notNull(),
+	updatedAt: timestamp("updated_at")
+		.notNull()
+		.defaultNow()
+		.$onUpdate(() => new Date()),
+});
+
+export type InsertAppConfig = typeof appConfig.$inferInsert;
+export type SelectAppConfig = typeof appConfig.$inferSelect;

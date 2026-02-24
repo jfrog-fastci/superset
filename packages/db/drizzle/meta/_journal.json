@@ -169,6 +169,13 @@
       "when": 1771866677057,
       "tag": "0023_agent_commands_timestamptz",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1771894737892,
+      "tag": "0024_add_app_config_table",
+      "breakpoints": true
     }
   ]
 }
