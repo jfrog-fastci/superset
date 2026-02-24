@@ -10,7 +10,6 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
-	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
@@ -22,13 +21,12 @@ import {
 	getPresetIcon,
 	useIsDarkTheme,
 } from "renderer/assets/app-icons/preset-icons";
+import { HotkeyMenuShortcut } from "renderer/components/HotkeyMenuShortcut";
 import { HotkeyTooltipContent } from "renderer/components/HotkeyTooltipContent/HotkeyTooltipContent";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { usePresets } from "renderer/react-query/presets";
 import { PRESET_HOTKEY_IDS } from "renderer/routes/_authenticated/_dashboard/workspace/$workspaceId/hooks/usePresetHotkeys";
-import { useHotkeyText } from "renderer/stores/hotkeys";
 import { useTabsWithPresets } from "renderer/stores/tabs/useTabsWithPresets";
-import type { HotkeyId } from "shared/hotkeys";
 
 interface PresetTemplate {
 	name: string;
@@ -52,12 +50,12 @@ const QUICK_ADD_PRESET_TEMPLATES: PresetTemplate[] = AGENT_TYPES.map(
 	}),
 );
 
-function PresetShortcut({ hotkeyId }: { hotkeyId: HotkeyId }) {
-	const hotkeyText = useHotkeyText(hotkeyId);
-	if (hotkeyText === "Unassigned") {
-		return null;
-	}
-	return <DropdownMenuShortcut>{hotkeyText}</DropdownMenuShortcut>;
+function isPresetPinnedToBar(pinnedToBar: boolean | undefined): boolean {
+	// Backward-compatibility rule:
+	// Existing presets created before `pinnedToBar` was introduced have
+	// `pinnedToBar === undefined` and should remain visible in the presets bar.
+	// Only an explicit `false` means "not pinned".
+	return pinnedToBar !== false;
 }
 
 export function PresetsBar() {
@@ -94,7 +92,7 @@ export function PresetsBar() {
 	const pinnedPresets = useMemo(
 		() =>
 			presets.flatMap((preset, index) =>
-				preset.pinnedToBar === false ? [] : [{ preset, index }],
+				isPresetPinnedToBar(preset.pinnedToBar) ? [{ preset, index }] : [],
 			),
 		[presets],
 	);
@@ -147,7 +145,7 @@ export function PresetsBar() {
 					{managedPresets.map((item) => {
 						const icon = getPresetIcon(item.iconName, isDark);
 						const isPinned = item.preset
-							? item.preset.pinnedToBar !== false
+							? isPresetPinnedToBar(item.preset.pinnedToBar)
 							: false;
 						const hasPreset = !!item.preset;
 						const presetIndex = item.preset
@@ -184,7 +182,7 @@ export function PresetsBar() {
 								)}
 								<span className="truncate">{item.name || "default"}</span>
 								<div className="ml-auto flex items-center gap-2">
-									{hotkeyId ? <PresetShortcut hotkeyId={hotkeyId} /> : null}
+									{hotkeyId ? <HotkeyMenuShortcut hotkeyId={hotkeyId} /> : null}
 									{hasPreset ? (
 										<LuPin
 											className={`size-3.5 ${

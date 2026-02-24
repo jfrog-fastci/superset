@@ -6,7 +6,6 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
-	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
 import { useParams } from "@tanstack/react-router";
@@ -22,28 +21,17 @@ import {
 import { BsTerminalPlus } from "react-icons/bs";
 import { LuPlus } from "react-icons/lu";
 import { TbMessageCirclePlus, TbWorld } from "react-icons/tb";
+import { HotkeyMenuShortcut } from "renderer/components/HotkeyMenuShortcut";
 import { electronTrpc } from "renderer/lib/electron-trpc";
-import { useHotkeyText } from "renderer/stores/hotkeys";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { useTabsWithPresets } from "renderer/stores/tabs/useTabsWithPresets";
 import {
 	isLastPaneInTab,
 	resolveActiveTabIdForWorkspace,
 } from "renderer/stores/tabs/utils";
-import type { HotkeyId } from "shared/hotkeys";
 import { type ActivePaneStatus, pickHigherStatus } from "shared/tabs-types";
 import { GroupItem } from "./GroupItem";
 import { NewTabDropZone } from "./NewTabDropZone";
-
-function MenuItemShortcut({ hotkeyId }: { hotkeyId: HotkeyId }) {
-	const hotkeyText = useHotkeyText(hotkeyId);
-
-	if (hotkeyText === "Unassigned") {
-		return null;
-	}
-
-	return <DropdownMenuShortcut>{hotkeyText}</DropdownMenuShortcut>;
-}
 
 export function GroupStrip() {
 	const { workspaceId: activeWorkspaceId } = useParams({ strict: false });
@@ -212,19 +200,19 @@ export function GroupStrip() {
 					<DropdownMenuItem onClick={handleAddGroup} className="gap-2">
 						<BsTerminalPlus className="size-4" />
 						<span>Terminal</span>
-						<MenuItemShortcut hotkeyId="NEW_GROUP" />
+						<HotkeyMenuShortcut hotkeyId="NEW_GROUP" />
 					</DropdownMenuItem>
 					{hasAiChat && (
 						<DropdownMenuItem onClick={handleAddChat} className="gap-2">
 							<TbMessageCirclePlus className="size-4" />
 							<span>Chat</span>
-							<MenuItemShortcut hotkeyId="REOPEN_TAB" />
+							<HotkeyMenuShortcut hotkeyId="NEW_CHAT" />
 						</DropdownMenuItem>
 					)}
 					<DropdownMenuItem onClick={handleAddBrowser} className="gap-2">
 						<TbWorld className="size-4" />
 						<span>Browser</span>
-						<MenuItemShortcut hotkeyId="NEW_BROWSER" />
+						<HotkeyMenuShortcut hotkeyId="NEW_BROWSER" />
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuCheckboxItem
