@@ -8,6 +8,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@superset/ui/dropdown-menu";
+import { useLiveQuery } from "@tanstack/react-db";
 import { useParams } from "@tanstack/react-router";
 import { useFeatureFlagEnabled } from "posthog-js/react";
 import {
@@ -23,6 +24,7 @@ import { LuPlus } from "react-icons/lu";
 import { TbMessageCirclePlus, TbWorld } from "react-icons/tb";
 import { HotkeyMenuShortcut } from "renderer/components/HotkeyMenuShortcut";
 import { electronTrpc } from "renderer/lib/electron-trpc";
+import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { useTabsWithPresets } from "renderer/stores/tabs/useTabsWithPresets";
 import {
@@ -49,6 +51,8 @@ export function GroupStrip() {
 	const movePaneToTab = useTabsStore((s) => s.movePaneToTab);
 	const movePaneToNewTab = useTabsStore((s) => s.movePaneToNewTab);
 	const reorderTabs = useTabsStore((s) => s.reorderTabs);
+
+	const setTabAutoTitle = useTabsStore((s) => s.setTabAutoTitle);
 
 	const hasAiChat = useFeatureFlagEnabled(FEATURE_FLAGS.AI_CHAT);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +110,40 @@ export function GroupStrip() {
 		}
 		return result;
 	}, [panes]);
+
+	// Sync Electric session titles → tab names for all chat tabs in this workspace
+	const chatPaneSessionMap = useMemo(() => {
+		const map = new Map<string, string>(); // sessionId → tabId
+		for (const pane of Object.values(panes)) {
+			if (pane.type === "chat" && pane.chat?.sessionId) {
+				const tab = tabs.find((t) => t.id === pane.tabId);
+				if (tab) map.set(pane.chat.sessionId, tab.id);
+			}
+		}
+		return map;
+	}, [panes, tabs]);
+
+	const collections = useCollections();
+	const { data: chatSessions } = useLiveQuery(
+		(q) =>
+			q
+				.from({ chatSessions: collections.chatSessions })
+				.select(({ chatSessions }) => ({
+					id: chatSessions.id,
+					title: chatSessions.title,
+				})),
+		[collections.chatSessions],
+	);
+
+	useEffect(() => {
+		if (!chatSessions) return;
+		for (const session of chatSessions) {
+			const tabId = chatPaneSessionMap.get(session.id);
+			if (tabId) {
+				setTabAutoTitle(tabId, session.title || "New Chat");
+			}
+		}
+	}, [chatSessions, chatPaneSessionMap, setTabAutoTitle]);
 
 	const handleAddGroup = () => {
 		if (!activeWorkspaceId) return;
