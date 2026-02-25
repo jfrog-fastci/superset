@@ -228,6 +228,42 @@ export function ChatMastraPane({
 		}
 	}, [organizationId, paneId, switchChatMastraSession, workspaceId]);
 
+	const handleStartFreshSession = useCallback(async () => {
+		if (!organizationId) {
+			return {
+				created: false as const,
+				errorMessage: "No active organization selected",
+			};
+		}
+
+		const newSessionId = crypto.randomUUID();
+		try {
+			await createSessionRecord({
+				sessionId: newSessionId,
+				organizationId,
+				workspaceId,
+			});
+			switchChatMastraSession(paneId, newSessionId);
+			return { created: true as const };
+		} catch (error) {
+			reportChatMastraError({
+				operation: "session.create",
+				error,
+				sessionId: newSessionId,
+				workspaceId,
+				paneId,
+				organizationId,
+			});
+			return {
+				created: false as const,
+				errorMessage:
+					error instanceof Error
+						? error.message
+						: "Failed to create a new chat session",
+			};
+		}
+	}, [organizationId, paneId, switchChatMastraSession, workspaceId]);
+
 	const handleDeleteSession = useCallback(
 		async (sessionIdToDelete: string) => {
 			try {
@@ -308,6 +344,7 @@ export function ChatMastraPane({
 						sessionId={sessionId}
 						workspaceId={workspaceId}
 						cwd={workspace?.worktreePath ?? ""}
+						onStartFreshSession={handleStartFreshSession}
 					/>
 				</BasePaneWindow>
 			</ChatServiceProvider>
