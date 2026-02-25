@@ -25,6 +25,7 @@ import {
 	DEFAULT_SHOW_PRESETS_BAR,
 	DEFAULT_SHOW_RESOURCE_MONITOR,
 	DEFAULT_TERMINAL_LINK_BEHAVIOR,
+	DEFAULT_USE_COMPACT_TERMINAL_ADD_BUTTON,
 } from "shared/constants";
 import {
 	CUSTOM_RINGTONE_ID,
@@ -152,6 +153,7 @@ export const createSettingsRouter = () => {
 					description: z.string().optional(),
 					cwd: z.string(),
 					commands: z.array(z.string()),
+					pinnedToBar: z.boolean().optional(),
 					executionMode: z.enum(EXECUTION_MODES).optional(),
 				}),
 			)
@@ -179,6 +181,7 @@ export const createSettingsRouter = () => {
 						description: z.string().optional(),
 						cwd: z.string().optional(),
 						commands: z.array(z.string()).optional(),
+						pinnedToBar: z.boolean().optional(),
 						executionMode: z.enum(EXECUTION_MODES).optional(),
 					}),
 				}),
@@ -200,6 +203,8 @@ export const createSettingsRouter = () => {
 				if (input.patch.cwd !== undefined) preset.cwd = input.patch.cwd;
 				if (input.patch.commands !== undefined)
 					preset.commands = input.patch.commands;
+				if (input.patch.pinnedToBar !== undefined)
+					preset.pinnedToBar = input.patch.pinnedToBar;
 				if (input.patch.executionMode !== undefined)
 					preset.executionMode = input.patch.executionMode;
 
@@ -402,6 +407,29 @@ export const createSettingsRouter = () => {
 					.onConflictDoUpdate({
 						target: settings.id,
 						set: { showPresetsBar: input.enabled },
+					})
+					.run();
+
+				return { success: true };
+			}),
+
+		getUseCompactTerminalAddButton: publicProcedure.query(() => {
+			const row = getSettings();
+			return (
+				row.useCompactTerminalAddButton ??
+				DEFAULT_USE_COMPACT_TERMINAL_ADD_BUTTON
+			);
+		}),
+
+		setUseCompactTerminalAddButton: publicProcedure
+			.input(z.object({ enabled: z.boolean() }))
+			.mutation(({ input }) => {
+				localDb
+					.insert(settings)
+					.values({ id: 1, useCompactTerminalAddButton: input.enabled })
+					.onConflictDoUpdate({
+						target: settings.id,
+						set: { useCompactTerminalAddButton: input.enabled },
 					})
 					.run();
 

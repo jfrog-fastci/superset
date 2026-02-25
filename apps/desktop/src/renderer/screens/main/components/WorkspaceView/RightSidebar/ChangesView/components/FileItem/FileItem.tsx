@@ -214,31 +214,31 @@ export function FileItem({
 				</span>
 			</button>
 
-			{hasAction && (
-				<div className="flex items-center shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
-					{onDiscard && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="size-5 hover:bg-accent hover:text-destructive"
-									onClick={(e) => {
-										e.stopPropagation();
-										handleDiscardClick();
-									}}
-									disabled={isActioning}
-								>
+				{hasAction && (
+					<div className="flex items-center shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+						{onDiscard && (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="size-5 hover:bg-accent hover:text-destructive"
+										onClick={(e) => {
+											e.stopPropagation();
+											handleDiscardClick();
+										}}
+										disabled={isActioning}
+									>
 									{isDeleteAction ? (
 										<LuTrash2 className="size-3" />
 									) : (
 										<LuUndo2 className="size-3" />
-									)}
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{discardLabel}</TooltipContent>
-						</Tooltip>
-					)}
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">{discardLabel}</TooltipContent>
+							</Tooltip>
+						)}
 					{onStage && (
 						<Tooltip>
 							<TooltipTrigger asChild>
