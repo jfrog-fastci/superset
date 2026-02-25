@@ -1,4 +1,12 @@
 import {
+	AlertDialog,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@superset/ui/alert-dialog";
+import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
@@ -13,7 +21,7 @@ import {
 import { Button } from "@superset/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { HiChevronRight, HiMiniMinus, HiMiniPlus } from "react-icons/hi2";
 import {
 	LuClipboard,
@@ -117,10 +125,11 @@ export function FolderRow({
 	isActioning = false,
 	projectId,
 }: FolderRowProps) {
+	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 	const isGrouped = variant === "grouped";
 	const isRoot = folderPath === "";
 	const absolutePath = isRoot ? worktreePath : `${worktreePath}/${folderPath}`;
-	const hasAction = onStageAll || onUnstageAll || onDiscardAll;
+	const hasAction = !!(onStageAll || onUnstageAll || onDiscardAll);
 
 	const { copyPath, copyRelativePath, revealInFinder, openInEditor } =
 		usePathActions({
@@ -187,7 +196,7 @@ export function FolderRow({
 
 			{onDiscardAll && (
 				<ContextMenuItem
-					onClick={onDiscardAll}
+					onClick={() => setShowDiscardDialog(true)}
 					disabled={isActioning}
 					className="text-destructive focus:text-destructive"
 				>
@@ -199,6 +208,7 @@ export function FolderRow({
 	);
 
 	return (
+		<>
 		<Collapsible
 			open={isExpanded}
 			onOpenChange={onToggle}
@@ -224,7 +234,7 @@ export function FolderRow({
 												className="size-5 hover:bg-accent hover:text-destructive"
 												onClick={(e) => {
 													e.stopPropagation();
-													onDiscardAll();
+													setShowDiscardDialog(true);
 												}}
 												disabled={isActioning}
 											>
@@ -287,5 +297,40 @@ export function FolderRow({
 				{children}
 			</CollapsibleContent>
 		</Collapsible>
+
+		<AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+			<AlertDialogContent className="max-w-[340px] gap-0 p-0">
+				<AlertDialogHeader className="px-4 pt-4 pb-2">
+					<AlertDialogTitle className="font-medium">
+						Discard all changes in "{name}"?
+					</AlertDialogTitle>
+					<AlertDialogDescription>
+						This will revert all changes to {fileCount ?? "all"} file{fileCount === 1 ? "" : "s"} in this folder. This action cannot be undone.
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter className="px-4 pb-4 pt-2 flex-row justify-end gap-2">
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 px-3 text-xs"
+						onClick={() => setShowDiscardDialog(false)}
+					>
+						Cancel
+					</Button>
+					<Button
+						variant="destructive"
+						size="sm"
+						className="h-7 px-3 text-xs"
+						onClick={() => {
+							setShowDiscardDialog(false);
+							onDiscardAll();
+						}}
+					>
+						Discard
+					</Button>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+		</>
 	);
 }
