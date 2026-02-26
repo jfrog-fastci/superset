@@ -12,7 +12,6 @@ function trimTrailingPunctuation(value: string): string {
 
 function isFileLikeMention(value: string): boolean {
 	if (!value) return false;
-	if (value.toLowerCase().startsWith("task:")) return false;
 	if (value.includes(":")) return false;
 	return value.includes("/") || value.includes("\\") || value.includes(".");
 }

@@ -7,17 +7,13 @@ import {
 } from "@superset/ui/ai-elements/conversation";
 import { Message, MessageContent } from "@superset/ui/ai-elements/message";
 import { ShimmerLabel } from "@superset/ui/ai-elements/shimmer-label";
-import { FileSearchIcon } from "lucide-react";
-import { type ReactNode, useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
-import { useTabsStore } from "renderer/stores/tabs/store";
 import { MastraToolCallBlock } from "../../../../ChatPane/ChatInterface/components/MastraToolCallBlock";
-import { StreamingMessageText } from "../../../../ChatPane/ChatInterface/components/MessagePartsRenderer/components/StreamingMessageText";
-import { ReasoningBlock } from "../../../../ChatPane/ChatInterface/components/ReasoningBlock";
-import { normalizeWorkspaceFilePath } from "../../../../ChatPane/ChatInterface/utils/file-paths";
 import type { ToolPart } from "../../../../ChatPane/ChatInterface/utils/tool-helpers";
 import { normalizeToolName } from "../../../../ChatPane/ChatInterface/utils/tool-helpers";
-import { parseUserMentions } from "./utils/parseUserMentions";
+import { AssistantMessage } from "./components/AssistantMessage";
+import { UserMessage } from "./components/UserMessage";
 
 type MastraMessage = NonNullable<
 	UseMastraChatDisplayReturn["messages"]
@@ -26,9 +22,6 @@ type MastraActiveTools = NonNullable<UseMastraChatDisplayReturn["activeTools"]>;
 type MastraToolInputBuffers = NonNullable<
 	UseMastraChatDisplayReturn["toolInputBuffers"]
 >;
-type MastraMessageContent = MastraMessage["content"][number];
-type MastraToolCall = Extract<MastraMessageContent, { type: "tool_call" }>;
-type MastraToolResult = Extract<MastraMessageContent, { type: "tool_result" }>;
 type MastraActiveTool =
 	MastraActiveTools extends Map<string, infer ToolState> ? ToolState : never;
 type MastraToolInputBuffer =
@@ -44,68 +37,6 @@ interface ChatMastraMessageListProps {
 	workspaceCwd?: string;
 	activeTools: MastraActiveTools | undefined;
 	toolInputBuffers: MastraToolInputBuffers | undefined;
-}
-
-function ImagePart({ data, mimeType }: { data: string; mimeType: string }) {
-	return (
-		<img
-			src={`data:${mimeType};base64,${data}`}
-			alt="Attached"
-			className="max-h-48 rounded-lg object-contain"
-		/>
-	);
-}
-
-function findToolResultForCall({
-	content,
-	toolCallId,
-	startAt,
-}: {
-	content: MastraMessage["content"];
-	toolCallId: string;
-	startAt: number;
-}): { result: MastraToolResult | null; index: number } {
-	for (let index = startAt; index < content.length; index++) {
-		const part = content[index];
-		if (part.type === "tool_result" && part.id === toolCallId) {
-			return { result: part, index };
-		}
-	}
-	return { result: null, index: -1 };
-}
-
-function toToolPartFromCall({
-	part,
-	result,
-	isStreaming,
-}: {
-	part: MastraToolCall;
-	result: MastraToolResult | null;
-	isStreaming: boolean;
-}): ToolPart {
-	return {
-		type: `tool-${normalizeToolName(part.name)}` as ToolPart["type"],
-		toolCallId: part.id,
-		state: result?.isError
-			? "output-error"
-			: result
-				? "output-available"
-				: isStreaming
-					? "input-streaming"
-					: "input-available",
-		input: part.args,
-		...(result ? { output: result.result } : {}),
-	} as ToolPart;
-}
-
-function toToolPartFromResult(part: MastraToolResult): ToolPart {
-	return {
-		type: `tool-${normalizeToolName(part.name)}` as ToolPart["type"],
-		toolCallId: part.id,
-		state: part.isError ? "output-error" : "output-available",
-		input: {},
-		output: part.result,
-	} as ToolPart;
 }
 
 function toPreviewToolPart({
@@ -194,224 +125,6 @@ function getStreamingPreviewToolParts({
 			inputEntries.find(([id]) => id === toolCallId)?.[1] ?? null;
 		return toPreviewToolPart({ toolCallId, toolState, inputBuffer });
 	});
-}
-
-function UserMessage({
-	message,
-	workspaceId,
-	workspaceCwd,
-}: {
-	message: MastraMessage;
-	workspaceId: string;
-	workspaceCwd?: string;
-}) {
-	const addFileViewerPane = useTabsStore((store) => store.addFileViewerPane);
-	const openMentionedFile = useCallback(
-		(filePath: string) => {
-			addFileViewerPane(workspaceId, { filePath, isPinned: true });
-		},
-		[addFileViewerPane, workspaceId],
-	);
-
-	return (
-		<div
-			className="flex flex-col items-end gap-2"
-			data-chat-user-message="true"
-			data-message-id={message.id}
-		>
-			{message.content.map((part, partIndex) => {
-				if (part.type === "text") {
-					const mentionSegments = parseUserMentions(part.text);
-					return (
-						<div
-							key={`${message.id}-${partIndex}`}
-							className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap"
-						>
-							{mentionSegments.map((segment, segmentIndex) => {
-								if (segment.type === "text") {
-									return (
-										<span
-											key={`${message.id}-${partIndex}-${segmentIndex}`}
-											className="whitespace-pre-wrap break-words"
-										>
-											{segment.value}
-										</span>
-									);
-								}
-
-								const normalizedPath = normalizeWorkspaceFilePath({
-									filePath: segment.relativePath,
-									workspaceRoot: workspaceCwd,
-								});
-								const canOpen = Boolean(normalizedPath);
-
-								return (
-									<button
-										type="button"
-										key={`${message.id}-${partIndex}-${segmentIndex}`}
-										className="mx-0.5 inline-flex items-center gap-0.5 rounded-md bg-primary/15 px-1.5 py-0.5 font-mono text-xs text-primary transition-colors hover:bg-primary/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-default disabled:opacity-60"
-										onClick={() => {
-											if (!normalizedPath) return;
-											openMentionedFile(normalizedPath);
-										}}
-										disabled={!canOpen}
-										aria-label={`Open file ${segment.relativePath}`}
-									>
-										<span className="font-semibold text-primary">@</span>
-										<span className="text-primary/95">
-											{segment.relativePath}
-										</span>
-									</button>
-								);
-							})}
-						</div>
-					);
-				}
-				if (part.type === "image") {
-					return (
-						<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-							<ImagePart data={part.data} mimeType={part.mimeType} />
-						</div>
-					);
-				}
-				return null;
-			})}
-		</div>
-	);
-}
-
-function AssistantMessage({
-	message,
-	isStreaming,
-	workspaceId,
-	workspaceCwd,
-	previewToolParts = [],
-}: {
-	message: MastraMessage;
-	isStreaming: boolean;
-	workspaceId: string;
-	workspaceCwd?: string;
-	previewToolParts?: ToolPart[];
-}) {
-	const nodes: ReactNode[] = [];
-	const renderedToolCallIds = new Set<string>();
-	for (let partIndex = 0; partIndex < message.content.length; partIndex++) {
-		const part = message.content[partIndex];
-
-		if (part.type === "text") {
-			nodes.push(
-				<StreamingMessageText
-					key={`${message.id}-${partIndex}`}
-					text={part.text}
-					isAnimating={isStreaming}
-					mermaid={{
-						config: {
-							theme: "default",
-						},
-					}}
-				/>,
-			);
-			continue;
-		}
-
-		if (part.type === "thinking") {
-			nodes.push(
-				<ReasoningBlock
-					key={`${message.id}-${partIndex}`}
-					reasoning={part.thinking}
-				/>,
-			);
-			continue;
-		}
-
-		if (part.type === "image") {
-			nodes.push(
-				<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-					<ImagePart data={part.data} mimeType={part.mimeType} />
-				</div>,
-			);
-			continue;
-		}
-
-		if (part.type === "tool_call") {
-			renderedToolCallIds.add(part.id);
-			const { result, index: resultIndex } = findToolResultForCall({
-				content: message.content,
-				toolCallId: part.id,
-				startAt: partIndex + 1,
-			});
-
-			nodes.push(
-				<MastraToolCallBlock
-					key={`${message.id}-tool-${part.id}`}
-					part={toToolPartFromCall({
-						part,
-						result,
-						isStreaming,
-					})}
-					workspaceId={workspaceId}
-					workspaceCwd={workspaceCwd}
-				/>,
-			);
-
-			// If next sibling is the matched result, skip it.
-			if (resultIndex === partIndex + 1) {
-				partIndex++;
-			}
-			continue;
-		}
-
-		if (part.type === "tool_result") {
-			renderedToolCallIds.add(part.id);
-			nodes.push(
-				<MastraToolCallBlock
-					key={`${message.id}-tool-result-${part.id}`}
-					part={toToolPartFromResult(part)}
-					workspaceId={workspaceId}
-					workspaceCwd={workspaceCwd}
-				/>,
-			);
-			continue;
-		}
-
-		if (part.type.startsWith("om_")) {
-			nodes.push(
-				<div
-					key={`${message.id}-${partIndex}`}
-					className="flex items-center gap-2 text-xs text-muted-foreground"
-				>
-					<FileSearchIcon className="size-3.5" />
-					<span>{part.type.replaceAll("_", " ")}</span>
-				</div>,
-			);
-		}
-	}
-
-	for (const previewPart of previewToolParts) {
-		if (renderedToolCallIds.has(previewPart.toolCallId)) continue;
-		nodes.push(
-			<MastraToolCallBlock
-				key={`${message.id}-tool-preview-${previewPart.toolCallId}`}
-				part={previewPart}
-				workspaceId={workspaceId}
-				workspaceCwd={workspaceCwd}
-			/>,
-		);
-	}
-
-	return (
-		<Message from="assistant">
-			<MessageContent>
-				{nodes.length === 0 && isStreaming ? (
-					<ShimmerLabel className="text-sm text-muted-foreground">
-						Thinking...
-					</ShimmerLabel>
-				) : (
-					nodes
-				)}
-			</MessageContent>
-		</Message>
-	);
 }
 
 export function ChatMastraMessageList({

@@ -34,9 +34,11 @@ describe("parseUserMentions", () => {
 		);
 	});
 
-	it("ignores task mentions", () => {
-		expect(parseUserMentions("refer @task:SUPER-288 and @src/app.ts")).toEqual([
-			{ type: "text", value: "refer @task:SUPER-288 and " },
+	it("ignores colon-delimited mentions", () => {
+		expect(
+			parseUserMentions("refer @ticket:SUPER-288 and @src/app.ts"),
+		).toEqual([
+			{ type: "text", value: "refer @ticket:SUPER-288 and " },
 			{
 				type: "file-mention",
 				raw: "@src/app.ts",
