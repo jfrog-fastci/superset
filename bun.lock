@@ -108,7 +108,7 @@
     },
     "apps/desktop": {
       "name": "@superset/desktop",
-      "version": "0.0.85",
+      "version": "0.0.86",
       "dependencies": {
         "@ai-sdk/react": "^3.0.0",
         "@ast-grep/napi": "^0.41.0",
@@ -568,8 +568,6 @@
       "name": "@superset/chat",
       "version": "0.0.1",
       "dependencies": {
-        "@superset/trpc": "workspace:*",
-        "@trpc/client": "^11.7.1",
         "@trpc/server": "^11.7.1",
         "fast-glob": "^3.3.3",
         "fuse.js": "^7.1.0",
@@ -587,7 +585,6 @@
       "peerDependencies": {
         "@tanstack/react-query": "^5.0.0",
         "@trpc/react-query": "^11.7.1",
-        "drizzle-orm": "0.45.1",
         "react": "^18.0.0 || ^19.0.0",
       },
     },
