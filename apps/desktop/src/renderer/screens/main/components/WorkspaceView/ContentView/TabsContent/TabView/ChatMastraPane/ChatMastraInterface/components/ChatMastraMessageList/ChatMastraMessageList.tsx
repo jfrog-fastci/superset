@@ -8,13 +8,16 @@ import {
 import { Message, MessageContent } from "@superset/ui/ai-elements/message";
 import { ShimmerLabel } from "@superset/ui/ai-elements/shimmer-label";
 import { FileSearchIcon } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
+import { useTabsStore } from "renderer/stores/tabs/store";
 import { MastraToolCallBlock } from "../../../../ChatPane/ChatInterface/components/MastraToolCallBlock";
 import { StreamingMessageText } from "../../../../ChatPane/ChatInterface/components/MessagePartsRenderer/components/StreamingMessageText";
 import { ReasoningBlock } from "../../../../ChatPane/ChatInterface/components/ReasoningBlock";
+import { normalizeWorkspaceFilePath } from "../../../../ChatPane/ChatInterface/utils/file-paths";
 import type { ToolPart } from "../../../../ChatPane/ChatInterface/utils/tool-helpers";
 import { normalizeToolName } from "../../../../ChatPane/ChatInterface/utils/tool-helpers";
+import { parseUserMentions } from "./utils/parseUserMentions";
 
 type MastraMessage = NonNullable<
 	UseMastraChatDisplayReturn["messages"]
@@ -193,7 +196,23 @@ function getStreamingPreviewToolParts({
 	});
 }
 
-function UserMessage({ message }: { message: MastraMessage }) {
+function UserMessage({
+	message,
+	workspaceId,
+	workspaceCwd,
+}: {
+	message: MastraMessage;
+	workspaceId: string;
+	workspaceCwd?: string;
+}) {
+	const addFileViewerPane = useTabsStore((store) => store.addFileViewerPane);
+	const openMentionedFile = useCallback(
+		(filePath: string) => {
+			addFileViewerPane(workspaceId, { filePath, isPinned: true });
+		},
+		[addFileViewerPane, workspaceId],
+	);
+
 	return (
 		<div
 			className="flex flex-col items-end gap-2"
@@ -202,12 +221,49 @@ function UserMessage({ message }: { message: MastraMessage }) {
 		>
 			{message.content.map((part, partIndex) => {
 				if (part.type === "text") {
+					const mentionSegments = parseUserMentions(part.text);
 					return (
 						<div
 							key={`${message.id}-${partIndex}`}
 							className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap"
 						>
-							{part.text}
+							{mentionSegments.map((segment, segmentIndex) => {
+								if (segment.type === "text") {
+									return (
+										<span
+											key={`${message.id}-${partIndex}-${segmentIndex}`}
+											className="whitespace-pre-wrap break-words"
+										>
+											{segment.value}
+										</span>
+									);
+								}
+
+								const normalizedPath = normalizeWorkspaceFilePath({
+									filePath: segment.relativePath,
+									workspaceRoot: workspaceCwd,
+								});
+								const canOpen = Boolean(normalizedPath);
+
+								return (
+									<button
+										type="button"
+										key={`${message.id}-${partIndex}-${segmentIndex}`}
+										className="mx-0.5 inline-flex items-center gap-0.5 rounded-md bg-primary/15 px-1.5 py-0.5 font-mono text-xs text-primary transition-colors hover:bg-primary/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-default disabled:opacity-60"
+										onClick={() => {
+											if (!normalizedPath) return;
+											openMentionedFile(normalizedPath);
+										}}
+										disabled={!canOpen}
+										aria-label={`Open file ${segment.relativePath}`}
+									>
+										<span className="font-semibold text-primary">@</span>
+										<span className="text-primary/95">
+											{segment.relativePath}
+										</span>
+									</button>
+								);
+							})}
 						</div>
 					);
 				}
@@ -400,7 +456,14 @@ export function ChatMastraMessageList({
 				) : (
 					visibleMessages.map((message) => {
 						if (message.role === "user")
-							return <UserMessage key={message.id} message={message} />;
+							return (
+								<UserMessage
+									key={message.id}
+									message={message}
+									workspaceId={workspaceId}
+									workspaceCwd={workspaceCwd}
+								/>
+							);
 
 						return (
 							<AssistantMessage
