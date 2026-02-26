@@ -1,13 +1,7 @@
-import type { UseMastraChatDisplayReturn } from "@superset/chat-mastra/client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { McpOverviewPayload } from "../../../../ChatPane/ChatInterface/types";
 
-type PendingApproval = UseMastraChatDisplayReturn["pendingApproval"];
-type PendingQuestion = UseMastraChatDisplayReturn["pendingQuestion"];
-type PendingPlanApproval = UseMastraChatDisplayReturn["pendingPlanApproval"];
-
 export interface UseMcpUiOptions {
-	chat: UseMastraChatDisplayReturn;
 	cwd: string;
 	loadOverview: (cwd: string) => Promise<McpOverviewPayload>;
 	onSetErrorMessage: (message: string) => void;
@@ -23,23 +17,9 @@ export interface UseMcpUiReturn {
 	openOverview: () => Promise<void>;
 	refreshOverview: () => Promise<void>;
 	resetUi: () => void;
-	pendingApproval: PendingApproval | null | undefined;
-	pendingQuestion: PendingQuestion | null | undefined;
-	pendingPlanApproval: PendingPlanApproval | null | undefined;
-	isApprovalPending: boolean;
-	isQuestionPending: boolean;
-	isPlanPending: boolean;
-	questionDraft: string;
-	planFeedback: string;
-	setQuestionDraft: (value: string) => void;
-	setPlanFeedback: (value: string) => void;
-	submitApprovalDecision: (decision: "approve" | "deny") => Promise<void>;
-	submitQuestionAnswer: (answer: string) => Promise<void>;
-	submitPlanDecision: (action: "accept" | "reject" | "revise") => Promise<void>;
 }
 
 export function useMcpUi({
-	chat,
 	cwd,
 	loadOverview,
 	onSetErrorMessage,
@@ -48,32 +28,11 @@ export function useMcpUi({
 	const [overview, setOverview] = useState<McpOverviewPayload | null>(null);
 	const [overviewOpen, setOverviewOpen] = useState(false);
 	const [isOverviewLoading, setIsOverviewLoading] = useState(false);
-	const [isApprovalPending, setIsApprovalPending] = useState(false);
-	const [isQuestionPending, setIsQuestionPending] = useState(false);
-	const [isPlanPending, setIsPlanPending] = useState(false);
-	const [questionDraft, setQuestionDraftState] = useState("");
-	const [planFeedback, setPlanFeedbackState] = useState("");
-
-	const pendingApproval = chat.pendingApproval;
-	const pendingQuestion = chat.pendingQuestion;
-	const pendingPlanApproval = chat.pendingPlanApproval;
 
 	const resetUi = useCallback(() => {
 		setOverview(null);
 		setOverviewOpen(false);
-		setQuestionDraftState("");
-		setPlanFeedbackState("");
 	}, []);
-
-	useEffect(() => {
-		if (!pendingQuestion?.questionId) return;
-		setQuestionDraftState("");
-	}, [pendingQuestion?.questionId]);
-
-	useEffect(() => {
-		if (!pendingPlanApproval?.planId) return;
-		setPlanFeedbackState("");
-	}, [pendingPlanApproval?.planId]);
 
 	const showOverview = useCallback((nextOverview: McpOverviewPayload) => {
 		setOverview(nextOverview);
@@ -108,91 +67,6 @@ export function useMcpUi({
 		}
 	}, [cwd, loadOverview]);
 
-	const submitApprovalDecision = useCallback(
-		async (decision: "approve" | "deny") => {
-			if (!pendingApproval) return;
-			setIsApprovalPending(true);
-			onClearError();
-			try {
-				await chat.commands.respondToApproval({
-					payload: {
-						decision: decision === "approve" ? "approve" : "decline",
-					},
-				});
-			} catch (error) {
-				onSetErrorMessage(
-					error instanceof Error
-						? error.message
-						: "Failed to submit approval response",
-				);
-			} finally {
-				setIsApprovalPending(false);
-			}
-		},
-		[chat.commands, onClearError, onSetErrorMessage, pendingApproval],
-	);
-
-	const submitQuestionAnswer = useCallback(
-		async (answer: string) => {
-			if (!pendingQuestion) return;
-			const trimmed = answer.trim();
-			if (!trimmed) return;
-			setIsQuestionPending(true);
-			onClearError();
-			try {
-				await chat.commands.respondToQuestion({
-					payload: {
-						questionId: pendingQuestion.questionId,
-						answer: trimmed,
-					},
-				});
-				setQuestionDraftState("");
-			} catch (error) {
-				onSetErrorMessage(
-					error instanceof Error ? error.message : "Failed to answer question",
-				);
-			} finally {
-				setIsQuestionPending(false);
-			}
-		},
-		[chat.commands, onClearError, onSetErrorMessage, pendingQuestion],
-	);
-
-	const submitPlanDecision = useCallback(
-		async (action: "accept" | "reject" | "revise") => {
-			if (!pendingPlanApproval) return;
-			setIsPlanPending(true);
-			onClearError();
-			try {
-				const feedback = planFeedback.trim() || undefined;
-				await chat.commands.respondToPlan({
-					payload: {
-						planId: pendingPlanApproval.planId,
-						response: {
-							action: action === "accept" ? "approved" : "rejected",
-							...(feedback ? { feedback } : {}),
-						},
-					},
-				});
-			} catch (error) {
-				onSetErrorMessage(
-					error instanceof Error
-						? error.message
-						: "Failed to submit plan response",
-				);
-			} finally {
-				setIsPlanPending(false);
-			}
-		},
-		[
-			chat.commands,
-			onClearError,
-			onSetErrorMessage,
-			pendingPlanApproval,
-			planFeedback,
-		],
-	);
-
 	return {
 		overview,
 		overviewOpen,
@@ -202,18 +76,5 @@ export function useMcpUi({
 		openOverview,
 		refreshOverview,
 		resetUi,
-		pendingApproval,
-		pendingQuestion,
-		pendingPlanApproval,
-		isApprovalPending,
-		isQuestionPending,
-		isPlanPending,
-		questionDraft,
-		planFeedback,
-		setQuestionDraft: setQuestionDraftState,
-		setPlanFeedback: setPlanFeedbackState,
-		submitApprovalDecision,
-		submitQuestionAnswer,
-		submitPlanDecision,
 	};
 }

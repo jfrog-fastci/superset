@@ -99,7 +99,6 @@ export function ChatMastraInterface({
 		[chatServiceTrpcUtils.workspace.getMcpOverview],
 	);
 	const mcpUi = useMcpUi({
-		chat,
 		cwd,
 		loadOverview: loadMcpOverview,
 		onSetErrorMessage: setRuntimeErrorMessage,
