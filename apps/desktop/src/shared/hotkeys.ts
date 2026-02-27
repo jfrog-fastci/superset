@@ -519,8 +519,13 @@ export const HOTKEYS = {
 		label: "New Terminal",
 		category: "Terminal",
 	}),
-	REOPEN_TAB: defineHotkey({
+	NEW_CHAT: defineHotkey({
 		keys: "meta+shift+t",
+		label: "New Chat",
+		category: "Terminal",
+	}),
+	REOPEN_TAB: defineHotkey({
+		keys: "meta+shift+r",
 		label: "Reopen Closed Tab",
 		category: "Terminal",
 	}),
@@ -533,6 +538,12 @@ export const HOTKEYS = {
 		keys: "meta+w",
 		label: "Close Terminal",
 		category: "Terminal",
+	}),
+	CLOSE_TAB: defineHotkey({
+		keys: "meta+shift+w",
+		label: "Close Tab",
+		category: "Terminal",
+		description: "Close the current tab",
 	}),
 	CLEAR_TERMINAL: defineHotkey({
 		keys: "meta+k",
@@ -708,7 +719,7 @@ export const HOTKEYS = {
 		isHidden: true,
 	}),
 	CLOSE_WINDOW: defineHotkey({
-		keys: "meta+shift+w",
+		keys: "meta+shift+q",
 		label: "Close Window",
 		category: "Window",
 	}),
@@ -730,6 +741,13 @@ export const HOTKEYS = {
 		label: "Quick Open File",
 		category: "Navigation",
 		description: "Search and open files in the current workspace",
+	}),
+	KEYWORD_SEARCH: defineHotkey({
+		keys: "meta+shift+f",
+		label: "Keyword Search",
+		category: "Navigation",
+		description:
+			"Search for keyword matches across files in the current workspace",
 	}),
 
 	// Chat

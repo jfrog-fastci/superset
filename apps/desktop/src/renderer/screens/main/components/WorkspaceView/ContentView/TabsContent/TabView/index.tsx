@@ -20,7 +20,7 @@ import {
 } from "renderer/stores/tabs/utils";
 import { useTheme } from "renderer/stores/theme";
 import { BrowserPane } from "./BrowserPane";
-import { ChatPane } from "./ChatPane";
+import { ChatMastraPane } from "./ChatMastraPane";
 import { DevToolsPane } from "./DevToolsPane";
 import { FileViewerPane } from "./FileViewerPane";
 import { TabPane } from "./TabPane";
@@ -174,10 +174,10 @@ export function TabView({ tab }: TabViewProps) {
 				);
 			}
 
-			// Route chat panes to ChatPane component
-			if (paneInfo.type === "chat" && hasAiChat) {
+			// Route chat panes to ChatMastraPane component
+			if (paneInfo.type === "chat-mastra" && hasAiChat) {
 				return (
-					<ChatPane
+					<ChatMastraPane
 						paneId={paneId}
 						path={path}
 						tabId={tab.id}

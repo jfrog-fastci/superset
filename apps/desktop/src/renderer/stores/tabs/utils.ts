@@ -143,7 +143,6 @@ export const getPaneIdsInVisualOrder = extractPaneIdsFromLayout;
  * Options for creating a pane with preset configuration
  */
 export interface CreatePaneOptions {
-	initialCommands?: string[];
 	initialCwd?: string;
 }
 
@@ -163,7 +162,6 @@ export const createPane = (
 		type,
 		name: "Terminal",
 		isNew: true,
-		initialCommands: options?.initialCommands,
 		initialCwd: options?.initialCwd,
 	};
 };
@@ -228,18 +226,15 @@ export const createFileViewerPane = (
 	};
 };
 
-/**
- * Creates a new chat pane
- */
-export const createChatPane = (tabId: string): Pane => {
+export const createChatMastraPane = (tabId: string): Pane => {
 	const id = generateId("pane");
 
 	return {
 		id,
 		tabId,
-		type: "chat",
-		name: "Chat",
-		chat: {
+		type: "chat-mastra",
+		name: "New Chat",
+		chatMastra: {
 			sessionId: null,
 		},
 	};
@@ -324,23 +319,15 @@ export const createBrowserTabWithPane = (
 	return { tab, pane };
 };
 
-/**
- * Creates a new tab with a chat pane atomically
- */
-export const createChatTabWithPane = (
+export const createChatMastraTabWithPane = (
 	workspaceId: string,
-	existingTabs: Tab[] = [],
 ): { tab: Tab; pane: Pane } => {
 	const tabId = generateId("tab");
-	const pane = createChatPane(tabId);
-
-	const workspaceTabs = existingTabs.filter(
-		(t) => t.workspaceId === workspaceId,
-	);
+	const pane = createChatMastraPane(tabId);
 
 	const tab: Tab = {
 		id: tabId,
-		name: `Chat ${workspaceTabs.filter((t) => t.name.startsWith("Chat")).length + 1}`,
+		name: "New Chat",
 		workspaceId,
 		layout: pane.id,
 		createdAt: Date.now(),

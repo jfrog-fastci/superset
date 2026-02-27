@@ -346,8 +346,17 @@ export function setupCopyHandler(xterm: XTerm): () => void {
 			.map((line) => line.trimEnd())
 			.join("\n");
 
-		event.preventDefault();
-		event.clipboardData?.setData("text/plain", trimmedText);
+		// On Linux/Wayland in Electron, clipboardData can be null for copy events.
+		// Only cancel default behavior when we can write directly to event clipboardData.
+		if (event.clipboardData) {
+			event.preventDefault();
+			event.clipboardData.setData("text/plain", trimmedText);
+			return;
+		}
+
+		// Fallback path when clipboardData is unavailable.
+		// Keep default browser copy behavior and best-effort write trimmed text.
+		void navigator.clipboard?.writeText(trimmedText).catch(() => {});
 	};
 
 	element.addEventListener("copy", handleCopy);
@@ -380,9 +389,28 @@ export function setupPasteHandler(
 
 	let cancelActivePaste: (() => void) | null = null;
 
+	const shouldForwardCtrlVForNonTextPaste = (
+		event: ClipboardEvent,
+		text: string,
+	): boolean => {
+		if (text) return false;
+		const types = Array.from(event.clipboardData?.types ?? []);
+		if (types.length === 0) return false;
+		return types.some((type) => type !== "text/plain");
+	};
+
 	const handlePaste = (event: ClipboardEvent) => {
-		const text = event.clipboardData?.getData("text/plain");
-		if (!text) return;
+		const text = event.clipboardData?.getData("text/plain") ?? "";
+		if (!text) {
+			// Match terminal behavior like iTerm's "Paste or send ^V":
+			// when clipboard has non-text payloads but no plain text, forward Ctrl+V.
+			if (options.onWrite && shouldForwardCtrlVForNonTextPaste(event, text)) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				options.onWrite("\x16");
+			}
+			return;
+		}
 
 		event.preventDefault();
 		event.stopImmediatePropagation();

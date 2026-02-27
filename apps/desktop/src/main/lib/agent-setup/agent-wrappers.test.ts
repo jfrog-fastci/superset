@@ -56,11 +56,14 @@ mock.module("node:os", () => ({
 }));
 
 const {
+	buildCodexWrapperExecLine,
 	buildCopilotWrapperExecLine,
 	buildWrapperScript,
+	createCodexWrapper,
 	getCursorHooksJsonContent,
 	getCopilotHookScriptPath,
 	getGeminiSettingsJsonContent,
+	getMastraHooksJsonContent,
 } = await import("./agent-wrappers");
 
 describe("agent-wrappers copilot", () => {
@@ -116,6 +119,31 @@ describe("agent-wrappers copilot", () => {
 		const updated = readFileSync(hookFile, "utf-8");
 		expect(updated).toContain(hookScriptPath);
 		expect(updated).not.toContain("/tmp/old-hook.sh");
+	});
+
+	it("injects codex message-start watcher + completion notifications in wrapper", () => {
+		createCodexWrapper();
+
+		const wrapperPath = path.join(TEST_BIN_DIR, "codex");
+		const wrapper = readFileSync(wrapperPath, "utf-8");
+
+		expect(wrapper).toContain("export CODEX_TUI_RECORD_SESSION=1");
+		expect(wrapper).toContain('"type":"task_started"');
+		expect(wrapper).toContain('_superset_last_turn_id=""');
+		expect(wrapper).toContain("_superset_turn_id=$(printf");
+		expect(wrapper).toContain('awk -F\'"turn_id":"\'');
+		expect(wrapper).toContain('{"hook_event_name":"Start"}');
+		expect(wrapper).toContain(
+			`"$REAL_BIN" -c 'notify=["bash","${path.join(TEST_HOOKS_DIR, "notify.sh")}"]' "$@"`,
+		);
+		expect(wrapper).toContain("SUPERSET_CODEX_START_WATCHER_PID");
+		expect(wrapper).toContain('kill "$SUPERSET_CODEX_START_WATCHER_PID"');
+
+		const execLine = buildCodexWrapperExecLine(
+			path.join(TEST_HOOKS_DIR, "notify.sh"),
+		);
+		expect(execLine).not.toContain("{{NOTIFY_PATH}}");
+		expect(wrapper).toContain(execLine);
 	});
 
 	it("replaces stale Cursor hook commands from old superset paths", () => {
@@ -271,6 +299,67 @@ describe("agent-wrappers copilot", () => {
 		expect(
 			parsed2.hooks.BeforeAgent.some((def) =>
 				def.hooks.some((hook) => hook.command === "/opt/custom-hook.sh"),
+			),
+		).toBe(true);
+		expect(JSON.parse(content2)).toEqual(JSON.parse(content));
+	});
+
+	it("replaces stale Mastra hook commands from old superset paths", () => {
+		const mastraHooksPath = path.join(
+			mockedHomeDir,
+			".mastracode",
+			"hooks.json",
+		);
+		const staleHookPath = "/tmp/.superset-old/hooks/notify.sh";
+		const currentHookPath = "/tmp/.superset-new/hooks/notify.sh";
+
+		mkdirSync(path.dirname(mastraHooksPath), { recursive: true });
+		writeFileSync(
+			mastraHooksPath,
+			JSON.stringify(
+				{
+					UserPromptSubmit: [
+						{ type: "command", command: `bash '${staleHookPath}'` },
+						{ type: "command", command: "/usr/local/bin/custom-hook" },
+					],
+					Stop: [{ type: "command", command: `bash '${staleHookPath}'` }],
+					PostToolUse: [
+						{ type: "command", command: `bash '${staleHookPath}'` },
+					],
+				},
+				null,
+				2,
+			),
+		);
+
+		const content = getMastraHooksJsonContent(currentHookPath);
+		writeFileSync(mastraHooksPath, content);
+		const content2 = getMastraHooksJsonContent(currentHookPath);
+
+		const parsed = JSON.parse(content) as Record<
+			string,
+			Array<{ type: string; command: string }>
+		>;
+		const managedEvents = ["UserPromptSubmit", "Stop", "PostToolUse"] as const;
+
+		for (const eventName of managedEvents) {
+			const hooks = parsed[eventName];
+			expect(Array.isArray(hooks)).toBe(true);
+			expect(
+				hooks.some(
+					(entry) =>
+						entry.type === "command" &&
+						entry.command === `bash '${currentHookPath}'`,
+				),
+			).toBe(true);
+			expect(hooks.some((entry) => entry.command.includes(staleHookPath))).toBe(
+				false,
+			);
+		}
+
+		expect(
+			parsed.UserPromptSubmit.some(
+				(entry) => entry.command === "/usr/local/bin/custom-hook",
 			),
 		).toBe(true);
 		expect(JSON.parse(content2)).toEqual(JSON.parse(content));

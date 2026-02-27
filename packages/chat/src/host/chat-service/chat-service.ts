@@ -1,57 +1,177 @@
-import type { GetHeaders } from "../lib/auth/auth";
-import { AgentManager, type AgentManagerConfig } from "./agent-manager";
+import { createAuthStorage } from "mastracode";
+import {
+	createAnthropicOAuthSession,
+	exchangeAnthropicAuthorizationCode,
+	getCredentialsFromConfig,
+	getCredentialsFromKeychain,
+} from "../auth/anthropic";
 
-export interface ChatServiceHostConfig {
-	deviceId: string;
-	apiUrl: string;
-	getHeaders: GetHeaders;
+type OpenAIAuthMethod = "api_key" | "env_api_key" | "oauth" | null;
+const OPENAI_AUTH_PROVIDER_ID = "openai-codex";
+type OpenAIAuthStorage = ReturnType<typeof createAuthStorage>;
+
+type AnthropicOAuthCredentials = {
+	accessToken: string;
+	refreshToken?: string;
+	expiresAt?: number;
+};
+
+let anthropicOAuthCredentials: AnthropicOAuthCredentials | null = null;
+
+function setAnthropicOAuthCredentials(
+	credentials: AnthropicOAuthCredentials,
+): void {
+	anthropicOAuthCredentials = credentials;
+}
+
+function getAnthropicAuthToken(): string | null {
+	if (!anthropicOAuthCredentials) return null;
+	if (
+		typeof anthropicOAuthCredentials.expiresAt === "number" &&
+		Date.now() >= anthropicOAuthCredentials.expiresAt
+	) {
+		anthropicOAuthCredentials = null;
+		return null;
+	}
+
+	return anthropicOAuthCredentials.accessToken;
 }
 
 export class ChatService {
-	private agentManager: AgentManager | null = null;
-	private hostConfig: ChatServiceHostConfig;
+	private anthropicAuthSession: {
+		verifier: string;
+		state: string;
+		createdAt: number;
+	} | null = null;
+	private openAIAuthStorage: OpenAIAuthStorage | null = null;
+	private static readonly ANTHROPIC_AUTH_SESSION_TTL_MS = 10 * 60 * 1000;
 
-	constructor(hostConfig: ChatServiceHostConfig) {
-		this.hostConfig = hostConfig;
+	getAnthropicAuthStatus(): { authenticated: boolean } {
+		this.ensureAnthropicTokenFromCliCredentials();
+		return { authenticated: Boolean(getAnthropicAuthToken()) };
 	}
 
-	async start(options: { organizationId: string }): Promise<void> {
-		const config: AgentManagerConfig = {
-			deviceId: this.hostConfig.deviceId,
-			organizationId: options.organizationId,
-			apiUrl: this.hostConfig.apiUrl,
-			getHeaders: this.hostConfig.getHeaders,
+	async getOpenAIAuthStatus(): Promise<{
+		authenticated: boolean;
+		method: OpenAIAuthMethod;
+	}> {
+		const method = this.resolveOpenAIAuthMethod();
+		return { authenticated: method !== null, method };
+	}
+
+	async setOpenAIApiKey(input: { apiKey: string }): Promise<{ success: true }> {
+		const trimmedApiKey = input.apiKey.trim();
+		if (trimmedApiKey.length === 0) {
+			throw new Error("OpenAI API key is required");
+		}
+
+		const authStorage = this.getOpenAIAuthStorage();
+		authStorage.reload();
+		authStorage.set(OPENAI_AUTH_PROVIDER_ID, {
+			type: "api_key",
+			key: trimmedApiKey,
+		});
+
+		process.env.OPENAI_API_KEY = trimmedApiKey;
+		return { success: true };
+	}
+
+	async clearOpenAIApiKey(): Promise<{ success: true }> {
+		const authStorage = this.getOpenAIAuthStorage();
+		authStorage.reload();
+		const credential = authStorage.get(OPENAI_AUTH_PROVIDER_ID);
+		if (credential?.type !== "api_key") {
+			return { success: true };
+		}
+
+		authStorage.remove(OPENAI_AUTH_PROVIDER_ID);
+		if (process.env.OPENAI_API_KEY?.trim() === credential.key.trim()) {
+			delete process.env.OPENAI_API_KEY;
+		}
+
+		return { success: true };
+	}
+
+	private resolveOpenAIAuthMethod(): OpenAIAuthMethod {
+		const authStorage = this.getOpenAIAuthStorage();
+		authStorage.reload();
+		const credential = authStorage.get(OPENAI_AUTH_PROVIDER_ID);
+		if (credential?.type === "oauth") {
+			return "oauth";
+		}
+		if (credential?.type === "api_key" && credential.key.trim().length > 0) {
+			return "api_key";
+		}
+		if (process.env.OPENAI_API_KEY?.trim()) {
+			return "env_api_key";
+		}
+		return null;
+	}
+
+	private getOpenAIAuthStorage(): OpenAIAuthStorage {
+		if (!this.openAIAuthStorage) {
+			// Standalone auth storage bootstrap.
+			// This path intentionally avoids full createMastraCode runtime initialization.
+			this.openAIAuthStorage = createAuthStorage();
+		}
+		return this.openAIAuthStorage;
+	}
+
+	startAnthropicOAuth(): { url: string; instructions: string } {
+		const session = createAnthropicOAuthSession();
+		this.anthropicAuthSession = {
+			verifier: session.verifier,
+			state: session.state,
+			createdAt: session.createdAt,
 		};
 
-		if (this.agentManager) {
-			await this.agentManager.restart({
-				organizationId: options.organizationId,
-				deviceId: this.hostConfig.deviceId,
-			});
-		} else {
-			this.agentManager = new AgentManager(config);
-			await this.agentManager.start();
-		}
+		return {
+			url: session.authUrl,
+			instructions:
+				"Authorize Anthropic in your browser, then paste the code shown there (format: code#state).",
+		};
 	}
 
-	stop(): void {
-		if (this.agentManager) {
-			this.agentManager.stop();
-			this.agentManager = null;
-		}
+	cancelAnthropicOAuth(): { success: true } {
+		this.anthropicAuthSession = null;
+		return { success: true };
 	}
 
-	hasWatcher(sessionId: string): boolean {
-		return this.agentManager?.hasWatcher(sessionId) ?? false;
+	async completeAnthropicOAuth(input: {
+		code: string;
+	}): Promise<{ success: true; expiresAt: number }> {
+		if (!this.anthropicAuthSession) {
+			throw new Error("No active Anthropic auth session. Start auth again.");
+		}
+
+		const elapsed = Date.now() - this.anthropicAuthSession.createdAt;
+		if (elapsed > ChatService.ANTHROPIC_AUTH_SESSION_TTL_MS) {
+			this.anthropicAuthSession = null;
+			throw new Error(
+				"Anthropic auth session expired. Start auth again and paste a fresh code.",
+			);
+		}
+
+		const session = this.anthropicAuthSession;
+		this.anthropicAuthSession = null;
+
+		const credentials = await exchangeAnthropicAuthorizationCode({
+			rawCode: input.code,
+			verifier: session.verifier,
+			expectedState: session.state,
+		});
+
+		setAnthropicOAuthCredentials(credentials);
+		return { success: true, expiresAt: credentials.expiresAt };
 	}
 
-	async ensureWatcher(
-		sessionId: string,
-		cwd?: string,
-	): Promise<{ ready: boolean; reason?: string }> {
-		if (!this.agentManager) {
-			return { ready: false, reason: "Chat service is not started" };
-		}
-		return this.agentManager.ensureWatcher(sessionId, cwd);
+	private ensureAnthropicTokenFromCliCredentials(): void {
+		if (getAnthropicAuthToken()) return;
+		const credentials =
+			getCredentialsFromConfig() ?? getCredentialsFromKeychain();
+		if (!credentials || credentials.kind !== "oauth") return;
+		setAnthropicOAuthCredentials({
+			accessToken: credentials.apiKey,
+		});
 	}
 }

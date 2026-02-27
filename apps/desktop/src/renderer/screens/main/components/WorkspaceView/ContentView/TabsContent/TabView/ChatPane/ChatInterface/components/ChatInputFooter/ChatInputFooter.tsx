@@ -5,12 +5,13 @@ import {
 	type PromptInputMessage,
 	PromptInputTextarea,
 	usePromptInputAttachments,
+	usePromptInputController,
 } from "@superset/ui/ai-elements/prompt-input";
-import { useNavigate } from "@tanstack/react-router";
 import type { ChatStatus } from "ai";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
+	formatHotkeyText,
 	getCurrentPlatform,
 	HOTKEYS,
 	matchesHotkeyEvent,
@@ -20,15 +21,15 @@ import type { ModelOption, PermissionMode } from "../../types";
 import { IssueLinkCommand } from "../IssueLinkCommand";
 import { MentionAnchor, MentionProvider } from "../MentionPopover";
 import { SlashCommandInput } from "../SlashCommandInput";
-import { TaskChip, type TaskChipData } from "../TaskChip";
 import { ChatComposerControls } from "./components/ChatComposerControls";
 import { ChatInputDropZone } from "./components/ChatInputDropZone";
 import { FileDropOverlay } from "./components/FileDropOverlay";
 import { SlashCommandPreview } from "./components/SlashCommandPreview";
+import { getErrorMessage } from "./utils/getErrorMessage";
 
 interface ChatInputFooterProps {
 	cwd: string;
-	error: string | null;
+	error: unknown;
 	canAbort: boolean;
 	submitStatus?: ChatStatus;
 	availableModels: ModelOption[];
@@ -43,7 +44,7 @@ interface ChatInputFooterProps {
 	slashCommands: SlashCommand[];
 	onSubmitStart?: () => void;
 	onSubmitEnd?: () => void;
-	onSend: (message: PromptInputMessage, linkedTaskIds?: string[]) => void;
+	onSend: (message: PromptInputMessage) => void;
 	onStop: (e: React.MouseEvent) => void;
 	onSlashCommandSend: (command: SlashCommand) => void;
 }
@@ -87,17 +88,26 @@ function ChatShortcuts({
 function IssueLinkInserter({
 	issueLinkOpen,
 	setIssueLinkOpen,
-	onSelectTask,
 }: {
 	issueLinkOpen: boolean;
 	setIssueLinkOpen: React.Dispatch<React.SetStateAction<boolean>>;
-	onSelectTask: (task: TaskChipData) => void;
 }) {
+	const { textInput } = usePromptInputController();
+
+	const handleSelectTask = useCallback(
+		(slug: string) => {
+			const current = textInput.value;
+			const needsSpace = current.length > 0 && !current.endsWith(" ");
+			textInput.setInput(`${current}${needsSpace ? " " : ""}@task:${slug} `);
+		},
+		[textInput],
+	);
+
 	return (
 		<IssueLinkCommand
 			open={issueLinkOpen}
 			onOpenChange={setIssueLinkOpen}
-			onSelect={onSelectTask}
+			onSelect={handleSelectTask}
 		/>
 	);
 }
@@ -124,50 +134,19 @@ export function ChatInputFooter({
 	onSlashCommandSend,
 }: ChatInputFooterProps) {
 	const [issueLinkOpen, setIssueLinkOpen] = useState(false);
-	const [linkedTasks, setLinkedTasks] = useState<TaskChipData[]>([]);
-	const navigate = useNavigate();
-
-	const handleSelectTask = useCallback((task: TaskChipData) => {
-		setLinkedTasks((current) => {
-			if (current.some((existing) => existing.taskId === task.taskId)) {
-				return current;
-			}
-			return [...current, task];
-		});
-	}, []);
-
-	const handleRemoveTask = useCallback((taskId: string) => {
-		setLinkedTasks((current) =>
-			current.filter((task) => task.taskId !== taskId),
-		);
-	}, []);
-
-	const handleTaskChipSelect = useCallback(
-		(taskId: string) => {
-			navigate({
-				to: "/tasks/$taskId",
-				params: { taskId },
-			});
-		},
-		[navigate],
-	);
-
-	const handleSubmit = useCallback(
-		(message: PromptInputMessage) => {
-			const linkedTaskIds = linkedTasks.map((task) => task.taskId);
-			onSend(message, linkedTaskIds.length > 0 ? linkedTaskIds : undefined);
-			setLinkedTasks([]);
-		},
-		[linkedTasks, onSend],
-	);
+	const errorMessage = getErrorMessage(error);
+	const platform = getCurrentPlatform();
+	const focusKey = HOTKEYS.FOCUS_CHAT_INPUT.defaults[platform];
+	const focusShortcutText = formatHotkeyText(focusKey, platform);
+	const showFocusHint = focusShortcutText !== "Unassigned";
 
 	return (
 		<ChatInputDropZone className="bg-background px-4 py-3">
 			{(dragType) => (
 				<div className="mx-auto w-full max-w-[680px]">
-					{error && (
+					{errorMessage && (
 						<div className="mb-3 select-text rounded-md border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-							{error}
+							{errorMessage}
 						</div>
 					)}
 					<SlashCommandInput
@@ -183,11 +162,16 @@ export function ChatInputFooter({
 											: "relative"
 									}
 								>
+									{showFocusHint && (
+										<span className="pointer-events-none absolute top-3 right-3 z-10 text-xs text-muted-foreground/50 [:focus-within>&]:hidden">
+											{focusShortcutText} to focus
+										</span>
+									)}
 									<PromptInput
 										className="[&>[data-slot=input-group]]:rounded-[13px] [&>[data-slot=input-group]]:border-[0.5px] [&>[data-slot=input-group]]:shadow-none [&>[data-slot=input-group]]:bg-foreground/[0.02]"
 										onSubmitStart={onSubmitStart}
 										onSubmitEnd={onSubmitEnd}
-										onSubmit={handleSubmit}
+										onSubmit={onSend}
 										multiple
 										maxFiles={5}
 										maxFileSize={10 * 1024 * 1024}
@@ -197,24 +181,11 @@ export function ChatInputFooter({
 										<IssueLinkInserter
 											issueLinkOpen={issueLinkOpen}
 											setIssueLinkOpen={setIssueLinkOpen}
-											onSelectTask={handleSelectTask}
 										/>
 										<FileDropOverlay visible={dragType === "files"} />
 										<PromptInputAttachments>
 											{(file) => <PromptInputAttachment data={file} />}
 										</PromptInputAttachments>
-										{linkedTasks.length > 0 ? (
-											<div className="mx-3 mt-2 flex flex-wrap gap-2 rounded-md border border-border bg-background p-2">
-												{linkedTasks.map((task) => (
-													<TaskChip
-														key={task.taskId}
-														task={task}
-														onSelect={handleTaskChipSelect}
-														onRemove={handleRemoveTask}
-													/>
-												))}
-											</div>
-										) : null}
 										<SlashCommandPreview
 											cwd={cwd}
 											slashCommands={slashCommands}

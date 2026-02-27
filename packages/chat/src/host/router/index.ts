@@ -1,9 +1,9 @@
 export {
 	type ChatServiceRouter,
 	createChatServiceRouter,
+	getMcpOverviewInput,
 	getSlashCommandsInput,
 	previewSlashCommandInput,
 	resolveSlashCommandInput,
 	searchFilesInput,
-	sessionIdInput,
 } from "./router";

@@ -77,7 +77,7 @@ export default defineConfig({
 			),
 			"process.env.STREAMS_URL": defineEnv(
 				process.env.STREAMS_URL,
-				"https://streams.superset.sh",
+				"https://superset-stream.fly.dev",
 			),
 			"process.env.DESKTOP_VITE_PORT": defineEnv(process.env.DESKTOP_VITE_PORT),
 			"process.env.DESKTOP_NOTIFICATIONS_PORT": defineEnv(
@@ -102,7 +102,14 @@ export default defineConfig({
 				output: {
 					dir: resolve(devPath, "main"),
 				},
-				external: ["electron", "better-sqlite3", "node-pty", "pg-native"],
+				external: [
+					"electron",
+					"better-sqlite3",
+					"node-pty",
+					"pg-native",
+					"@ast-grep/napi",
+					"libsql",
+				],
 				plugins: [sentryPlugin].filter(Boolean),
 			},
 		},
@@ -178,7 +185,7 @@ export default defineConfig({
 			),
 			"process.env.STREAMS_URL": defineEnv(
 				process.env.STREAMS_URL,
-				"https://streams.superset.sh",
+				"https://superset-stream.fly.dev",
 			),
 			"process.env.DESKTOP_VITE_PORT": defineEnv(process.env.DESKTOP_VITE_PORT),
 			"process.env.DESKTOP_NOTIFICATIONS_PORT": defineEnv(

@@ -1,7 +1,7 @@
 import { chatServiceTrpc } from "@superset/chat/client";
 import { toast } from "@superset/ui/sonner";
 import { useCallback } from "react";
-import type { ModelOption } from "../../types";
+import type { McpOverviewPayload, ModelOption } from "../../types";
 import {
 	findModelByQuery,
 	normalizeModelQueryFromActionArgument,
@@ -21,6 +21,8 @@ interface UseSlashCommandExecutorOptions {
 	onOpenModelPicker: () => void;
 	onSetErrorMessage: (message: string) => void;
 	onClearError: () => void;
+	onShowMcpOverview: (overview: McpOverviewPayload) => void;
+	loadMcpOverview?: (cwd: string) => Promise<McpOverviewPayload>;
 }
 
 interface ResolveSlashCommandResult {
@@ -38,9 +40,12 @@ export function useSlashCommandExecutor({
 	onOpenModelPicker,
 	onSetErrorMessage,
 	onClearError,
+	onShowMcpOverview,
+	loadMcpOverview,
 }: UseSlashCommandExecutorOptions) {
 	const { mutateAsync: resolveSlashCommandMutateAsync } =
 		chatServiceTrpc.workspace.resolveSlashCommand.useMutation();
+	const chatServiceTrpcUtils = chatServiceTrpc.useUtils();
 
 	const resolveSlashCommandInput = useCallback(
 		async (inputText: string): Promise<ResolveSlashCommandResult> => {
@@ -109,6 +114,26 @@ export function useSlashCommandExecutor({
 							toast.success(`Model set to ${matchedModel.name}`);
 							return { handled: true, nextText: "" };
 						}
+						case "show_mcp_overview": {
+							try {
+								const overview = loadMcpOverview
+									? await loadMcpOverview(cwd)
+									: await chatServiceTrpcUtils.workspace.getMcpOverview.fetch({
+											cwd,
+										});
+								onClearError();
+								onShowMcpOverview(overview);
+							} catch (error) {
+								console.warn(
+									"[chat] Failed to load MCP overview from settings",
+									error,
+								);
+								const overviewError = "Failed to load MCP settings";
+								onSetErrorMessage(overviewError);
+								toast.error(overviewError);
+							}
+							return { handled: true, nextText: "" };
+						}
 						default: {
 							const unknownActionType = String(
 								(resolvedCommand.action as { type: unknown }).type,
@@ -158,8 +183,11 @@ export function useSlashCommandExecutor({
 			onOpenModelPicker,
 			onSelectModel,
 			onSetErrorMessage,
+			onShowMcpOverview,
+			loadMcpOverview,
 			onStartFreshSession,
 			onStopActiveResponse,
+			chatServiceTrpcUtils.workspace.getMcpOverview,
 			resolveSlashCommandMutateAsync,
 		],
 	);

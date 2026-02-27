@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  VERCEL_CLI_VERSION: 50.22.1
+
 jobs:
   deploy-database:
     name: Deploy Database Migrations
@@ -61,7 +64,7 @@ jobs:
         run: bun install --frozen
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@$VERCEL_CLI_VERSION
 
       - name: Build and Deploy API
         env:
@@ -103,8 +106,8 @@ jobs:
           QSTASH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
           QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
           QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
-          ELECTRIC_SOURCE_ID: ${{ secrets.ELECTRIC_SOURCE_ID }}
-          ELECTRIC_SOURCE_SECRET: ${{ secrets.ELECTRIC_SOURCE_SECRET }}
+          ELECTRIC_URL: ${{ secrets.ELECTRIC_URL }}
+          ELECTRIC_SECRET: ${{ secrets.ELECTRIC_SECRET }}
           DURABLE_STREAMS_URL: ${{ secrets.DURABLE_STREAMS_URL }}
           DURABLE_STREAMS_SECRET: ${{ secrets.DURABLE_STREAMS_SECRET }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
@@ -117,7 +120,7 @@ jobs:
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prod --prebuilt --token=$VERCEL_TOKEN \
+          vercel deploy --prod --prebuilt --archive=tgz --token=$VERCEL_TOKEN \
             --env DATABASE_URL=$DATABASE_URL \
             --env DATABASE_URL_UNPOOLED=$DATABASE_URL_UNPOOLED \
             --env BLOB_READ_WRITE_TOKEN=$BLOB_READ_WRITE_TOKEN \
@@ -152,8 +155,8 @@ jobs:
             --env QSTASH_TOKEN=$QSTASH_TOKEN \
             --env QSTASH_CURRENT_SIGNING_KEY=$QSTASH_CURRENT_SIGNING_KEY \
             --env QSTASH_NEXT_SIGNING_KEY=$QSTASH_NEXT_SIGNING_KEY \
-            --env ELECTRIC_SOURCE_ID=$ELECTRIC_SOURCE_ID \
-            --env ELECTRIC_SOURCE_SECRET=$ELECTRIC_SOURCE_SECRET \
+            --env ELECTRIC_URL=$ELECTRIC_URL \
+            --env ELECTRIC_SECRET=$ELECTRIC_SECRET \
             --env DURABLE_STREAMS_URL=$DURABLE_STREAMS_URL \
             --env DURABLE_STREAMS_SECRET=$DURABLE_STREAMS_SECRET \
             --env STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY \
@@ -189,7 +192,7 @@ jobs:
         run: bun install --frozen
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@$VERCEL_CLI_VERSION
 
       - name: Build and Deploy Web
         env:
@@ -224,7 +227,7 @@ jobs:
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prod --prebuilt --token=$VERCEL_TOKEN \
+          vercel deploy --prod --prebuilt --archive=tgz --token=$VERCEL_TOKEN \
             --env DATABASE_URL=$DATABASE_URL \
             --env DATABASE_URL_UNPOOLED=$DATABASE_URL_UNPOOLED \
             --env BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET \
@@ -275,7 +278,7 @@ jobs:
         run: bun install --frozen
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@$VERCEL_CLI_VERSION
 
       - name: Build and Deploy Marketing
         env:
@@ -307,7 +310,7 @@ jobs:
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prod --prebuilt --token=$VERCEL_TOKEN \
+          vercel deploy --prod --prebuilt --archive=tgz --token=$VERCEL_TOKEN \
             --env BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET \
             --env NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
             --env NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL \
@@ -355,7 +358,7 @@ jobs:
         run: bun install --frozen
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@$VERCEL_CLI_VERSION
 
       - name: Build and Deploy Admin
         env:
@@ -391,7 +394,7 @@ jobs:
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prod --prebuilt --token=$VERCEL_TOKEN \
+          vercel deploy --prod --prebuilt --archive=tgz --token=$VERCEL_TOKEN \
             --env DATABASE_URL=$DATABASE_URL \
             --env DATABASE_URL_UNPOOLED=$DATABASE_URL_UNPOOLED \
             --env BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET \
@@ -418,6 +421,33 @@ jobs:
             --env SECRETS_ENCRYPTION_KEY=$SECRETS_ENCRYPTION_KEY \
             --env ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
 
+  deploy-electric:
+    name: Deploy Electric to Fly.io
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Stage secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl secrets set \
+            DATABASE_URL="${{ secrets.DATABASE_URL_UNPOOLED }}" \
+            ELECTRIC_SECRET="${{ secrets.ELECTRIC_SECRET }}" \
+            --app superset-electric \
+            --stage
+
+      - name: Deploy to Fly.io
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy . --config fly.toml --remote-only
+
   deploy-docs:
     name: Deploy Docs to Vercel
     runs-on: ubuntu-latest
@@ -443,7 +473,7 @@ jobs:
         run: bun install --frozen
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@$VERCEL_CLI_VERSION
 
       - name: Build and Deploy Docs
         env:
@@ -462,7 +492,7 @@ jobs:
         run: |
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
           vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prod --prebuilt --token=$VERCEL_TOKEN \
+          vercel deploy --prod --prebuilt --archive=tgz --token=$VERCEL_TOKEN \
             --env NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY \
             --env NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST \
             --env NEXT_PUBLIC_SENTRY_DSN_DOCS=$NEXT_PUBLIC_SENTRY_DSN_DOCS \
