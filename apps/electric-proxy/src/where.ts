@@ -16,7 +16,7 @@ import {
 import { eq, inArray, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { QueryBuilder } from "drizzle-orm/pg-core";
-import type { WhereClause } from "./types";
+import type { WhereClause } from "./auth";
 
 function build(table: PgTable, column: PgColumn, id: string): WhereClause {
 	const whereExpr = eq(sql`${sql.identifier(column.name)}`, id);

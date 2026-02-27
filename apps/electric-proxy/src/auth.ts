@@ -1,5 +1,15 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { AuthContext, Env } from "./types";
+
+export interface AuthContext {
+	sub: string;
+	email: string;
+	organizationIds: string[];
+}
+
+export interface WhereClause {
+	fragment: string;
+	params: unknown[];
+}
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
@@ -12,12 +22,12 @@ function getJWKS(authUrl: string): ReturnType<typeof createRemoteJWKSet> {
 
 export async function verifyJWT(
 	token: string,
-	env: Env,
+	authUrl: string,
 ): Promise<AuthContext | null> {
 	try {
-		const { payload } = await jwtVerify(token, getJWKS(env.AUTH_URL), {
-			issuer: env.AUTH_URL,
-			audience: env.AUTH_URL,
+		const { payload } = await jwtVerify(token, getJWKS(authUrl), {
+			issuer: authUrl,
+			audience: authUrl,
 		});
 
 		const sub = payload.sub;

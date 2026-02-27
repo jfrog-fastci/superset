@@ -1,4 +1,5 @@
-import type { AuthContext, Env, WhereClause } from "./types";
+import type { AuthContext, WhereClause } from "./auth";
+import type { Env } from "./types";
 
 /**
  * Electric protocol query params that should be forwarded from the client request
