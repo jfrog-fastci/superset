@@ -43,21 +43,10 @@ interface ChatMastraMessageListProps {
 	toolInputBuffers: MastraToolInputBuffers | undefined;
 }
 
-function toImageSrc(data: string, mediaType: string): string {
-	if (
-		data.startsWith("data:") ||
-		data.startsWith("https:") ||
-		data.startsWith("http:")
-	) {
-		return data;
-	}
-	return `data:${mediaType};base64,${data}`;
-}
-
-function ImagePart({ data, mediaType }: { data: string; mediaType: string }) {
+function ImagePart({ src }: { src: string }) {
 	return (
 		<img
-			src={toImageSrc(data, mediaType)}
+			src={src}
 			alt="Attached"
 			className="max-h-48 cursor-zoom-in rounded-lg object-contain"
 		/>
@@ -221,7 +210,7 @@ function getStreamingPreviewToolParts({
 }
 
 function UserMessage({ message }: { message: MastraMessage }) {
-	const images: Array<{ key: string; data: string; mediaType: string }> = [];
+	const images: Array<{ key: string; src: string }> = [];
 	const fileChips: Array<{
 		key: string;
 		filename?: string;
@@ -235,11 +224,9 @@ function UserMessage({ message }: { message: MastraMessage }) {
 		const key = `${message.id}-${i}`;
 		if (part.type === "text") {
 			textParts.push({ key, text: part.text });
-		} else if (part.type === "image") {
-			images.push({ key, data: part.data, mediaType: part.mimeType });
 		} else if (part.type === "file") {
 			if (part.mediaType.startsWith("image/")) {
-				images.push({ key, data: part.data, mediaType: part.mediaType });
+				images.push({ key, src: part.data });
 			} else {
 				fileChips.push({
 					key,
@@ -258,7 +245,7 @@ function UserMessage({ message }: { message: MastraMessage }) {
 		>
 			{images.map((img) => (
 				<div key={img.key} className="max-w-[85%]">
-					<ImagePart data={img.data} mediaType={img.mediaType} />
+					<ImagePart src={img.src} />
 				</div>
 			))}
 			{fileChips.length > 0 && (
@@ -329,20 +316,11 @@ function AssistantMessage({
 			continue;
 		}
 
-		if (part.type === "image") {
-			nodes.push(
-				<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-					<ImagePart data={part.data} mediaType={part.mimeType} />
-				</div>,
-			);
-			continue;
-		}
-
 		if (part.type === "file") {
 			if (part.mediaType.startsWith("image/")) {
 				nodes.push(
 					<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-						<ImagePart data={part.data} mediaType={part.mediaType} />
+						<ImagePart src={part.data} />
 					</div>,
 				);
 			} else {
