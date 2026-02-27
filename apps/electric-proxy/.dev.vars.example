@@ -1,0 +1,11 @@
+# Copy to .dev.vars and fill in values for local wrangler dev
+AUTH_URL=http://localhost:3141
+
+# Local Docker Electric (default for local dev)
+ELECTRIC_URL=http://localhost:3149/v1/shape
+ELECTRIC_SECRET=local_electric_dev_secret
+
+# Electric Cloud (set these to use cloud instead of local Docker)
+# ELECTRIC_CLOUD_URL=https://api.electric-sql.cloud
+# ELECTRIC_SOURCE_ID=
+# ELECTRIC_SOURCE_SECRET=

@@ -1,0 +1,10 @@
+{
+	"name": "electric-proxy",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-01-01"
+	// All config via secrets (changeable without redeploy):
+	// AUTH_URL           — e.g. https://api.superset.sh
+	// ELECTRIC_CLOUD_URL — e.g. https://api.electric-sql.cloud
+	// ELECTRIC_SOURCE_ID
+	// ELECTRIC_SOURCE_SECRET
+}
