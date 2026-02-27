@@ -41,6 +41,7 @@ interface ChatInputFooterProps {
 	thinkingEnabled: boolean;
 	setThinkingEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 	slashCommands: SlashCommand[];
+	submitDisabled?: boolean;
 	onSubmitStart?: () => void;
 	onSubmitEnd?: () => void;
 	onSend: (message: PromptInputMessage) => void;
@@ -126,6 +127,7 @@ export function ChatInputFooter({
 	thinkingEnabled,
 	setThinkingEnabled,
 	slashCommands,
+	submitDisabled,
 	onSubmitStart,
 	onSubmitEnd,
 	onSend,
@@ -196,6 +198,7 @@ export function ChatInputFooter({
 											setThinkingEnabled={setThinkingEnabled}
 											canAbort={canAbort}
 											submitStatus={submitStatus}
+											submitDisabled={submitDisabled}
 											onStop={onStop}
 											onLinkIssue={() => setIssueLinkOpen(true)}
 										/>

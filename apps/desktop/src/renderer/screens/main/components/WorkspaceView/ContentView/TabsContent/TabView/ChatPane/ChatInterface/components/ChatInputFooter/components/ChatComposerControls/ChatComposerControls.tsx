@@ -25,6 +25,7 @@ interface ChatComposerControlsProps {
 	setThinkingEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 	canAbort: boolean;
 	submitStatus?: ChatStatus;
+	submitDisabled?: boolean;
 	onStop: (event: React.MouseEvent) => void;
 	onLinkIssue: () => void;
 }
@@ -41,6 +42,7 @@ export function ChatComposerControls({
 	setThinkingEnabled,
 	canAbort,
 	submitStatus,
+	submitDisabled,
 	onStop,
 	onLinkIssue,
 }: ChatComposerControlsProps) {
@@ -69,6 +71,7 @@ export function ChatComposerControls({
 				<PromptInputSubmit
 					className="size-[23px] rounded-full border border-transparent bg-foreground/10 shadow-none p-[5px] hover:bg-foreground/20"
 					status={submitStatus}
+					disabled={submitDisabled}
 					onClick={canAbort ? onStop : undefined}
 				>
 					{canAbort ? (

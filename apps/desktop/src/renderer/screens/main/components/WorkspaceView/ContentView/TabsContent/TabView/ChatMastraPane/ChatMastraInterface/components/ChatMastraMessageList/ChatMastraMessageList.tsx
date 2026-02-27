@@ -7,7 +7,7 @@ import {
 } from "@superset/ui/ai-elements/conversation";
 import { Message, MessageContent } from "@superset/ui/ai-elements/message";
 import { ShimmerLabel } from "@superset/ui/ai-elements/shimmer-label";
-import { FileSearchIcon } from "lucide-react";
+import { FileIcon, FileSearchIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
 import { MastraToolCallBlock } from "../../../../ChatPane/ChatInterface/components/MastraToolCallBlock";
@@ -43,13 +43,40 @@ interface ChatMastraMessageListProps {
 	toolInputBuffers: MastraToolInputBuffers | undefined;
 }
 
-function ImagePart({ data, mimeType }: { data: string; mimeType: string }) {
+function toImageSrc(data: string, mediaType: string): string {
+	if (
+		data.startsWith("data:") ||
+		data.startsWith("https:") ||
+		data.startsWith("http:")
+	) {
+		return data;
+	}
+	return `data:${mediaType};base64,${data}`;
+}
+
+function ImagePart({ data, mediaType }: { data: string; mediaType: string }) {
 	return (
 		<img
-			src={`data:${mimeType};base64,${data}`}
+			src={toImageSrc(data, mediaType)}
 			alt="Attached"
-			className="max-h-48 rounded-lg object-contain"
+			className="max-h-48 cursor-zoom-in rounded-lg object-contain"
 		/>
+	);
+}
+
+function FileChip({
+	filename,
+	mediaType,
+}: {
+	filename?: string;
+	mediaType: string;
+}) {
+	const label = filename || mediaType;
+	return (
+		<div className="inline-flex items-center gap-1.5 rounded-lg border bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+			<FileIcon className="size-3.5 shrink-0" />
+			<span className="max-w-[200px] truncate">{label}</span>
+		</div>
 	);
 }
 
@@ -194,32 +221,65 @@ function getStreamingPreviewToolParts({
 }
 
 function UserMessage({ message }: { message: MastraMessage }) {
+	const images: Array<{ key: string; data: string; mediaType: string }> = [];
+	const fileChips: Array<{
+		key: string;
+		filename?: string;
+		mediaType: string;
+	}> = [];
+	const textParts: Array<{ key: string; text: string }> = [];
+
+	const parts = message.content as MastraMessageContent[];
+	for (let i = 0; i < parts.length; i++) {
+		const part = parts[i];
+		const key = `${message.id}-${i}`;
+		if (part.type === "text") {
+			textParts.push({ key, text: part.text });
+		} else if (part.type === "image") {
+			images.push({ key, data: part.data, mediaType: part.mimeType });
+		} else if (part.type === "file") {
+			if (part.mediaType.startsWith("image/")) {
+				images.push({ key, data: part.data, mediaType: part.mediaType });
+			} else {
+				fileChips.push({
+					key,
+					filename: part.filename,
+					mediaType: part.mediaType,
+				});
+			}
+		}
+	}
+
 	return (
 		<div
 			className="flex flex-col items-end gap-2"
 			data-chat-user-message="true"
 			data-message-id={message.id}
 		>
-			{message.content.map((part, partIndex) => {
-				if (part.type === "text") {
-					return (
-						<div
-							key={`${message.id}-${partIndex}`}
-							className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap"
-						>
-							{part.text}
-						</div>
-					);
-				}
-				if (part.type === "image") {
-					return (
-						<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-							<ImagePart data={part.data} mimeType={part.mimeType} />
-						</div>
-					);
-				}
-				return null;
-			})}
+			{images.map((img) => (
+				<div key={img.key} className="max-w-[85%]">
+					<ImagePart data={img.data} mediaType={img.mediaType} />
+				</div>
+			))}
+			{fileChips.length > 0 && (
+				<div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+					{fileChips.map((chip) => (
+						<FileChip
+							key={chip.key}
+							filename={chip.filename}
+							mediaType={chip.mediaType}
+						/>
+					))}
+				</div>
+			)}
+			{textParts.map((tp) => (
+				<div
+					key={tp.key}
+					className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-foreground whitespace-pre-wrap"
+				>
+					{tp.text}
+				</div>
+			))}
 		</div>
 	);
 }
@@ -239,8 +299,9 @@ function AssistantMessage({
 }) {
 	const nodes: ReactNode[] = [];
 	const renderedToolCallIds = new Set<string>();
-	for (let partIndex = 0; partIndex < message.content.length; partIndex++) {
-		const part = message.content[partIndex];
+	const parts = message.content as MastraMessageContent[];
+	for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+		const part = parts[partIndex];
 
 		if (part.type === "text") {
 			nodes.push(
@@ -271,9 +332,28 @@ function AssistantMessage({
 		if (part.type === "image") {
 			nodes.push(
 				<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
-					<ImagePart data={part.data} mimeType={part.mimeType} />
+					<ImagePart data={part.data} mediaType={part.mimeType} />
 				</div>,
 			);
+			continue;
+		}
+
+		if (part.type === "file") {
+			if (part.mediaType.startsWith("image/")) {
+				nodes.push(
+					<div key={`${message.id}-${partIndex}`} className="max-w-[85%]">
+						<ImagePart data={part.data} mediaType={part.mediaType} />
+					</div>,
+				);
+			} else {
+				nodes.push(
+					<FileChip
+						key={`${message.id}-${partIndex}`}
+						filename={part.filename}
+						mediaType={part.mediaType}
+					/>,
+				);
+			}
 			continue;
 		}
 

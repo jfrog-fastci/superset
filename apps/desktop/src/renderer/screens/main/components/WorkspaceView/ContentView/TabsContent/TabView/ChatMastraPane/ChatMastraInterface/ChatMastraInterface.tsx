@@ -6,6 +6,7 @@ import {
 import {
 	type PromptInputMessage,
 	PromptInputProvider,
+	useProviderAttachments,
 } from "@superset/ui/ai-elements/prompt-input";
 import { useQuery } from "@tanstack/react-query";
 import type { ChatStatus } from "ai";
@@ -22,8 +23,8 @@ import type {
 import { ChatMastraMessageList } from "./components/ChatMastraMessageList";
 import { McpControls } from "./components/McpControls";
 import { useMcpUi } from "./hooks/useMcpUi";
+import { useOptimisticUpload } from "./hooks/useOptimisticUpload";
 import type { ChatMastraInterfaceProps } from "./types";
-import { toMastraImages } from "./utils/toMastraImages";
 
 function useAvailableModels(): {
 	models: ModelOption[];
@@ -45,7 +46,15 @@ function toErrorMessage(error: unknown): string | null {
 	return "Unknown chat error";
 }
 
-export function ChatMastraInterface({
+export function ChatMastraInterface(props: ChatMastraInterfaceProps) {
+	return (
+		<PromptInputProvider>
+			<ChatMastraInterfaceInner {...props} />
+		</PromptInputProvider>
+	);
+}
+
+function ChatMastraInterfaceInner({
 	sessionId,
 	workspaceId,
 	cwd,
@@ -95,6 +104,14 @@ export function ChatMastraInterface({
 	const setRuntimeErrorMessage = useCallback((message: string) => {
 		setRuntimeError(message);
 	}, []);
+
+	const attachments = useProviderAttachments();
+	const { getUploadedFiles, isUploading } = useOptimisticUpload({
+		sessionId,
+		attachmentFiles: attachments.files,
+		removeAttachment: attachments.remove,
+		onError: setRuntimeErrorMessage,
+	});
 
 	const canAbort = Boolean(isRunning);
 	const loadMcpOverview = useCallback(
@@ -178,11 +195,6 @@ export function ChatMastraInterface({
 	const handleSend = useCallback(
 		async (message: PromptInputMessage) => {
 			let text = message.text.trim();
-			const files = (message.files ?? []).map((file) => ({
-				url: file.url,
-				mediaType: file.mediaType,
-				filename: file.filename,
-			}));
 
 			const slashCommandResult = await resolveSlashCommandInput(text);
 			if (slashCommandResult.handled) {
@@ -190,22 +202,36 @@ export function ChatMastraInterface({
 			}
 			text = slashCommandResult.nextText.trim();
 
-			const images = toMastraImages(files);
-			if (!text && images.length === 0) return;
+			const { ready, files: uploadedFiles } = getUploadedFiles();
+			if (!ready) return;
+
+			if (!text && uploadedFiles.length === 0) return;
 			setSubmitStatus("submitted");
 			clearRuntimeError();
+
+			const files = uploadedFiles.map((file) => ({
+				data: file.url,
+				mediaType: file.mediaType,
+				filename: file.filename,
+			}));
 
 			await commands.sendMessage({
 				payload: {
 					content: text || "",
-					...(images.length > 0 ? { images } : {}),
+					...(files.length > 0 ? { files } : {}),
 				},
 				metadata: {
 					model: activeModel?.id,
 				},
 			});
 		},
-		[activeModel?.id, clearRuntimeError, commands, resolveSlashCommandInput],
+		[
+			activeModel?.id,
+			clearRuntimeError,
+			commands,
+			getUploadedFiles,
+			resolveSlashCommandInput,
+		],
 	);
 
 	const handleStop = useCallback(
@@ -228,44 +254,43 @@ export function ChatMastraInterface({
 	const mergedMessages = useMemo(() => messages, [messages]);
 
 	return (
-		<PromptInputProvider>
-			<div className="flex h-full flex-col bg-background">
-				<ChatMastraMessageList
-					messages={mergedMessages}
-					isRunning={canAbort}
-					currentMessage={currentMessage ?? null}
-					workspaceId={workspaceId}
-					workspaceCwd={cwd}
-					activeTools={activeTools}
-					toolInputBuffers={toolInputBuffers}
-				/>
-				<McpControls mcpUi={mcpUi} />
-				<ChatInputFooter
-					cwd={cwd}
-					error={errorMessage}
-					canAbort={canAbort}
-					submitStatus={submitStatus}
-					availableModels={availableModels}
-					selectedModel={activeModel}
-					setSelectedModel={setSelectedModel}
-					modelSelectorOpen={modelSelectorOpen}
-					setModelSelectorOpen={setModelSelectorOpen}
-					permissionMode={permissionMode}
-					setPermissionMode={setPermissionMode}
-					thinkingEnabled={thinkingEnabled}
-					setThinkingEnabled={setThinkingEnabled}
-					slashCommands={slashCommands}
-					onSend={(message) => {
-						void handleSend(message);
-					}}
-					onSubmitStart={() => setSubmitStatus("submitted")}
-					onSubmitEnd={() => {
-						if (!canAbort) setSubmitStatus(undefined);
-					}}
-					onStop={handleStop}
-					onSlashCommandSend={handleSlashCommandSend}
-				/>
-			</div>
-		</PromptInputProvider>
+		<div className="flex h-full flex-col bg-background">
+			<ChatMastraMessageList
+				messages={mergedMessages}
+				isRunning={canAbort}
+				currentMessage={currentMessage ?? null}
+				workspaceId={workspaceId}
+				workspaceCwd={cwd}
+				activeTools={activeTools}
+				toolInputBuffers={toolInputBuffers}
+			/>
+			<McpControls mcpUi={mcpUi} />
+			<ChatInputFooter
+				cwd={cwd}
+				error={errorMessage}
+				canAbort={canAbort}
+				submitStatus={submitStatus}
+				submitDisabled={isUploading}
+				availableModels={availableModels}
+				selectedModel={activeModel}
+				setSelectedModel={setSelectedModel}
+				modelSelectorOpen={modelSelectorOpen}
+				setModelSelectorOpen={setModelSelectorOpen}
+				permissionMode={permissionMode}
+				setPermissionMode={setPermissionMode}
+				thinkingEnabled={thinkingEnabled}
+				setThinkingEnabled={setThinkingEnabled}
+				slashCommands={slashCommands}
+				onSend={(message) => {
+					void handleSend(message);
+				}}
+				onSubmitStart={() => setSubmitStatus("submitted")}
+				onSubmitEnd={() => {
+					if (!canAbort) setSubmitStatus(undefined);
+				}}
+				onStop={handleStop}
+				onSlashCommandSend={handleSlashCommandSend}
+			/>
+		</div>
 	);
 }
