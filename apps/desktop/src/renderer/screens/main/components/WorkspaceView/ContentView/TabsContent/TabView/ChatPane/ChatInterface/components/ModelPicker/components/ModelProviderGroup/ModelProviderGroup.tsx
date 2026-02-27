@@ -20,6 +20,8 @@ interface ModelProviderGroupProps {
 	isAnthropicAuthenticated: boolean;
 	isAnthropicOAuthPending: boolean;
 	onStartAnthropicOAuth: () => void;
+	isAnthropicApiKeyPending: boolean;
+	onOpenAnthropicApiKeyDialog: () => void;
 	isOpenAIAuthenticated: boolean;
 	isOpenAIApiKeyPending: boolean;
 	onOpenOpenAIApiKeyDialog: () => void;
@@ -33,6 +35,8 @@ export function ModelProviderGroup({
 	isAnthropicAuthenticated,
 	isAnthropicOAuthPending,
 	onStartAnthropicOAuth,
+	isAnthropicApiKeyPending,
+	onOpenAnthropicApiKeyDialog,
 	isOpenAIAuthenticated,
 	isOpenAIApiKeyPending,
 	onOpenOpenAIApiKeyDialog,
@@ -61,8 +65,10 @@ export function ModelProviderGroup({
 				<AnthropicProviderHeading
 					heading={heading}
 					isConnected={isConnected}
-					isPending={isAnthropicOAuthPending}
+					isOAuthPending={isAnthropicOAuthPending}
+					isApiKeyPending={isAnthropicApiKeyPending}
 					onStartOAuth={onStartAnthropicOAuth}
+					onConfigureApiKey={onOpenAnthropicApiKeyDialog}
 				/>
 			) : isOpenAIProvider ? (
 				<OpenAIProviderHeading
@@ -79,9 +85,11 @@ export function ModelProviderGroup({
 					(logo === ANTHROPIC_LOGO_PROVIDER && !isAnthropicAuthenticated) ||
 					(logo === OPENAI_LOGO_PROVIDER && !isOpenAIAuthenticated);
 				const disabledLabel =
-					logo === OPENAI_LOGO_PROVIDER
-						? `${model.provider} (API key required)`
-						: `${model.provider} (connection required)`;
+					logo === ANTHROPIC_LOGO_PROVIDER
+						? `${model.provider} (API key or OAuth required)`
+						: logo === OPENAI_LOGO_PROVIDER
+							? `${model.provider} (API key required)`
+							: `${model.provider} (connection required)`;
 
 				return (
 					<ModelSelectorItem

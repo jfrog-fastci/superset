@@ -42,10 +42,13 @@ const { ChatService } = await import("./chat-service");
 
 describe("ChatService OpenAI auth storage", () => {
 	let originalOpenAiEnv: string | undefined;
+	let originalAnthropicEnv: string | undefined;
 
 	beforeEach(() => {
 		originalOpenAiEnv = process.env.OPENAI_API_KEY;
+		originalAnthropicEnv = process.env.ANTHROPIC_API_KEY;
 		delete process.env.OPENAI_API_KEY;
+		delete process.env.ANTHROPIC_API_KEY;
 		createAuthStorageMock.mockClear();
 		fakeAuthStorage.clear();
 		fakeAuthStorage.reload.mockClear();
@@ -57,9 +60,15 @@ describe("ChatService OpenAI auth storage", () => {
 	afterEach(() => {
 		if (originalOpenAiEnv === undefined) {
 			delete process.env.OPENAI_API_KEY;
+		} else {
+			process.env.OPENAI_API_KEY = originalOpenAiEnv;
+		}
+
+		if (originalAnthropicEnv === undefined) {
+			delete process.env.ANTHROPIC_API_KEY;
 			return;
 		}
-		process.env.OPENAI_API_KEY = originalOpenAiEnv;
+		process.env.ANTHROPIC_API_KEY = originalAnthropicEnv;
 	});
 
 	it("uses standalone createAuthStorage and reuses it across calls", async () => {
@@ -75,5 +84,19 @@ describe("ChatService OpenAI auth storage", () => {
 			key: "test-key",
 		});
 		expect(fakeAuthStorage.remove).toHaveBeenCalledWith("openai-codex");
+	});
+
+	it("stores and clears Anthropic API key in standalone auth storage", async () => {
+		const chatService = new ChatService();
+
+		await chatService.setAnthropicApiKey({ apiKey: " test-anthropic-key " });
+		await chatService.clearAnthropicApiKey();
+
+		expect(createAuthStorageMock).toHaveBeenCalledTimes(1);
+		expect(fakeAuthStorage.set).toHaveBeenCalledWith("anthropic", {
+			type: "api_key",
+			key: "test-anthropic-key",
+		});
+		expect(fakeAuthStorage.remove).toHaveBeenCalledWith("anthropic");
 	});
 });

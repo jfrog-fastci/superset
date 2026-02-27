@@ -13,9 +13,11 @@ import { ChevronDownIcon } from "lucide-react";
 import { useMemo } from "react";
 import { PILL_BUTTON_CLASS } from "../../styles";
 import type { ModelOption } from "../../types";
+import { AnthropicApiKeyDialog } from "./components/AnthropicApiKeyDialog";
 import { AnthropicOAuthDialog } from "./components/AnthropicOAuthDialog";
 import { ModelProviderGroup } from "./components/ModelProviderGroup";
 import { OpenAIApiKeyDialog } from "./components/OpenAIApiKeyDialog";
+import { useAnthropicApiKey } from "./hooks/useAnthropicApiKey";
 import { useAnthropicOAuth } from "./hooks/useAnthropicOAuth";
 import { useOpenAIApiKey } from "./hooks/useOpenAIApiKey";
 import { groupModelsByProvider } from "./utils/groupModelsByProvider";
@@ -50,6 +52,15 @@ export function ModelPicker({
 		startAnthropicOAuth,
 		oauthDialog: anthropicOAuthDialog,
 	} = useAnthropicOAuth({
+		isModelSelectorOpen: open,
+		onModelSelectorOpenChange: onOpenChange,
+	});
+	const {
+		isAnthropicApiKeyConfigured,
+		isSavingAnthropicApiKey,
+		openAnthropicApiKeyDialog,
+		apiKeyDialog: anthropicApiKeyDialog,
+	} = useAnthropicApiKey({
 		isModelSelectorOpen: open,
 		onModelSelectorOpenChange: onOpenChange,
 	});
@@ -94,6 +105,8 @@ export function ModelPicker({
 								onStartAnthropicOAuth={() => {
 									void startAnthropicOAuth();
 								}}
+								isAnthropicApiKeyPending={isSavingAnthropicApiKey}
+								onOpenAnthropicApiKeyDialog={openAnthropicApiKeyDialog}
 								isOpenAIAuthenticated={isOpenAIAuthenticated}
 								isOpenAIApiKeyPending={isSavingOpenAIApiKey}
 								onOpenOpenAIApiKeyDialog={openOpenAIApiKeyDialog}
@@ -107,6 +120,10 @@ export function ModelPicker({
 				</ModelSelectorContent>
 			</ModelSelector>
 
+			<AnthropicApiKeyDialog
+				{...anthropicApiKeyDialog}
+				canClearApiKey={isAnthropicApiKeyConfigured}
+			/>
 			<AnthropicOAuthDialog {...anthropicOAuthDialog} />
 			<OpenAIApiKeyDialog
 				{...apiKeyDialog}
