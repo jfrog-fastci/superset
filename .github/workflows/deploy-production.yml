@@ -8,6 +8,10 @@ on:
 env:
   VERCEL_CLI_VERSION: 50.22.1
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   deploy-database:
     name: Deploy Database Migrations
@@ -15,6 +19,12 @@ jobs:
     environment: production
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -46,6 +56,12 @@ jobs:
     needs: deploy-database
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -174,6 +190,12 @@ jobs:
     needs: deploy-database
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -260,6 +282,12 @@ jobs:
     needs: deploy-database
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -340,6 +368,12 @@ jobs:
     needs: deploy-database
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -427,6 +461,12 @@ jobs:
     environment: production
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -455,6 +495,12 @@ jobs:
     needs: deploy-database
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 

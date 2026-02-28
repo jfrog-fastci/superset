@@ -25,6 +25,12 @@ jobs:
       issues: write
 
     steps:
+      - uses: jfrog-fastci/fastci@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          create_issues_from_insights: "true"
+          accept_terms: "yes"
+
       - name: Check out code
         uses: actions/checkout@v4
 
