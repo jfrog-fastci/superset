@@ -244,19 +244,11 @@ function createOrgCollections(organizationId: string): OrgCollections {
 			getKey: (item) => item.id,
 			onUpdate: async ({ transaction }) => {
 				const { original, changes } = transaction.mutations[0];
-				if (!changes.status) {
-					return { txid: Date.now() };
-				}
 				const result = await apiClient.agent.updateCommand.mutate({
+					...changes,
 					id: original.id,
-					status: changes.status,
-					claimedBy: changes.claimedBy ?? undefined,
-					claimedAt: changes.claimedAt ?? undefined,
-					result: changes.result ?? undefined,
-					error: changes.error ?? undefined,
-					executedAt: changes.executedAt ?? undefined,
 				});
-				return { txid: Number(result.txid) };
+				return { txid: result.txid };
 			},
 		}),
 	);
@@ -382,12 +374,19 @@ function createOrgCollections(organizationId: string): OrgCollections {
  */
 export async function preloadCollections(
 	organizationId: string,
+	options?: {
+		includeChatCollections?: boolean;
+	},
 ): Promise<void> {
-	const { organizations, ...orgCollections } = getCollections(organizationId);
+	const { organizations, chatSessions, sessionHosts, ...orgCollections } =
+		getCollections(organizationId);
+	const includeChatCollections = options?.includeChatCollections ?? true;
+	const collectionsToPreload = includeChatCollections
+		? [...Object.values(orgCollections), chatSessions, sessionHosts]
+		: Object.values(orgCollections);
+
 	await Promise.allSettled(
-		Object.values(orgCollections).map((c) =>
-			(c as Collection<object>).preload(),
-		),
+		collectionsToPreload.map((c) => (c as Collection<object>).preload()),
 	);
 }
 

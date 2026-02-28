@@ -67,6 +67,7 @@ If it runs in a terminal, it runs on Superset
 | **Runtime** | [Bun](https://bun.sh/) v1.0+ |
 | **Version Control** | Git 2.20+ |
 | **GitHub CLI** | [gh](https://cli.github.com/) |
+| **Caddy** | [caddy](https://caddyserver.com/docs/install) (for dev server) |
 
 ## Getting Started
 
@@ -96,17 +97,25 @@ cp .env.example .env
 
 Option B: Skip env validation (for quick local testing)
 ```bash
-export SKIP_ENV_VALIDATION=1
+cp .env.example .env
+echo 'SKIP_ENV_VALIDATION=1' >> .env
 ```
 
-**3. Install dependencies and run**
+**3. Set up Caddy** (reverse proxy for Electric SQL streams):
+
+```bash
+# Install caddy: brew install caddy (macOS) or see https://caddyserver.com/docs/install
+cp Caddyfile.example Caddyfile
+```
+
+**4. Install dependencies and run**
 
 ```bash
 bun install
 bun run dev
 ```
 
-**4. Build the desktop app**
+**5. Build the desktop app**
 
 ```bash
 bun run build
@@ -186,6 +195,10 @@ echo "Workspace ready!"
 Scripts have access to environment variables:
 - `SUPERSET_WORKSPACE_NAME` — Name of the workspace
 - `SUPERSET_ROOT_PATH` — Path to the main repository
+
+## Internal Dependency Overrides
+
+For the internal `mastracode` fork/bundle workflow used by this repo, see [docs/mastracode-fork-workflow.md](docs/mastracode-fork-workflow.md).
 
 ## Tech Stack
 

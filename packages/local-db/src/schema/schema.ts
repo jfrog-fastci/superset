@@ -167,12 +167,17 @@ export const settings = sqliteTable("settings", {
 	deleteLocalBranch: integer("delete_local_branch", { mode: "boolean" }),
 	fileOpenMode: text("file_open_mode").$type<FileOpenMode>(),
 	showPresetsBar: integer("show_presets_bar", { mode: "boolean" }),
+	useCompactTerminalAddButton: integer("use_compact_terminal_add_button", {
+		mode: "boolean",
+	}),
 	terminalFontFamily: text("terminal_font_family"),
 	terminalFontSize: integer("terminal_font_size"),
 	editorFontFamily: text("editor_font_family"),
 	editorFontSize: integer("editor_font_size"),
 	showResourceMonitor: integer("show_resource_monitor", { mode: "boolean" }),
 	worktreeBaseDir: text("worktree_base_dir"),
+	openLinksInApp: integer("open_links_in_app", { mode: "boolean" }),
+	defaultEditor: text("default_editor").$type<ExternalApp>(),
 });
 
 export type InsertSettings = typeof settings.$inferInsert;

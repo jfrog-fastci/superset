@@ -13,6 +13,10 @@ import {
 	CommandPalette,
 	useCommandPalette,
 } from "renderer/screens/main/components/CommandPalette";
+import {
+	KeywordSearch,
+	useKeywordSearch,
+} from "renderer/screens/main/components/KeywordSearch";
 import { WorkspaceInitializingView } from "renderer/screens/main/components/WorkspaceView/WorkspaceInitializingView";
 import { WorkspaceLayout } from "renderer/screens/main/components/WorkspaceView/WorkspaceLayout";
 import { usePRStatus } from "renderer/screens/main/hooks";
@@ -124,10 +128,11 @@ function WorkspacePage() {
 		splitPaneHorizontal,
 		openPreset,
 	} = useTabsWithPresets();
-	const addChatTab = useTabsStore((s) => s.addChatTab);
+	const addChatMastraTab = useTabsStore((s) => s.addChatMastraTab);
 	const reopenClosedTab = useTabsStore((s) => s.reopenClosedTab);
 	const addBrowserTab = useTabsStore((s) => s.addBrowserTab);
 	const setActiveTab = useTabsStore((s) => s.setActiveTab);
+	const removeTab = useTabsStore((s) => s.removeTab);
 	const removePane = useTabsStore((s) => s.removePane);
 	const setFocusedPane = useTabsStore((s) => s.setFocusedPane);
 	const toggleSidebar = useSidebarStore((s) => s.toggleSidebar);
@@ -163,7 +168,7 @@ function WorkspacePage() {
 		(presetIndex: number) => {
 			const preset = presets[presetIndex];
 			if (preset) {
-				openPreset(workspaceId, preset);
+				openPreset(workspaceId, preset, { target: "active-tab" });
 			} else {
 				addTab(workspaceId);
 			}
@@ -175,15 +180,19 @@ function WorkspacePage() {
 		workspaceId,
 		addTab,
 	]);
+	useAppHotkey("NEW_CHAT", () => addChatMastraTab(workspaceId), undefined, [
+		workspaceId,
+		addChatMastraTab,
+	]);
 	useAppHotkey(
 		"REOPEN_TAB",
 		() => {
 			if (!reopenClosedTab(workspaceId)) {
-				addChatTab(workspaceId);
+				addChatMastraTab(workspaceId);
 			}
 		},
 		undefined,
-		[workspaceId, reopenClosedTab, addChatTab],
+		[workspaceId, reopenClosedTab, addChatMastraTab],
 	);
 	useAppHotkey("NEW_BROWSER", () => addBrowserTab(workspaceId), undefined, [
 		workspaceId,
@@ -200,6 +209,16 @@ function WorkspacePage() {
 		},
 		undefined,
 		[focusedPaneId, removePane],
+	);
+	useAppHotkey(
+		"CLOSE_TAB",
+		() => {
+			if (activeTabId) {
+				removeTab(activeTabId);
+			}
+		},
+		undefined,
+		[activeTabId, removeTab],
 	);
 
 	useAppHotkey(
@@ -300,11 +319,10 @@ function WorkspacePage() {
 
 	// Open in last used app shortcut
 	const projectId = workspace?.projectId;
-	const { data: defaultApp = "cursor" } =
-		electronTrpc.projects.getDefaultApp.useQuery(
-			{ projectId: projectId as string },
-			{ enabled: !!projectId },
-		);
+	const { data: defaultApp } = electronTrpc.projects.getDefaultApp.useQuery(
+		{ projectId: projectId as string },
+		{ enabled: !!projectId },
+	);
 	const utils = electronTrpc.useUtils();
 	const openInApp = electronTrpc.external.openInApp.useMutation({
 		onSuccess: () => {
@@ -316,7 +334,7 @@ function WorkspacePage() {
 	useAppHotkey(
 		"OPEN_IN_APP",
 		() => {
-			if (workspace?.worktreePath) {
+			if (workspace?.worktreePath && defaultApp) {
 				openInApp.mutate({
 					path: workspace.worktreePath,
 					app: defaultApp,
@@ -364,9 +382,28 @@ function WorkspacePage() {
 		workspaceId,
 		worktreePath: workspace?.worktreePath,
 	});
-	useAppHotkey("QUICK_OPEN", () => commandPalette.toggle(), undefined, [
-		commandPalette.toggle,
-	]);
+	const keywordSearch = useKeywordSearch({
+		workspaceId,
+		worktreePath: workspace?.worktreePath,
+	});
+	useAppHotkey(
+		"QUICK_OPEN",
+		() => {
+			keywordSearch.handleOpenChange(false);
+			commandPalette.toggle();
+		},
+		undefined,
+		[commandPalette.toggle, keywordSearch.handleOpenChange],
+	);
+	useAppHotkey(
+		"KEYWORD_SEARCH",
+		() => {
+			commandPalette.handleOpenChange(false);
+			keywordSearch.toggle();
+		},
+		undefined,
+		[commandPalette.handleOpenChange, keywordSearch.toggle],
+	);
 
 	// Toggle changes sidebar (⌘L)
 	useAppHotkey("TOGGLE_SIDEBAR", () => toggleSidebar(), undefined, [
@@ -523,8 +560,30 @@ function WorkspacePage() {
 				onOpenChange={commandPalette.handleOpenChange}
 				query={commandPalette.query}
 				onQueryChange={commandPalette.setQuery}
+				filtersOpen={commandPalette.filtersOpen}
+				onFiltersOpenChange={commandPalette.setFiltersOpen}
+				includePattern={commandPalette.includePattern}
+				onIncludePatternChange={commandPalette.setIncludePattern}
+				excludePattern={commandPalette.excludePattern}
+				onExcludePatternChange={commandPalette.setExcludePattern}
+				isLoading={commandPalette.isFetching}
 				searchResults={commandPalette.searchResults}
 				onSelectFile={commandPalette.selectFile}
+			/>
+			<KeywordSearch
+				open={keywordSearch.open}
+				onOpenChange={keywordSearch.handleOpenChange}
+				query={keywordSearch.query}
+				onQueryChange={keywordSearch.setQuery}
+				filtersOpen={keywordSearch.filtersOpen}
+				onFiltersOpenChange={keywordSearch.setFiltersOpen}
+				includePattern={keywordSearch.includePattern}
+				onIncludePatternChange={keywordSearch.setIncludePattern}
+				excludePattern={keywordSearch.excludePattern}
+				onExcludePatternChange={keywordSearch.setExcludePattern}
+				isLoading={keywordSearch.isFetching}
+				searchResults={keywordSearch.searchResults}
+				onSelectMatch={keywordSearch.selectMatch}
 			/>
 		</div>
 	);

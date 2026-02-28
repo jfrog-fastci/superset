@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+	deduplicateBranchName,
 	sanitizeAuthorPrefix,
 	sanitizeBranchName,
+	sanitizeBranchNameWithMaxLength,
 	sanitizeSegment,
+	truncateBranchName,
 } from "./branch";
 
 describe("sanitizeSegment", () => {
@@ -134,5 +137,65 @@ describe("sanitizeBranchName", () => {
 
 	test("handles only slashes", () => {
 		expect(sanitizeBranchName("///")).toBe("");
+	});
+});
+
+describe("truncateBranchName", () => {
+	test("truncates to max length", () => {
+		expect(truncateBranchName("feature/my-very-long-branch", 8)).toBe(
+			"feature",
+		);
+	});
+
+	test("drops trailing slash after truncation", () => {
+		expect(truncateBranchName("feature/test", 8)).toBe("feature");
+	});
+});
+
+describe("sanitizeBranchNameWithMaxLength", () => {
+	test("sanitizes and then truncates", () => {
+		expect(
+			sanitizeBranchNameWithMaxLength("Feature Name/With Spaces", 16),
+		).toBe("feature-name/wit");
+	});
+});
+
+describe("deduplicateBranchName", () => {
+	test("returns candidate when no collision exists", () => {
+		expect(deduplicateBranchName("feature/test", ["main", "develop"])).toBe(
+			"feature/test",
+		);
+	});
+
+	test("appends numeric suffix when branch exists", () => {
+		expect(deduplicateBranchName("feature/test", ["feature/test"])).toBe(
+			"feature/test-1",
+		);
+	});
+
+	test("increments suffix to next available value", () => {
+		expect(
+			deduplicateBranchName("feature/test", [
+				"feature/test",
+				"feature/test-1",
+				"feature/test-2",
+			]),
+		).toBe("feature/test-3");
+	});
+
+	test("treats existing names case-insensitively", () => {
+		expect(deduplicateBranchName("Feature/Test", ["feature/test"])).toBe(
+			"Feature/Test-1",
+		);
+	});
+
+	test("reuses base segment when candidate already ends with a suffix", () => {
+		expect(
+			deduplicateBranchName("feature/test-2", [
+				"feature/test",
+				"feature/test-1",
+				"feature/test-2",
+			]),
+		).toBe("feature/test-3");
 	});
 });

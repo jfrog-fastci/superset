@@ -1,6 +1,7 @@
 import type { MosaicNode } from "react-mosaic-component";
 import { updateTree } from "react-mosaic-component";
 import { getFileOpenMode } from "renderer/hooks/useFileOpenMode";
+import { posthog } from "renderer/lib/posthog";
 import { trpcTabsStorage } from "renderer/lib/trpc-storage";
 import { acknowledgedStatus } from "shared/tabs-types";
 import { create } from "zustand";
@@ -15,8 +16,9 @@ import type {
 import {
 	buildMultiPaneLayout,
 	type CreatePaneOptions,
+	createBrowserPane,
 	createBrowserTabWithPane,
-	createChatTabWithPane,
+	createChatMastraTabWithPane,
 	createDevToolsPane,
 	createFileViewerPane,
 	createPane,
@@ -142,13 +144,19 @@ export const useTabsStore = create<TabsStore>()(
 						},
 					});
 
+					posthog.capture("panel_opened", {
+						panel_type: "terminal",
+						workspace_id: workspaceId,
+						pane_id: pane.id,
+					});
+
 					return { tabId: tab.id, paneId: pane.id };
 				},
 
-				addChatTab: (workspaceId: string) => {
+				addChatMastraTab: (workspaceId: string) => {
 					const state = get();
 
-					const { tab, pane } = createChatTabWithPane(workspaceId, state.tabs);
+					const { tab, pane } = createChatMastraTabWithPane(workspaceId);
 
 					const currentActiveId = state.activeTabIds[workspaceId];
 					const historyStack = state.tabHistoryStacks[workspaceId] || [];
@@ -176,6 +184,12 @@ export const useTabsStore = create<TabsStore>()(
 						},
 					});
 
+					posthog.capture("panel_opened", {
+						panel_type: "chat",
+						workspace_id: workspaceId,
+						pane_id: pane.id,
+					});
+
 					return { tabId: tab.id, paneId: pane.id };
 				},
 
@@ -186,9 +200,8 @@ export const useTabsStore = create<TabsStore>()(
 					const state = get();
 					const tabId = generateId("tab");
 					const panes: ReturnType<typeof createPane>[] = options.commands.map(
-						(command) =>
+						(_command) =>
 							createPane(tabId, "terminal", {
-								initialCommands: [command],
 								initialCwd: options.initialCwd,
 							}),
 					);
@@ -237,6 +250,14 @@ export const useTabsStore = create<TabsStore>()(
 							[workspaceId]: newHistoryStack,
 						},
 					});
+
+					for (const paneId of paneIds) {
+						posthog.capture("panel_opened", {
+							panel_type: "terminal",
+							workspace_id: workspaceId,
+							pane_id: paneId,
+						});
+					}
 
 					return { tabId: tab.id, paneIds };
 				},
@@ -497,6 +518,12 @@ export const useTabsStore = create<TabsStore>()(
 						},
 					});
 
+					posthog.capture("panel_opened", {
+						panel_type: "terminal",
+						workspace_id: tab.workspaceId,
+						pane_id: newPane.id,
+					});
+
 					return newPane.id;
 				},
 
@@ -509,9 +536,8 @@ export const useTabsStore = create<TabsStore>()(
 					if (!tab) return [];
 
 					const panes: ReturnType<typeof createPane>[] = options.commands.map(
-						(command) =>
+						(_command) =>
 							createPane(tabId, "terminal", {
-								initialCommands: [command],
 								initialCwd: options.initialCwd,
 							}),
 					);
@@ -540,6 +566,14 @@ export const useTabsStore = create<TabsStore>()(
 							[tabId]: paneIds[0],
 						},
 					});
+
+					for (const paneId of paneIds) {
+						posthog.capture("panel_opened", {
+							panel_type: "terminal",
+							workspace_id: tab.workspaceId,
+							pane_id: paneId,
+						});
+					}
 
 					return paneIds;
 				},
@@ -673,6 +707,7 @@ export const useTabsStore = create<TabsStore>()(
 							filePath: options.filePath,
 							diffCategory: options.diffCategory,
 							viewMode: options.viewMode,
+							fileStatus: options.fileStatus,
 						});
 
 						set({
@@ -743,6 +778,12 @@ export const useTabsStore = create<TabsStore>()(
 							},
 						});
 
+						posthog.capture("panel_opened", {
+							panel_type: "file_viewer",
+							workspace_id: workspaceId,
+							pane_id: newPane.id,
+						});
+
 						return newPane.id;
 					}
 
@@ -769,6 +810,12 @@ export const useTabsStore = create<TabsStore>()(
 							...state.focusedPaneIds,
 							[activeTab.id]: newPane.id,
 						},
+					});
+
+					posthog.capture("panel_opened", {
+						panel_type: "file_viewer",
+						workspace_id: activeTab.workspaceId,
+						pane_id: newPane.id,
 					});
 
 					return newPane.id;
@@ -988,10 +1035,7 @@ export const useTabsStore = create<TabsStore>()(
 					set((state) => {
 						const pane = state.panes[paneId];
 						if (!pane) return state;
-						if (
-							pane.initialCommands === undefined &&
-							pane.initialCwd === undefined
-						) {
+						if (pane.initialCwd === undefined) {
 							return state;
 						}
 						return {
@@ -999,7 +1043,6 @@ export const useTabsStore = create<TabsStore>()(
 								...state.panes,
 								[paneId]: {
 									...pane,
-									initialCommands: undefined,
 									initialCwd: undefined,
 								},
 							},
@@ -1078,6 +1121,12 @@ export const useTabsStore = create<TabsStore>()(
 							[tabId]: newPane.id,
 						},
 					});
+
+					posthog.capture("panel_opened", {
+						panel_type: "terminal",
+						workspace_id: tab.workspaceId,
+						pane_id: newPane.id,
+					});
 				},
 
 				splitPaneHorizontal: (tabId, sourcePaneId, path, options) => {
@@ -1129,6 +1178,12 @@ export const useTabsStore = create<TabsStore>()(
 							...state.focusedPaneIds,
 							[tabId]: newPane.id,
 						},
+					});
+
+					posthog.capture("panel_opened", {
+						panel_type: "terminal",
+						workspace_id: tab.workspaceId,
+						pane_id: newPane.id,
 					});
 				},
 
@@ -1223,7 +1278,139 @@ export const useTabsStore = create<TabsStore>()(
 						},
 					});
 
+					posthog.capture("panel_opened", {
+						panel_type: "browser",
+						workspace_id: workspaceId,
+						pane_id: pane.id,
+					});
+
 					return { tabId: tab.id, paneId: pane.id };
+				},
+
+				openInBrowserPane: (workspaceId: string, url: string) => {
+					const state = get();
+
+					// Find an existing browser pane in this workspace
+					const workspaceTabIds = new Set(
+						state.tabs
+							.filter((t) => t.workspaceId === workspaceId)
+							.map((t) => t.id),
+					);
+					const existingPane = Object.values(state.panes).find(
+						(p) =>
+							p.type === "webview" && p.browser && workspaceTabIds.has(p.tabId),
+					);
+
+					if (existingPane?.browser) {
+						// Navigate existing pane and make its tab active
+						const { history: prevHistory, historyIndex } = existingPane.browser;
+						const history = prevHistory.slice(0, historyIndex + 1);
+						history.push({
+							url,
+							title: "",
+							timestamp: Date.now(),
+						});
+						if (history.length > 100) {
+							history.splice(0, history.length - 100);
+						}
+
+						const currentActiveId = state.activeTabIds[workspaceId];
+						const historyStack = state.tabHistoryStacks[workspaceId] || [];
+						const newHistoryStack = currentActiveId
+							? [
+									currentActiveId,
+									...historyStack.filter((id) => id !== currentActiveId),
+								]
+							: historyStack;
+
+						const newPanes = {
+							...state.panes,
+							[existingPane.id]: {
+								...existingPane,
+								name: "Browser",
+								browser: {
+									...existingPane.browser,
+									currentUrl: url,
+									history,
+									historyIndex: history.length - 1,
+								},
+							},
+						};
+						const tabName = deriveTabName(newPanes, existingPane.tabId);
+
+						set({
+							panes: newPanes,
+							tabs: state.tabs.map((t) =>
+								t.id === existingPane.tabId ? { ...t, name: tabName } : t,
+							),
+							activeTabIds: {
+								...state.activeTabIds,
+								[workspaceId]: existingPane.tabId,
+							},
+							focusedPaneIds: {
+								...state.focusedPaneIds,
+								[existingPane.tabId]: existingPane.id,
+							},
+							tabHistoryStacks: {
+								...state.tabHistoryStacks,
+								[workspaceId]: newHistoryStack,
+							},
+						});
+					} else {
+						// No existing browser pane — add one to the active tab
+						const resolvedActiveTabId = resolveActiveTabIdForWorkspace({
+							workspaceId,
+							tabs: state.tabs,
+							activeTabIds: state.activeTabIds,
+							tabHistoryStacks: state.tabHistoryStacks,
+						});
+						const activeTab = resolvedActiveTabId
+							? state.tabs.find((t) => t.id === resolvedActiveTabId)
+							: null;
+
+						if (!activeTab) {
+							get().addBrowserTab(workspaceId, url);
+							return;
+						}
+
+						const newPane = createBrowserPane(activeTab.id, {
+							url,
+						});
+						const newLayout: MosaicNode<string> = {
+							direction: "row",
+							first: activeTab.layout,
+							second: newPane.id,
+							splitPercentage: 50,
+						};
+						const newPanes = {
+							...state.panes,
+							[newPane.id]: newPane,
+						};
+						const tabName = deriveTabName(newPanes, activeTab.id);
+
+						set({
+							tabs: state.tabs.map((t) =>
+								t.id === activeTab.id
+									? {
+											...t,
+											layout: newLayout,
+											name: tabName,
+										}
+									: t,
+							),
+							panes: newPanes,
+							focusedPaneIds: {
+								...state.focusedPaneIds,
+								[activeTab.id]: newPane.id,
+							},
+						});
+
+						posthog.capture("panel_opened", {
+							panel_type: "browser",
+							workspace_id: workspaceId,
+							pane_id: newPane.id,
+						});
+					}
 				},
 
 				updateBrowserUrl: (
@@ -1446,6 +1633,12 @@ export const useTabsStore = create<TabsStore>()(
 						},
 					});
 
+					posthog.capture("panel_opened", {
+						panel_type: "devtools",
+						workspace_id: tab.workspaceId,
+						pane_id: newPane.id,
+					});
+
 					return newPane.id;
 				},
 
@@ -1534,17 +1727,17 @@ export const useTabsStore = create<TabsStore>()(
 				},
 
 				// Chat operations
-				switchChatSession: (paneId, sessionId) => {
+				switchChatMastraSession: (paneId, sessionId) => {
 					const state = get();
 					const pane = state.panes[paneId];
-					if (!pane?.chat) return;
+					if (!pane || pane.type !== "chat-mastra") return;
 
 					set({
 						panes: {
 							...state.panes,
 							[paneId]: {
 								...pane,
-								chat: { sessionId },
+								chatMastra: { sessionId },
 							},
 						},
 					});
@@ -1581,7 +1774,7 @@ export const useTabsStore = create<TabsStore>()(
 			}),
 			{
 				name: "tabs-storage",
-				version: 5,
+				version: 7,
 				storage: trpcTabsStorage,
 				migrate: (persistedState, version) => {
 					const state = persistedState as TabsState;
@@ -1610,8 +1803,21 @@ export const useTabsStore = create<TabsStore>()(
 					}
 					if (version < 5 && state.panes) {
 						for (const pane of Object.values(state.panes)) {
-							if (pane.chat) {
-								pane.chat.sessionId = null;
+							if (pane.chatMastra) {
+								pane.chatMastra.sessionId = null;
+							}
+						}
+					}
+					if (version < 7 && state.panes) {
+						for (const pane of Object.values(state.panes)) {
+							// biome-ignore lint/suspicious/noExplicitAny: migration from legacy chat pane shape
+							const legacyPane = pane as any;
+							if (legacyPane.type === "chat") {
+								legacyPane.type = "chat-mastra";
+								legacyPane.chatMastra = {
+									sessionId: legacyPane.chat?.sessionId ?? null,
+								};
+								delete legacyPane.chat;
 							}
 						}
 					}

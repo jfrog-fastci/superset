@@ -1,5 +1,9 @@
 import type { MosaicBranch, MosaicNode } from "react-mosaic-component";
-import type { ChangeCategory } from "shared/changes-types";
+import {
+	type ChangeCategory,
+	type FileStatus,
+	isNewFile,
+} from "shared/changes-types";
 import { hasRenderedPreview, isImageFile } from "shared/file-types";
 import type {
 	BrowserPaneState,
@@ -14,14 +18,21 @@ export const resolveFileViewerMode = ({
 	filePath,
 	diffCategory,
 	viewMode,
+	fileStatus,
 }: {
 	filePath: string;
 	diffCategory?: ChangeCategory;
 	viewMode?: FileViewerMode;
+	fileStatus?: FileStatus;
 }): FileViewerMode => {
 	if (viewMode) return viewMode;
 	// Images always default to rendered (no meaningful diff for binary files)
 	if (isImageFile(filePath)) return "rendered";
+	// New files have no previous version — show raw/rendered instead of an all-green diff
+	if (diffCategory && fileStatus && isNewFile(fileStatus)) {
+		if (hasRenderedPreview(filePath)) return "rendered";
+		return "raw";
+	}
 	if (diffCategory) return "diff";
 	if (hasRenderedPreview(filePath)) return "rendered";
 	return "raw";
@@ -132,7 +143,6 @@ export const getPaneIdsInVisualOrder = extractPaneIdsFromLayout;
  * Options for creating a pane with preset configuration
  */
 export interface CreatePaneOptions {
-	initialCommands?: string[];
 	initialCwd?: string;
 }
 
@@ -152,7 +162,6 @@ export const createPane = (
 		type,
 		name: "Terminal",
 		isNew: true,
-		initialCommands: options?.initialCommands,
 		initialCwd: options?.initialCwd,
 	};
 };
@@ -167,6 +176,8 @@ export interface CreateFileViewerPaneOptions {
 	isPinned?: boolean;
 	diffLayout?: DiffLayout;
 	diffCategory?: ChangeCategory;
+	/** File status from git — used to determine default view mode for new files */
+	fileStatus?: FileStatus;
 	commitHash?: string;
 	oldPath?: string;
 	/** Line to scroll to (raw mode only) */
@@ -188,6 +199,7 @@ export const createFileViewerPane = (
 		filePath: options.filePath,
 		diffCategory: options.diffCategory,
 		viewMode: options.viewMode,
+		fileStatus: options.fileStatus,
 	});
 
 	const fileViewer: FileViewerState = {
@@ -214,18 +226,15 @@ export const createFileViewerPane = (
 	};
 };
 
-/**
- * Creates a new chat pane
- */
-export const createChatPane = (tabId: string): Pane => {
+export const createChatMastraPane = (tabId: string): Pane => {
 	const id = generateId("pane");
 
 	return {
 		id,
 		tabId,
-		type: "chat",
-		name: "Chat",
-		chat: {
+		type: "chat-mastra",
+		name: "New Chat",
+		chatMastra: {
 			sessionId: null,
 		},
 	};
@@ -310,23 +319,15 @@ export const createBrowserTabWithPane = (
 	return { tab, pane };
 };
 
-/**
- * Creates a new tab with a chat pane atomically
- */
-export const createChatTabWithPane = (
+export const createChatMastraTabWithPane = (
 	workspaceId: string,
-	existingTabs: Tab[] = [],
 ): { tab: Tab; pane: Pane } => {
 	const tabId = generateId("tab");
-	const pane = createChatPane(tabId);
-
-	const workspaceTabs = existingTabs.filter(
-		(t) => t.workspaceId === workspaceId,
-	);
+	const pane = createChatMastraPane(tabId);
 
 	const tab: Tab = {
 		id: tabId,
-		name: `Chat ${workspaceTabs.filter((t) => t.name.startsWith("Chat")).length + 1}`,
+		name: "New Chat",
 		workspaceId,
 		layout: pane.id,
 		createdAt: Date.now(),

@@ -281,13 +281,13 @@ export const agentCommands = pgTable(
 		params: jsonb().$type<Record<string, unknown>>(),
 		parentCommandId: uuid("parent_command_id"),
 		status: commandStatus().notNull().default("pending"),
-		claimedBy: text("claimed_by"),
-		claimedAt: timestamp("claimed_at"),
 		result: jsonb().$type<Record<string, unknown>>(),
 		error: text(),
-		createdAt: timestamp("created_at").notNull().defaultNow(),
-		executedAt: timestamp("executed_at"),
-		timeoutAt: timestamp("timeout_at"),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+		executedAt: timestamp("executed_at", { withTimezone: true }),
+		timeoutAt: timestamp("timeout_at", { withTimezone: true }),
 	},
 	(table) => [
 		index("agent_commands_user_status_idx").on(table.userId, table.status),

@@ -29,10 +29,10 @@ export const SETTING_ITEM_ID = {
 	BEHAVIOR_FILE_OPEN_MODE: "behavior-file-open-mode",
 	BEHAVIOR_RESOURCE_MONITOR: "behavior-resource-monitor",
 	BEHAVIOR_WORKTREE_LOCATION: "behavior-worktree-location",
+	BEHAVIOR_OPEN_LINKS_IN_APP: "behavior-open-links-in-app",
 
 	TERMINAL_PRESETS: "terminal-presets",
 	TERMINAL_QUICK_ADD: "terminal-quick-add",
-	TERMINAL_AUTO_APPLY_PRESET: "terminal-auto-apply-preset",
 	TERMINAL_SESSIONS: "terminal-sessions",
 	TERMINAL_LINK_BEHAVIOR: "terminal-link-behavior",
 
@@ -58,6 +58,7 @@ export const SETTING_ITEM_ID = {
 	// Permissions
 	PERMISSIONS_FULL_DISK_ACCESS: "permissions-full-disk-access",
 	PERMISSIONS_ACCESSIBILITY: "permissions-accessibility",
+	PERMISSIONS_MICROPHONE: "permissions-microphone",
 	PERMISSIONS_APPLE_EVENTS: "permissions-apple-events",
 	PERMISSIONS_LOCAL_NETWORK: "permissions-local-network",
 } as const;
@@ -464,6 +465,23 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 		],
 	},
 	{
+		id: SETTING_ITEM_ID.BEHAVIOR_OPEN_LINKS_IN_APP,
+		section: "behavior",
+		title: "Open links in app browser",
+		description:
+			"Open links from chat and terminal in the built-in browser instead of your default browser",
+		keywords: [
+			"browser",
+			"links",
+			"in-app",
+			"external",
+			"open",
+			"chat",
+			"terminal",
+			"url",
+		],
+	},
+	{
 		id: SETTING_ITEM_ID.TERMINAL_PRESETS,
 		section: "terminal",
 		title: "Terminal Presets",
@@ -499,25 +517,6 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 			"opencode",
 			"ai",
 			"assistant",
-		],
-	},
-	{
-		id: SETTING_ITEM_ID.TERMINAL_AUTO_APPLY_PRESET,
-		section: "terminal",
-		title: "Auto-Apply Default Preset",
-		description:
-			"Automatically apply the workspace creation preset when creating new workspaces",
-		keywords: [
-			"terminal",
-			"preset",
-			"default",
-			"auto",
-			"apply",
-			"workspace",
-			"create",
-			"new",
-			"startup",
-			"launch",
 		],
 	},
 	{
@@ -793,7 +792,7 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 		section: "permissions",
 		title: "Full Disk Access",
 		description:
-			"Access files in Documents, Downloads, Desktop, and iCloud from the terminal",
+			"Persistent access to Documents, Downloads, Desktop, and iCloud from terminal sessions",
 		keywords: [
 			"permissions",
 			"full disk access",
@@ -824,6 +823,24 @@ export const SETTINGS_ITEMS: SettingsItem[] = [
 			"security",
 			"privacy",
 			"trusted",
+		],
+	},
+	{
+		id: SETTING_ITEM_ID.PERMISSIONS_MICROPHONE,
+		section: "permissions",
+		title: "Microphone",
+		description: "Use voice transcription and push-to-talk features",
+		keywords: [
+			"permissions",
+			"microphone",
+			"mic",
+			"voice",
+			"transcription",
+			"audio",
+			"recording",
+			"push to talk",
+			"codex",
+			"privacy",
 		],
 	},
 	{

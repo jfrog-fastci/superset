@@ -24,6 +24,7 @@ import { PROJECT_COLOR_VALUES } from "shared/constants/project-colors";
 import simpleGit from "simple-git";
 import { z } from "zod";
 import { publicProcedure, router } from "../..";
+import { resolveDefaultEditor } from "../external";
 import {
 	activateProject,
 	getBranchWorkspace,
@@ -35,6 +36,7 @@ import {
 	getDefaultBranch,
 	getGitAuthorName,
 	getGitRoot,
+	NotGitRepoError,
 	refreshDefaultBranch,
 	sanitizeAuthorPrefix,
 } from "../workspaces/utils/git";
@@ -278,13 +280,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 		getDefaultApp: publicProcedure
 			.input(z.object({ projectId: z.string() }))
 			.query(({ input }) => {
-				const project = localDb
-					.select()
-					.from(projects)
-					.where(eq(projects.id, input.projectId))
-					.get();
-
-				return project?.defaultApp ?? "cursor";
+				return resolveDefaultEditor(input.projectId);
 			}),
 
 		getRecents: publicProcedure.query((): Project[] => {
@@ -524,15 +520,11 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 
 					outcomes.push({ status: "success", project });
 				} catch (gitError) {
-					const msg =
-						gitError instanceof Error ? gitError.message : String(gitError);
-					const msgLower = msg.toLowerCase();
-					if (
-						msgLower.includes("not a git repository") ||
-						msgLower.includes("cannot find git root")
-					) {
+					if (gitError instanceof NotGitRepoError) {
 						outcomes.push({ status: "needsGitInit", selectedPath });
 					} else {
+						const msg =
+							gitError instanceof Error ? gitError.message : String(gitError);
 						console.error(
 							"[projects/openNew] Failed to open project:",
 							selectedPath,
@@ -577,12 +569,15 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 				let mainRepoPath: string;
 				try {
 					mainRepoPath = await getGitRoot(selectedPath);
-				} catch {
-					return {
-						canceled: false,
-						needsGitInit: true as const,
-						selectedPath,
-					};
+				} catch (error) {
+					if (error instanceof NotGitRepoError) {
+						return {
+							canceled: false,
+							needsGitInit: true as const,
+							selectedPath,
+						};
+					}
+					throw error;
 				}
 
 				const defaultBranch = await getDefaultBranch(mainRepoPath);

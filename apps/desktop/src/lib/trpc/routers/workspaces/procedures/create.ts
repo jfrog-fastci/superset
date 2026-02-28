@@ -20,7 +20,6 @@ import {
 } from "../utils/db-helpers";
 import {
 	createWorktreeFromPr,
-	fetchPrBranch,
 	generateBranchName,
 	getBranchPrefix,
 	getBranchWorktreePath,
@@ -33,7 +32,7 @@ import {
 	parsePrUrl,
 	safeCheckoutBranch,
 	sanitizeAuthorPrefix,
-	sanitizeBranchName,
+	sanitizeBranchNameWithMaxLength,
 	worktreeExists,
 } from "../utils/git";
 import { resolveWorktreePath } from "../utils/resolve-worktree-path";
@@ -199,11 +198,6 @@ async function handleNewWorktree({
 			`This PR's branch is already checked out in a worktree at: ${existingWorktreePath}`,
 		);
 	}
-
-	await fetchPrBranch({
-		repoPath: project.mainRepoPath,
-		prInfo,
-	});
 
 	const worktreePath = resolveWorktreePath(project, localBranchName);
 
@@ -374,7 +368,9 @@ export const createCreateProcedures = () => {
 					}
 					branch = existingBranchName;
 				} else if (input.branchName?.trim()) {
-					branch = withPrefix(sanitizeBranchName(input.branchName));
+					branch = sanitizeBranchNameWithMaxLength(
+						withPrefix(input.branchName),
+					);
 				} else {
 					branch = generateBranchName({
 						existingBranches,

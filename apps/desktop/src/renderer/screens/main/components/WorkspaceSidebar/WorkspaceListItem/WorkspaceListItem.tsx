@@ -42,7 +42,6 @@ import { STROKE_WIDTH } from "../constants";
 import { CollapsedWorkspaceItem } from "./CollapsedWorkspaceItem";
 import { DeleteWorkspaceDialog, WorkspaceHoverCardContent } from "./components";
 import {
-	AHEAD_BEHIND_STALE_TIME,
 	GITHUB_STATUS_STALE_TIME,
 	HOVER_CARD_CLOSE_DELAY,
 	HOVER_CARD_OPEN_DELAY,
@@ -92,6 +91,7 @@ export function WorkspaceListItem({
 	const matchRoute = useMatchRoute();
 	const reorderWorkspaces = useReorderWorkspaces();
 	const [hasHovered, setHasHovered] = useState(false);
+	const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
 	const rename = useWorkspaceRename(id, name, branch);
 	const tabs = useTabsStore((s) => s.tabs);
 	const panes = useTabsStore((s) => s.panes);
@@ -141,14 +141,15 @@ export function WorkspaceListItem({
 		staleTime: GITHUB_STATUS_STALE_TIME,
 	});
 
-	const { data: aheadBehind } = electronTrpc.workspaces.getAheadBehind.useQuery(
-		{ workspaceId: id },
-		{
-			enabled: isBranchWorkspace,
-			staleTime: AHEAD_BEHIND_STALE_TIME,
-			refetchInterval: AHEAD_BEHIND_STALE_TIME,
-		},
-	);
+	const { data: aheadBehind, refetch: refetchAheadBehind } =
+		electronTrpc.workspaces.getAheadBehind.useQuery(
+			{ workspaceId: id },
+			{
+				enabled: isBranchWorkspace,
+				staleTime: GITHUB_STATUS_STALE_TIME,
+				refetchInterval: hasHovered ? GITHUB_STATUS_STALE_TIME : false,
+			},
+		);
 
 	useBranchSyncInvalidation({
 		gitBranch: localChanges?.branch,
@@ -194,6 +195,7 @@ export function WorkspaceListItem({
 
 	const handleMouseEnter = () => {
 		if (!hasHovered) setHasHovered(true);
+		if (isBranchWorkspace) void refetchAheadBehind();
 	};
 
 	const handleOpenInFinder = () => {
@@ -396,13 +398,6 @@ export function WorkspaceListItem({
 								{isBranchWorkspace ? "local" : name || branch}
 							</span>
 
-							{shortcutIndex !== undefined &&
-								shortcutIndex < MAX_KEYBOARD_SHORTCUT_INDEX && (
-									<span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono tabular-nums shrink-0">
-										⌘{shortcutIndex + 1}
-									</span>
-								)}
-
 							{isBranchWorkspace && aheadBehind && (
 								<WorkspaceAheadBehind
 									ahead={aheadBehind.ahead}
@@ -410,45 +405,43 @@ export function WorkspaceListItem({
 								/>
 							)}
 
-							{isBranchWorkspace && diffStats && (
-								<WorkspaceDiffStats
-									additions={diffStats.additions}
-									deletions={diffStats.deletions}
-									isActive={isActive}
-								/>
-							)}
-
-							{!isBranchWorkspace &&
-								(diffStats ? (
+							<div className="grid shrink-0 h-5 [&>*]:col-start-1 [&>*]:row-start-1 items-center">
+								{diffStats && (
 									<WorkspaceDiffStats
 										additions={diffStats.additions}
 										deletions={diffStats.deletions}
 										isActive={isActive}
-										onClose={(e) => {
-											e.stopPropagation();
-											handleDeleteClick();
-										}}
 									/>
-								) : (
-									<Tooltip delayDuration={300}>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												onClick={(e) => {
-													e.stopPropagation();
-													handleDeleteClick();
-												}}
-												className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-muted-foreground hover:text-foreground"
-												aria-label="Close workspace"
-											>
-												<HiMiniXMark className="size-3.5" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent side="top" sideOffset={4}>
-											Close workspace
-										</TooltipContent>
-									</Tooltip>
-								))}
+								)}
+								<div className="flex items-center justify-end gap-1.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-[opacity,visibility]">
+									{shortcutIndex !== undefined &&
+										shortcutIndex < MAX_KEYBOARD_SHORTCUT_INDEX && (
+											<span className="text-[10px] text-muted-foreground font-mono tabular-nums shrink-0">
+												⌘{shortcutIndex + 1}
+											</span>
+										)}
+									{!isBranchWorkspace && (
+										<Tooltip delayDuration={300}>
+											<TooltipTrigger asChild>
+												<button
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														handleDeleteClick();
+													}}
+													className="flex items-center justify-center text-muted-foreground hover:text-foreground"
+													aria-label="Close workspace"
+												>
+													<HiMiniXMark className="size-3.5" />
+												</button>
+											</TooltipTrigger>
+											<TooltipContent side="top" sideOffset={4}>
+												Close workspace
+											</TooltipContent>
+										</Tooltip>
+									)}
+								</div>
+							</div>
 						</div>
 
 						{(showBranchSubtitle || pr) && (
@@ -534,10 +527,11 @@ export function WorkspaceListItem({
 	return (
 		<>
 			<HoverCard
+				open={isContextMenuOpen ? false : undefined}
 				openDelay={HOVER_CARD_OPEN_DELAY}
 				closeDelay={HOVER_CARD_CLOSE_DELAY}
 			>
-				<ContextMenu>
+				<ContextMenu onOpenChange={setIsContextMenuOpen}>
 					<HoverCardTrigger asChild>
 						<ContextMenuTrigger asChild>{content}</ContextMenuTrigger>
 					</HoverCardTrigger>

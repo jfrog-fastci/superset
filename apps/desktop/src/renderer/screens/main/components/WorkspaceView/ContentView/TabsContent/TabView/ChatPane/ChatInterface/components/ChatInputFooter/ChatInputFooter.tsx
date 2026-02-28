@@ -2,19 +2,16 @@ import {
 	PromptInput,
 	PromptInputAttachment,
 	PromptInputAttachments,
-	PromptInputFooter,
 	type PromptInputMessage,
-	PromptInputSubmit,
 	PromptInputTextarea,
-	PromptInputTools,
 	usePromptInputAttachments,
 	usePromptInputController,
 } from "@superset/ui/ai-elements/prompt-input";
-import { ThinkingToggle } from "@superset/ui/ai-elements/thinking-toggle";
-import { UploadIcon } from "lucide-react";
+import type { ChatStatus } from "ai";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+	formatHotkeyText,
 	getCurrentPlatform,
 	HOTKEYS,
 	matchesHotkeyEvent,
@@ -23,15 +20,18 @@ import type { SlashCommand } from "../../hooks/useSlashCommands";
 import type { ModelOption, PermissionMode } from "../../types";
 import { IssueLinkCommand } from "../IssueLinkCommand";
 import { MentionAnchor, MentionProvider } from "../MentionPopover";
-import { ModelPicker } from "../ModelPicker";
-import { PermissionModePicker } from "../PermissionModePicker";
-import { PlusMenu } from "../PlusMenu";
 import { SlashCommandInput } from "../SlashCommandInput";
+import { ChatComposerControls } from "./components/ChatComposerControls";
+import { ChatInputDropZone } from "./components/ChatInputDropZone";
+import { FileDropOverlay } from "./components/FileDropOverlay";
+import { SlashCommandPreview } from "./components/SlashCommandPreview";
+import { getErrorMessage } from "./utils/getErrorMessage";
 
 interface ChatInputFooterProps {
 	cwd: string;
-	error: string | null;
-	isStreaming: boolean;
+	error: unknown;
+	canAbort: boolean;
+	submitStatus?: ChatStatus;
 	availableModels: ModelOption[];
 	selectedModel: ModelOption | null;
 	setSelectedModel: React.Dispatch<React.SetStateAction<ModelOption | null>>;
@@ -42,44 +42,11 @@ interface ChatInputFooterProps {
 	thinkingEnabled: boolean;
 	setThinkingEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 	slashCommands: SlashCommand[];
+	onSubmitStart?: () => void;
+	onSubmitEnd?: () => void;
 	onSend: (message: PromptInputMessage) => void;
 	onStop: (e: React.MouseEvent) => void;
 	onSlashCommandSend: (command: SlashCommand) => void;
-}
-
-function useDocumentDrag() {
-	const [isDragging, setIsDragging] = useState(false);
-	const counter = useRef(0);
-
-	const onEnter = useCallback((e: DragEvent) => {
-		if (e.dataTransfer?.types?.includes("Files")) {
-			counter.current++;
-			setIsDragging(true);
-		}
-	}, []);
-
-	const onLeave = useCallback(() => {
-		counter.current--;
-		if (counter.current === 0) setIsDragging(false);
-	}, []);
-
-	const onDrop = useCallback(() => {
-		counter.current = 0;
-		setIsDragging(false);
-	}, []);
-
-	useEffect(() => {
-		document.addEventListener("dragenter", onEnter);
-		document.addEventListener("dragleave", onLeave);
-		document.addEventListener("drop", onDrop);
-		return () => {
-			document.removeEventListener("dragenter", onEnter);
-			document.removeEventListener("dragleave", onLeave);
-			document.removeEventListener("drop", onDrop);
-		};
-	}, [onEnter, onLeave, onDrop]);
-
-	return isDragging;
 }
 
 function ChatShortcuts({
@@ -148,7 +115,8 @@ function IssueLinkInserter({
 export function ChatInputFooter({
 	cwd,
 	error,
-	isStreaming,
+	canAbort,
+	submitStatus,
 	availableModels,
 	selectedModel,
 	setSelectedModel,
@@ -159,92 +127,100 @@ export function ChatInputFooter({
 	thinkingEnabled,
 	setThinkingEnabled,
 	slashCommands,
+	onSubmitStart,
+	onSubmitEnd,
 	onSend,
 	onStop,
 	onSlashCommandSend,
 }: ChatInputFooterProps) {
-	const isDragging = useDocumentDrag();
 	const [issueLinkOpen, setIssueLinkOpen] = useState(false);
+	const errorMessage = getErrorMessage(error);
+	const platform = getCurrentPlatform();
+	const focusKey = HOTKEYS.FOCUS_CHAT_INPUT.defaults[platform];
+	const focusShortcutText = formatHotkeyText(focusKey, platform);
+	const showFocusHint = focusShortcutText !== "Unassigned";
 
 	return (
-		<div className="border-t bg-background px-4 py-3">
-			<div className="mx-auto w-full max-w-3xl">
-				{error && (
-					<div className="mb-3 select-text rounded-md border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-						{error}
-					</div>
-				)}
-				<SlashCommandInput
-					onCommandSend={onSlashCommandSend}
-					commands={slashCommands}
-				>
-					<MentionProvider cwd={cwd}>
-						<MentionAnchor>
-							<div className="relative">
-								<span className="pointer-events-none absolute top-3 right-3 z-10 text-xs text-muted-foreground/50 [:focus-within>&]:hidden">
-									⌘F to focus
-								</span>
-								<PromptInput
-									onSubmit={onSend}
-									multiple
-									maxFiles={5}
-									maxFileSize={10 * 1024 * 1024}
-									globalDrop
+		<ChatInputDropZone className="bg-background px-4 py-3">
+			{(dragType) => (
+				<div className="mx-auto w-full max-w-[680px]">
+					{errorMessage && (
+						<div className="mb-3 select-text rounded-md border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+							{errorMessage}
+						</div>
+					)}
+					<SlashCommandInput
+						onCommandSend={onSlashCommandSend}
+						commands={slashCommands}
+					>
+						<MentionProvider cwd={cwd}>
+							<MentionAnchor>
+								<div
+									className={
+										dragType === "path"
+											? "relative opacity-50 transition-opacity"
+											: "relative"
+									}
 								>
-									<ChatShortcuts setIssueLinkOpen={setIssueLinkOpen} />
-									<IssueLinkInserter
-										issueLinkOpen={issueLinkOpen}
-										setIssueLinkOpen={setIssueLinkOpen}
-									/>
-									{isDragging && (
-										<div className="mx-3 mt-3 flex self-stretch flex-col items-center gap-2 bg-muted py-6">
-											<div className="flex size-8 items-center justify-center rounded-full bg-muted-foreground/20">
-												<UploadIcon className="size-4 text-muted-foreground" />
-											</div>
-											<p className="font-medium text-foreground text-sm">
-												Drop files here
-											</p>
-											<p className="text-muted-foreground text-xs">
-												Images, PDFs, text files, or folders
-											</p>
-										</div>
+									{showFocusHint && (
+										<span className="pointer-events-none absolute top-3 right-3 z-10 text-xs text-muted-foreground/50 [:focus-within>&]:hidden">
+											{focusShortcutText} to focus
+										</span>
 									)}
-									<PromptInputAttachments>
-										{(file) => <PromptInputAttachment data={file} />}
-									</PromptInputAttachments>
-									<PromptInputTextarea placeholder="Ask to make changes, @mention files, run /commands" />
-									<PromptInputFooter>
-										<PromptInputTools>
-											<ModelPicker
-												models={availableModels}
-												selectedModel={selectedModel}
-												onSelectModel={setSelectedModel}
-												open={modelSelectorOpen}
-												onOpenChange={setModelSelectorOpen}
-											/>
-											<ThinkingToggle
-												enabled={thinkingEnabled}
-												onToggle={setThinkingEnabled}
-											/>
-											<PermissionModePicker
-												selectedMode={permissionMode}
-												onSelectMode={setPermissionMode}
-											/>
-										</PromptInputTools>
-										<div className="flex items-center space-x-2">
-											<PlusMenu onLinkIssue={() => setIssueLinkOpen(true)} />
-											<PromptInputSubmit
-												status={isStreaming ? "streaming" : undefined}
-												onClick={isStreaming ? onStop : undefined}
-											/>
-										</div>
-									</PromptInputFooter>
-								</PromptInput>
-							</div>
-						</MentionAnchor>
-					</MentionProvider>
-				</SlashCommandInput>
-			</div>
-		</div>
+									<PromptInput
+										className="[&>[data-slot=input-group]]:rounded-[13px] [&>[data-slot=input-group]]:border-[0.5px] [&>[data-slot=input-group]]:shadow-none [&>[data-slot=input-group]]:bg-foreground/[0.02]"
+										onSubmitStart={onSubmitStart}
+										onSubmitEnd={onSubmitEnd}
+										onSubmit={onSend}
+										multiple
+										maxFiles={5}
+										maxFileSize={10 * 1024 * 1024}
+										globalDrop
+									>
+										<ChatShortcuts setIssueLinkOpen={setIssueLinkOpen} />
+										<IssueLinkInserter
+											issueLinkOpen={issueLinkOpen}
+											setIssueLinkOpen={setIssueLinkOpen}
+										/>
+										<FileDropOverlay visible={dragType === "files"} />
+										<PromptInputAttachments>
+											{(file) => <PromptInputAttachment data={file} />}
+										</PromptInputAttachments>
+										<SlashCommandPreview
+											cwd={cwd}
+											slashCommands={slashCommands}
+										/>
+										<PromptInputTextarea
+											placeholder="Ask anything..."
+											className="min-h-10"
+										/>
+										<ChatComposerControls
+											availableModels={availableModels}
+											selectedModel={selectedModel}
+											setSelectedModel={setSelectedModel}
+											modelSelectorOpen={modelSelectorOpen}
+											setModelSelectorOpen={setModelSelectorOpen}
+											permissionMode={permissionMode}
+											setPermissionMode={setPermissionMode}
+											thinkingEnabled={thinkingEnabled}
+											setThinkingEnabled={setThinkingEnabled}
+											canAbort={canAbort}
+											submitStatus={submitStatus}
+											onStop={onStop}
+											onLinkIssue={() => setIssueLinkOpen(true)}
+										/>
+									</PromptInput>
+								</div>
+							</MentionAnchor>
+						</MentionProvider>
+					</SlashCommandInput>
+					<div className="flex items-center px-2 pt-1.5">
+						<span className="text-xs text-muted-foreground/50">
+							Use '@' to mention files, run /commands
+						</span>
+					</div>
+				</div>
+			)}
+		</ChatInputDropZone>
 	);
 }

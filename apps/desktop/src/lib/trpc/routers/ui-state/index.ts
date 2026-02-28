@@ -33,17 +33,22 @@ const fileViewerStateSchema = z.object({
 const paneSchema = z.object({
 	id: z.string(),
 	tabId: z.string(),
-	type: z.enum(["terminal", "webview", "file-viewer", "chat", "devtools"]),
+	type: z.enum([
+		"terminal",
+		"webview",
+		"file-viewer",
+		"chat-mastra",
+		"devtools",
+	]),
 	name: z.string(),
 	isNew: z.boolean().optional(),
 	status: z.enum(["idle", "working", "permission", "review"]).optional(),
-	initialCommands: z.array(z.string()).optional(),
 	initialCwd: z.string().optional(),
 	url: z.string().optional(),
 	cwd: z.string().nullable().optional(),
 	cwdConfirmed: z.boolean().optional(),
 	fileViewer: fileViewerStateSchema.optional(),
-	chat: z.object({ sessionId: z.string().nullable() }).optional(),
+	chatMastra: z.object({ sessionId: z.string().nullable() }).optional(),
 	browser: z
 		.object({
 			currentUrl: z.string(),
@@ -158,6 +163,8 @@ const uiColorsSchema = z.object({
 	chart3: z.string(),
 	chart4: z.string(),
 	chart5: z.string(),
+	highlightMatch: z.string(),
+	highlightActive: z.string(),
 });
 
 /**

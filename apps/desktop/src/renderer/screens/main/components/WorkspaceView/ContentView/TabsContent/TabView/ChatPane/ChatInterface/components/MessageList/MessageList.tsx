@@ -5,19 +5,27 @@ import {
 	ConversationScrollButton,
 } from "@superset/ui/ai-elements/conversation";
 import { Message, MessageContent } from "@superset/ui/ai-elements/message";
-import { Shimmer } from "@superset/ui/ai-elements/shimmer";
-import type { UIMessage } from "ai";
+import { ShimmerLabel } from "@superset/ui/ai-elements/shimmer-label";
+import type { ChatStatus, UIMessage } from "ai";
 import { FileIcon, FileTextIcon, ImageIcon } from "lucide-react";
 import { useCallback } from "react";
 import { HiMiniChatBubbleLeftRight } from "react-icons/hi2";
 import { useTabsStore } from "renderer/stores/tabs/store";
+import type { InterruptedMessagePreview } from "../../types";
 import { MessagePartsRenderer } from "../MessagePartsRenderer";
+import { MessageScrollbackRail } from "./components/MessageScrollbackRail";
 
 interface MessageListProps {
 	messages: UIMessage[];
+	interruptedMessage?: InterruptedMessagePreview | null;
 	isStreaming: boolean;
+	submitStatus?: ChatStatus;
 	workspaceId?: string;
-	onAnswer?: (toolCallId: string, answers: Record<string, string>) => void;
+	workspaceCwd?: string;
+	onAnswer: (
+		toolCallId: string,
+		answers: Record<string, string>,
+	) => Promise<void>;
 }
 
 function FileChip({
@@ -45,11 +53,16 @@ function FileChip({
 
 export function MessageList({
 	messages,
+	interruptedMessage,
 	isStreaming,
+	submitStatus,
 	workspaceId,
+	workspaceCwd,
 	onAnswer,
 }: MessageListProps) {
 	const addFileViewerPane = useTabsStore((s) => s.addFileViewerPane);
+	const isThinking =
+		submitStatus === "submitted" || submitStatus === "streaming";
 
 	const handleImageClick = useCallback(
 		(url: string) => {
@@ -61,8 +74,8 @@ export function MessageList({
 
 	return (
 		<Conversation className="flex-1">
-			<ConversationContent className="mx-auto w-full max-w-3xl gap-6 px-4 py-6">
-				{messages.length === 0 ? (
+			<ConversationContent className="mx-auto w-full max-w-3xl gap-6 py-6 pl-4 pr-16">
+				{messages.length === 0 && !interruptedMessage ? (
 					<ConversationEmptyState
 						title="Start a conversation"
 						description="Ask anything to get started"
@@ -72,6 +85,8 @@ export function MessageList({
 					messages.map((msg, index) => {
 						const isLastAssistant =
 							msg.role === "assistant" && index === messages.length - 1;
+						const shouldAnimateStreaming =
+							isLastAssistant && (isStreaming || submitStatus === "submitted");
 
 						if (msg.role === "user") {
 							const textContent = msg.parts
@@ -87,13 +102,18 @@ export function MessageList({
 							);
 
 							return (
-								<div key={msg.id} className="flex flex-col items-end gap-2">
+								<div
+									key={msg.id}
+									className="flex flex-col items-end gap-2"
+									data-chat-user-message="true"
+									data-message-id={msg.id}
+								>
 									{imageParts.length > 0 && (
 										<div className="flex max-w-[85%] flex-wrap gap-2">
-											{imageParts.map((p, i) =>
+											{imageParts.map((p) =>
 												p.type === "file" ? (
 													<button
-														key={`${msg.id}-img-${i}`}
+														key={`${msg.id}-img-${p.url}`}
 														type="button"
 														className="cursor-zoom-in"
 														onClick={() => handleImageClick(p.url)}
@@ -110,10 +130,10 @@ export function MessageList({
 									)}
 									{nonImageParts.length > 0 && (
 										<div className="flex max-w-[85%] flex-wrap gap-1.5">
-											{nonImageParts.map((p, i) =>
+											{nonImageParts.map((p) =>
 												p.type === "file" ? (
 													<FileChip
-														key={`${msg.id}-file-${i}`}
+														key={`${msg.id}-file-${p.url}`}
 														filename={p.filename || ""}
 														mediaType={p.mediaType}
 													/>
@@ -133,18 +153,17 @@ export function MessageList({
 						return (
 							<Message key={msg.id} from={msg.role}>
 								<MessageContent>
-									{isLastAssistant && isStreaming && msg.parts.length === 0 ? (
-										<Shimmer
-											className="text-sm text-muted-foreground"
-											duration={1}
-										>
+									{isLastAssistant && isThinking && msg.parts.length === 0 ? (
+										<ShimmerLabel className="text-sm text-muted-foreground">
 											Thinking...
-										</Shimmer>
+										</ShimmerLabel>
 									) : (
 										<MessagePartsRenderer
 											parts={msg.parts}
 											isLastAssistant={isLastAssistant}
-											isStreaming={isStreaming}
+											isStreaming={shouldAnimateStreaming}
+											workspaceId={workspaceId}
+											workspaceCwd={workspaceCwd}
 											onAnswer={onAnswer}
 										/>
 									)}
@@ -153,7 +172,37 @@ export function MessageList({
 						);
 					})
 				)}
+				{interruptedMessage && interruptedMessage.parts.length > 0 && (
+					<Message key={interruptedMessage.id} from="assistant">
+						<MessageContent>
+							<MessagePartsRenderer
+								parts={interruptedMessage.parts}
+								isLastAssistant={false}
+								isStreaming={false}
+								workspaceId={workspaceId}
+								workspaceCwd={workspaceCwd}
+								onAnswer={onAnswer}
+							/>
+							<div className="flex items-center gap-2 text-xs text-muted-foreground">
+								<span className="rounded border border-border bg-muted px-1.5 py-0.5 font-medium uppercase tracking-wide">
+									Interrupted
+								</span>
+								<span>Response stopped</span>
+							</div>
+						</MessageContent>
+					</Message>
+				)}
+				{isThinking && messages[messages.length - 1]?.role === "user" && (
+					<Message from="assistant">
+						<MessageContent>
+							<ShimmerLabel className="text-sm text-muted-foreground">
+								Thinking...
+							</ShimmerLabel>
+						</MessageContent>
+					</Message>
+				)}
 			</ConversationContent>
+			<MessageScrollbackRail messages={messages} />
 			<ConversationScrollButton />
 		</Conversation>
 	);
