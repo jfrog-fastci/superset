@@ -9,19 +9,15 @@ export function RaffleForm() {
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [submitted, setSubmitted] = useState(false);
-	const [loading, setLoading] = useState(false);
 
 	function handleSubmit(e: FormEvent) {
 		e.preventDefault();
-		setLoading(true);
 
 		posthog.group("raffle", "hackathon-raffle", {
 			name: "Hackathon Raffle",
 		});
 
 		posthog.capture("hackathon_raffle_entry", {
-			entry_name: name,
-			entry_email: email,
 			$groups: { raffle: "hackathon-raffle" },
 		});
 
@@ -32,7 +28,6 @@ export function RaffleForm() {
 		});
 
 		setSubmitted(true);
-		setLoading(false);
 	}
 
 	if (submitted) {
@@ -117,10 +112,9 @@ export function RaffleForm() {
 
 			<button
 				type="submit"
-				disabled={loading}
-				className="w-full flex items-center justify-center gap-2 py-4 border-t border-border text-sm font-medium tracking-wider text-background bg-foreground hover:bg-foreground/80 transition-colors disabled:opacity-50"
+				className="w-full flex items-center justify-center gap-2 py-4 border-t border-border text-sm font-medium tracking-wider text-background bg-foreground hover:bg-foreground/80 transition-colors"
 			>
-				{loading ? "SUBMITTING..." : "ENTER RAFFLE"}
+				ENTER RAFFLE
 			</button>
 		</form>
 	);
