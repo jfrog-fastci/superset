@@ -37,6 +37,27 @@ function findLastUserMessageIndex(messages: ListMessagesOutput): number {
 	return -1;
 }
 
+function findLatestAssistantErrorMessage(
+	messages: ListMessagesOutput,
+): string | null {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index] as {
+			role?: string;
+			stopReason?: string;
+			errorMessage?: string;
+		};
+		if (message.role !== "assistant") continue;
+		if (message.stopReason !== "error") continue;
+		if (
+			typeof message.errorMessage === "string" &&
+			message.errorMessage.trim().length > 0
+		) {
+			return message.errorMessage.trim();
+		}
+	}
+	return null;
+}
+
 export function withoutActiveTurnAssistantHistory({
 	messages,
 	currentMessage,
@@ -97,6 +118,8 @@ export function useMastraChatDisplay(options: UseMastraChatDisplayOptions) {
 	const currentMessage = displayState?.currentMessage ?? null;
 	const isRunning = displayState?.isRunning ?? false;
 	const historicalMessages = messagesQuery.data ?? [];
+	const latestAssistantErrorMessage =
+		findLatestAssistantErrorMessage(historicalMessages);
 	const [optimisticUserMessage, setOptimisticUserMessage] = useState<
 		ListMessagesOutput[number] | null
 	>(null);
@@ -242,6 +265,7 @@ export function useMastraChatDisplay(options: UseMastraChatDisplayOptions) {
 		messages,
 		error:
 			runtimeErrorMessage ??
+			latestAssistantErrorMessage ??
 			displayQuery.error ??
 			messagesQuery.error ??
 			commandError ??

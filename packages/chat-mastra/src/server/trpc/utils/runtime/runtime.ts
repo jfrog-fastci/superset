@@ -25,7 +25,6 @@ export interface RuntimeSession {
 	hookManager: RuntimeHookManager;
 	mcpManualStatuses: Map<string, RuntimeMcpServerStatus>;
 	lastErrorMessage: string | null;
-	lastPublishedErrorMessage: string | null;
 	cwd: string;
 }
 
@@ -104,23 +103,11 @@ export function subscribeToSessionEvents(
 		if (isHarnessErrorEvent(event)) {
 			const message = toRuntimeErrorMessage(event.error);
 			runtime.lastErrorMessage = message;
-			console.error("[chat-mastra] Harness error event", {
-				sessionId: runtime.sessionId,
-				cwd: runtime.cwd,
-				message,
-				error: event.error,
-			});
 			return;
 		}
 		if (isHarnessWorkspaceErrorEvent(event)) {
 			const message = toRuntimeErrorMessage(event.error);
 			runtime.lastErrorMessage = message;
-			console.error("[chat-mastra] Harness workspace_error event", {
-				sessionId: runtime.sessionId,
-				cwd: runtime.cwd,
-				message,
-				error: event.error,
-			});
 			return;
 		}
 		if (isHarnessAgentStartEvent(event)) {
@@ -132,25 +119,14 @@ export function subscribeToSessionEvents(
 		}
 
 		const raw = event.reason;
-		const reason = raw === "aborted" || raw === "error" ? raw : "complete";
-		console.warn("[chat-mastra] Harness agent_end", {
-			sessionId: runtime.sessionId,
-			cwd: runtime.cwd,
-			reason,
-			lastErrorMessage: runtime.lastErrorMessage,
-		});
-		if (reason === "error") {
-			console.error("[chat-mastra] Harness agent_end with error reason", {
-				sessionId: runtime.sessionId,
-				cwd: runtime.cwd,
-				lastErrorMessage: runtime.lastErrorMessage,
-			});
-			if (!runtime.lastErrorMessage) {
-				void backfillRuntimeErrorFromLatestAssistantMessage(runtime);
-			}
-		}
-		if (reason === "complete") {
-			runtime.lastErrorMessage = null;
+		const normalizedReason =
+			raw === "aborted" || raw === "error" ? raw : "complete";
+		const reason =
+			normalizedReason === "complete" && runtime.lastErrorMessage
+				? "error"
+				: normalizedReason;
+		if (reason === "error" && !runtime.lastErrorMessage) {
+			void backfillRuntimeErrorFromLatestAssistantMessage(runtime);
 		}
 		if (runtime.hookManager) {
 			void runtime.hookManager.runStop(undefined, reason).catch(() => {});
@@ -346,19 +322,10 @@ async function backfillRuntimeErrorFromLatestAssistantMessage(
 			)?.errorMessage;
 		if (!assistantErrorMessage?.trim()) return;
 		runtime.lastErrorMessage = assistantErrorMessage.trim();
-		console.error(
-			"[chat-mastra] Backfilled runtime error from message history",
-			{
-				sessionId: runtime.sessionId,
-				cwd: runtime.cwd,
-				lastErrorMessage: runtime.lastErrorMessage,
-			},
-		);
 	} catch (error) {
-		console.warn("[chat-mastra] Failed to backfill runtime error message", {
-			sessionId: runtime.sessionId,
-			cwd: runtime.cwd,
+		console.warn(
+			"[chat-mastra] Failed to backfill runtime error message",
 			error,
-		});
+		);
 	}
 }
