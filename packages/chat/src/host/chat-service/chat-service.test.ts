@@ -212,4 +212,64 @@ describe("ChatService OpenAI auth storage", () => {
 			expect.any(Object),
 		);
 	});
+
+	it("completes OpenAI OAuth when provider flow does not require manual code", async () => {
+		const chatService = new ChatService();
+
+		fakeAuthStorage.login.mockImplementation(
+			async (_providerId: string, callbacks: OAuthCallbacks) => {
+				callbacks.onAuth({
+					url: "https://auth.openai.com/oauth/authorize?foo=bar",
+				});
+			},
+		);
+
+		const unhandledRejections: unknown[] = [];
+		const onUnhandledRejection = (reason: unknown) => {
+			unhandledRejections.push(reason);
+		};
+		process.on("unhandledRejection", onUnhandledRejection);
+
+		try {
+			const start = await chatService.startOpenAIOAuth();
+			expect(start.url).toContain("auth.openai.com");
+			await chatService.completeOpenAIOAuth({});
+			await Promise.resolve();
+			expect(unhandledRejections).toHaveLength(0);
+		} finally {
+			process.off("unhandledRejection", onUnhandledRejection);
+		}
+	});
+
+	it("clears OpenAI OAuth session when auth-url wait times out", async () => {
+		const chatService = new ChatService();
+		let loginSignal: AbortSignal | undefined;
+
+		fakeAuthStorage.login.mockImplementation(
+			async (_providerId: string, callbacks: OAuthCallbacks) => {
+				loginSignal = callbacks.signal;
+				await new Promise<void>((resolve) => {
+					callbacks.signal?.addEventListener("abort", () => resolve(), {
+						once: true,
+					});
+				});
+			},
+		);
+
+		const timeoutSlot = ChatService as unknown as { OAUTH_URL_TIMEOUT_MS: number };
+		const previousTimeout = timeoutSlot.OAUTH_URL_TIMEOUT_MS;
+		timeoutSlot.OAUTH_URL_TIMEOUT_MS = 1;
+
+		try {
+			await expect(chatService.startOpenAIOAuth()).rejects.toThrow(
+				"Timed out while waiting for OpenAI OAuth URL",
+			);
+			expect(loginSignal?.aborted).toBe(true);
+			await expect(
+				chatService.completeOpenAIOAuth({ code: "code#state" }),
+			).rejects.toThrow("No active OpenAI auth session. Start auth again.");
+		} finally {
+			timeoutSlot.OAUTH_URL_TIMEOUT_MS = previousTimeout;
+		}
+	});
 });

@@ -94,6 +94,7 @@ export class ChatService {
 
 		let resolveManualCode: ((code: string) => void) | null = null;
 		let rejectManualCode: ((reason?: unknown) => void) | null = null;
+		let manualCodeRequested = false;
 		const manualCodePromise = new Promise<string>((resolve, reject) => {
 			resolveManualCode = resolve;
 			rejectManualCode = reject;
@@ -109,6 +110,11 @@ export class ChatService {
 				rejectManualCode = null;
 			},
 			rejectManualCode: (reason?: unknown) => {
+				if (!manualCodeRequested) {
+					resolveManualCode = null;
+					rejectManualCode = null;
+					return;
+				}
 				rejectManualCode?.(reason);
 				resolveManualCode = null;
 				rejectManualCode = null;
@@ -125,8 +131,14 @@ export class ChatService {
 					resolveAuthInfo = null;
 					rejectAuthInfo = null;
 				},
-				onPrompt: async () => manualCodePromise,
-				onManualCodeInput: async () => manualCodePromise,
+				onPrompt: async () => {
+					manualCodeRequested = true;
+					return manualCodePromise;
+				},
+				onManualCodeInput: async () => {
+					manualCodeRequested = true;
+					return manualCodePromise;
+				},
 				signal: abortController.signal,
 			})
 			.catch((error: unknown) => {
@@ -142,14 +154,20 @@ export class ChatService {
 			});
 		session.loginPromise = loginPromise;
 
-		const authInfo = await Promise.race([
-			authInfoPromise,
-			new Promise<OAuthAuthInfo>((_, reject) => {
-				setTimeout(() => {
-					reject(new Error("Timed out while waiting for OpenAI OAuth URL"));
-				}, ChatService.OAUTH_URL_TIMEOUT_MS);
-			}),
-		]);
+		let authInfo: OAuthAuthInfo;
+		try {
+			authInfo = await Promise.race([
+				authInfoPromise,
+				new Promise<OAuthAuthInfo>((_, reject) => {
+					setTimeout(() => {
+						reject(new Error("Timed out while waiting for OpenAI OAuth URL"));
+					}, ChatService.OAUTH_URL_TIMEOUT_MS);
+				}),
+			]);
+		} catch (error) {
+			this.clearOpenAIOAuthSession();
+			throw error;
+		}
 
 		return {
 			url: authInfo.url,
@@ -250,6 +268,7 @@ export class ChatService {
 
 		let resolveManualCode: ((code: string) => void) | null = null;
 		let rejectManualCode: ((reason?: unknown) => void) | null = null;
+		let manualCodeRequested = false;
 		const manualCodePromise = new Promise<string>((resolve, reject) => {
 			resolveManualCode = resolve;
 			rejectManualCode = reject;
@@ -265,6 +284,11 @@ export class ChatService {
 				rejectManualCode = null;
 			},
 			rejectManualCode: (reason?: unknown) => {
+				if (!manualCodeRequested) {
+					resolveManualCode = null;
+					rejectManualCode = null;
+					return;
+				}
 				rejectManualCode?.(reason);
 				resolveManualCode = null;
 				rejectManualCode = null;
@@ -281,7 +305,10 @@ export class ChatService {
 					resolveAuthInfo = null;
 					rejectAuthInfo = null;
 				},
-				onPrompt: async () => manualCodePromise,
+				onPrompt: async () => {
+					manualCodeRequested = true;
+					return manualCodePromise;
+				},
 				signal: abortController.signal,
 			})
 			.catch((error: unknown) => {
@@ -297,14 +324,20 @@ export class ChatService {
 			});
 		session.loginPromise = loginPromise;
 
-		const authInfo = await Promise.race([
-			authInfoPromise,
-			new Promise<OAuthAuthInfo>((_, reject) => {
-				setTimeout(() => {
-					reject(new Error("Timed out while waiting for Anthropic OAuth URL"));
-				}, ChatService.OAUTH_URL_TIMEOUT_MS);
-			}),
-		]);
+		let authInfo: OAuthAuthInfo;
+		try {
+			authInfo = await Promise.race([
+				authInfoPromise,
+				new Promise<OAuthAuthInfo>((_, reject) => {
+					setTimeout(() => {
+						reject(new Error("Timed out while waiting for Anthropic OAuth URL"));
+					}, ChatService.OAUTH_URL_TIMEOUT_MS);
+				}),
+			]);
+		} catch (error) {
+			this.clearAnthropicOAuthSession();
+			throw error;
+		}
 
 		return {
 			url: authInfo.url,

@@ -37,7 +37,7 @@ function findLastUserMessageIndex(messages: ListMessagesOutput): number {
 	return -1;
 }
 
-function findLatestAssistantErrorMessage(
+export function findLatestAssistantErrorMessage(
 	messages: ListMessagesOutput,
 ): string | null {
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -48,7 +48,7 @@ function findLatestAssistantErrorMessage(
 		};
 		if (message.role !== "assistant") continue;
 		if (message.stopReason !== undefined && message.stopReason !== "error") {
-			continue;
+			return null;
 		}
 		if (
 			typeof message.errorMessage === "string" &&
@@ -56,6 +56,7 @@ function findLatestAssistantErrorMessage(
 		) {
 			return message.errorMessage.trim();
 		}
+		return null;
 	}
 	return null;
 }
