@@ -33,6 +33,10 @@ export const anthropicOAuthCodeInput = z.object({
 	code: z.string().min(1),
 });
 
+export const openAIOAuthCodeInput = z.object({
+	code: z.string().optional(),
+});
+
 export const anthropicApiKeyInput = z.object({
 	apiKey: z.string().min(1),
 });
@@ -90,6 +94,17 @@ export function createChatServiceRouter(service: ChatService) {
 			}),
 			getOpenAIStatus: t.procedure.query(() => {
 				return service.getOpenAIAuthStatus();
+			}),
+			startOpenAIOAuth: t.procedure.mutation(() => {
+				return service.startOpenAIOAuth();
+			}),
+			completeOpenAIOAuth: t.procedure
+				.input(openAIOAuthCodeInput)
+				.mutation(async ({ input }) => {
+					return service.completeOpenAIOAuth({ code: input.code });
+				}),
+			cancelOpenAIOAuth: t.procedure.mutation(() => {
+				return service.cancelOpenAIOAuth();
 			}),
 			startAnthropicOAuth: t.procedure.mutation(() => {
 				return service.startAnthropicOAuth();

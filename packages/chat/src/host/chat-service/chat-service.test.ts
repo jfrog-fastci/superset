@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 type Credential =
 	| { type: "api_key"; key: string }
 	| { type: "oauth"; access: string; expires: number };
+type OAuthCallbacks = {
+	onAuth: (info: { url: string; instructions?: string }) => void;
+	onPrompt: (prompt: { message: string }) => Promise<string>;
+	onProgress?: (message: string) => void;
+	onManualCodeInput?: () => Promise<string>;
+	signal?: AbortSignal;
+};
 
 type FakeAuthStorage = {
 	reload: ReturnType<typeof mock<() => void>>;
@@ -11,6 +18,11 @@ type FakeAuthStorage = {
 		typeof mock<(providerId: string, credential: Credential) => void>
 	>;
 	remove: ReturnType<typeof mock<(providerId: string) => void>>;
+	login: ReturnType<
+		typeof mock<
+			(providerId: string, callbacks: OAuthCallbacks) => Promise<void>
+		>
+	>;
 	clear: () => void;
 };
 
@@ -25,6 +37,7 @@ function createFakeAuthStorage(): FakeAuthStorage {
 		remove: mock((providerId: string) => {
 			credentials.delete(providerId);
 		}),
+		login: mock(async () => {}),
 		clear: () => {
 			credentials.clear();
 		},
@@ -55,6 +68,7 @@ describe("ChatService OpenAI auth storage", () => {
 		fakeAuthStorage.get.mockClear();
 		fakeAuthStorage.set.mockClear();
 		fakeAuthStorage.remove.mockClear();
+		fakeAuthStorage.login.mockClear();
 	});
 
 	afterEach(() => {
@@ -98,5 +112,32 @@ describe("ChatService OpenAI auth storage", () => {
 			key: "test-anthropic-key",
 		});
 		expect(fakeAuthStorage.remove).toHaveBeenCalledWith("anthropic");
+	});
+
+	it("starts and completes OpenAI OAuth via auth storage login", async () => {
+		const chatService = new ChatService();
+
+		fakeAuthStorage.login.mockImplementation(
+			async (_providerId: string, callbacks: OAuthCallbacks) => {
+				callbacks.onAuth({
+					url: "https://auth.openai.com/oauth/authorize?foo=bar",
+					instructions: "Open browser and finish login",
+				});
+				const code = callbacks.onManualCodeInput
+					? await callbacks.onManualCodeInput()
+					: await callbacks.onPrompt({ message: "Paste code" });
+				expect(code).toBe("code#state");
+			},
+		);
+
+		const start = await chatService.startOpenAIOAuth();
+		expect(start.url).toContain("auth.openai.com");
+		expect(start.instructions).toContain("Open browser");
+
+		await chatService.completeOpenAIOAuth({ code: "code#state" });
+		expect(fakeAuthStorage.login).toHaveBeenCalledWith(
+			"openai-codex",
+			expect.any(Object),
+		);
 	});
 });

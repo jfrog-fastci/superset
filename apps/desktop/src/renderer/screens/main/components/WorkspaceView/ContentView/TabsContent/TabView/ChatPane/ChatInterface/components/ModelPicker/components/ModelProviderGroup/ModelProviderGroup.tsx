@@ -23,7 +23,9 @@ interface ModelProviderGroupProps {
 	isAnthropicApiKeyPending: boolean;
 	onOpenAnthropicApiKeyDialog: () => void;
 	isOpenAIAuthenticated: boolean;
+	isOpenAIOAuthPending: boolean;
 	isOpenAIApiKeyPending: boolean;
+	onStartOpenAIOAuth: () => void;
 	onOpenOpenAIApiKeyDialog: () => void;
 	onSelectModel: (model: ModelOption) => void;
 	onCloseModelSelector: () => void;
@@ -38,7 +40,9 @@ export function ModelProviderGroup({
 	isAnthropicApiKeyPending,
 	onOpenAnthropicApiKeyDialog,
 	isOpenAIAuthenticated,
+	isOpenAIOAuthPending,
 	isOpenAIApiKeyPending,
+	onStartOpenAIOAuth,
 	onOpenOpenAIApiKeyDialog,
 	onSelectModel,
 	onCloseModelSelector,
@@ -74,8 +78,10 @@ export function ModelProviderGroup({
 				<OpenAIProviderHeading
 					heading={heading}
 					isConnected={isConnected}
-					isPending={isOpenAIApiKeyPending}
+					isApiKeyPending={isOpenAIApiKeyPending}
+					isOAuthPending={isOpenAIOAuthPending}
 					onConfigureApiKey={onOpenOpenAIApiKeyDialog}
+					onStartOAuth={onStartOpenAIOAuth}
 				/>
 			) : null}
 
@@ -88,7 +94,7 @@ export function ModelProviderGroup({
 					logo === ANTHROPIC_LOGO_PROVIDER
 						? `${model.provider} (API key or OAuth required)`
 						: logo === OPENAI_LOGO_PROVIDER
-							? `${model.provider} (API key required)`
+							? `${model.provider} (API key or OAuth required)`
 							: `${model.provider} (connection required)`;
 
 				return (

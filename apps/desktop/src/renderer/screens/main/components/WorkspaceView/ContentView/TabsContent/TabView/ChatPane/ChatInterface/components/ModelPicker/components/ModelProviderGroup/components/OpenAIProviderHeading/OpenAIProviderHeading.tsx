@@ -1,51 +1,90 @@
 import { Button } from "@superset/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
-import { KeyRoundIcon, Loader2Icon } from "lucide-react";
+import { KeyRoundIcon, Loader2Icon, Settings2Icon } from "lucide-react";
 
 interface OpenAIProviderHeadingProps {
 	heading: string;
 	isConnected: boolean;
-	isPending: boolean;
+	isApiKeyPending: boolean;
+	isOAuthPending: boolean;
 	onConfigureApiKey: () => void;
+	onStartOAuth: () => void;
 }
 
 export function OpenAIProviderHeading({
 	heading,
 	isConnected,
-	isPending,
+	isApiKeyPending,
+	isOAuthPending,
 	onConfigureApiKey,
+	onStartOAuth,
 }: OpenAIProviderHeadingProps) {
-	const tooltipLabel = isConnected ? "Update OpenAI key" : "Connect OpenAI";
+	const apiKeyTooltipLabel = isConnected
+		? "Update OpenAI key"
+		: "Connect OpenAI API key";
+	const oauthTooltipLabel = isConnected
+		? "Re-auth OpenAI"
+		: "Connect OpenAI with OAuth";
+	const disableApiKeyButton = isApiKeyPending || isOAuthPending;
+	const disableOAuthButton = isOAuthPending || isApiKeyPending;
 
 	return (
 		<div className="text-muted-foreground flex items-center justify-between px-2 py-1.5 text-xs font-medium">
 			<span>{heading}</span>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						aria-label={tooltipLabel}
-						className="text-muted-foreground hover:text-foreground size-6"
-						disabled={isPending}
-						onClick={(event) => {
-							event.preventDefault();
-							event.stopPropagation();
-							onConfigureApiKey();
-						}}
-					>
-						{isPending ? (
-							<Loader2Icon className="size-4 animate-spin" />
-						) : (
-							<KeyRoundIcon className="size-4" />
-						)}
-					</Button>
-				</TooltipTrigger>
-				<TooltipContent side="top" sideOffset={6} showArrow={false}>
-					{tooltipLabel}
-				</TooltipContent>
-			</Tooltip>
+			<div className="flex items-center gap-0.5">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							aria-label={apiKeyTooltipLabel}
+							className="text-muted-foreground hover:text-foreground size-6"
+							disabled={disableApiKeyButton}
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								onConfigureApiKey();
+							}}
+						>
+							{isApiKeyPending ? (
+								<Loader2Icon className="size-4 animate-spin" />
+							) : (
+								<KeyRoundIcon className="size-4" />
+							)}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top" sideOffset={6} showArrow={false}>
+						{apiKeyTooltipLabel}
+					</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							aria-label={oauthTooltipLabel}
+							className="text-muted-foreground hover:text-foreground size-6"
+							disabled={disableOAuthButton}
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								onStartOAuth();
+							}}
+						>
+							{isOAuthPending ? (
+								<Loader2Icon className="size-4 animate-spin" />
+							) : (
+								<Settings2Icon className="size-4" />
+							)}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top" sideOffset={6} showArrow={false}>
+						{oauthTooltipLabel}
+					</TooltipContent>
+				</Tooltip>
+			</div>
 		</div>
 	);
 }

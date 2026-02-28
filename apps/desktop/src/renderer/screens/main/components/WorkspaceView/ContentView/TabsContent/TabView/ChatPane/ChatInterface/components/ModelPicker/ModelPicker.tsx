@@ -17,9 +17,11 @@ import { AnthropicApiKeyDialog } from "./components/AnthropicApiKeyDialog";
 import { AnthropicOAuthDialog } from "./components/AnthropicOAuthDialog";
 import { ModelProviderGroup } from "./components/ModelProviderGroup";
 import { OpenAIApiKeyDialog } from "./components/OpenAIApiKeyDialog";
+import { OpenAIOAuthDialog } from "./components/OpenAIOAuthDialog";
 import { useAnthropicApiKey } from "./hooks/useAnthropicApiKey";
 import { useAnthropicOAuth } from "./hooks/useAnthropicOAuth";
 import { useOpenAIApiKey } from "./hooks/useOpenAIApiKey";
+import { useOpenAIOAuth } from "./hooks/useOpenAIOAuth";
 import { groupModelsByProvider } from "./utils/groupModelsByProvider";
 import {
 	ANTHROPIC_LOGO_PROVIDER,
@@ -74,6 +76,14 @@ export function ModelPicker({
 		isModelSelectorOpen: open,
 		onModelSelectorOpenChange: onOpenChange,
 	});
+	const {
+		isStartingOAuth: isStartingOpenAIOAuth,
+		startOpenAIOAuth,
+		oauthDialog: openAIOAuthDialog,
+	} = useOpenAIOAuth({
+		isModelSelectorOpen: open,
+		onModelSelectorOpenChange: onOpenChange,
+	});
 
 	return (
 		<>
@@ -108,7 +118,11 @@ export function ModelPicker({
 								isAnthropicApiKeyPending={isSavingAnthropicApiKey}
 								onOpenAnthropicApiKeyDialog={openAnthropicApiKeyDialog}
 								isOpenAIAuthenticated={isOpenAIAuthenticated}
+								isOpenAIOAuthPending={isStartingOpenAIOAuth}
 								isOpenAIApiKeyPending={isSavingOpenAIApiKey}
+								onStartOpenAIOAuth={() => {
+									void startOpenAIOAuth();
+								}}
 								onOpenOpenAIApiKeyDialog={openOpenAIApiKeyDialog}
 								onSelectModel={onSelectModel}
 								onCloseModelSelector={() => {
@@ -129,6 +143,7 @@ export function ModelPicker({
 				{...apiKeyDialog}
 				canClearApiKey={isOpenAIApiKeyConfigured}
 			/>
+			<OpenAIOAuthDialog {...openAIOAuthDialog} />
 		</>
 	);
 }
