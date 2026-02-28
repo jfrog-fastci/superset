@@ -102,6 +102,10 @@ export function subscribeToSessionEvents(
 			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
 			return;
 		}
+		if (isHarnessWorkspaceErrorEvent(event)) {
+			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
+			return;
+		}
 		if (isHarnessAgentStartEvent(event)) {
 			runtime.lastErrorMessage = null;
 			return;
@@ -146,20 +150,97 @@ function isHarnessAgentEndEvent(
 	return isObjectRecord(event) && event.type === "agent_end";
 }
 
+function isHarnessWorkspaceErrorEvent(
+	event: unknown,
+): event is { type: "workspace_error"; error: unknown } {
+	return (
+		isObjectRecord(event) &&
+		event.type === "workspace_error" &&
+		"error" in event
+	);
+}
+
 function toRuntimeErrorMessage(error: unknown): string {
-	if (error instanceof Error && error.message.trim()) {
-		return error.message;
+	const providerMessage = extractProviderMessage(error);
+	if (providerMessage) {
+		return providerMessage;
 	}
-	if (typeof error === "string" && error.trim()) {
-		return error;
+	if (error instanceof Error) {
+		const normalized = normalizeErrorMessage(error.message);
+		if (normalized) return normalized;
+	}
+	if (typeof error === "string") {
+		const normalized = normalizeErrorMessage(error);
+		if (normalized) return normalized;
 	}
 	if (isObjectRecord(error)) {
 		const maybeMessage = error.message;
-		if (typeof maybeMessage === "string" && maybeMessage.trim()) {
-			return maybeMessage;
+		if (typeof maybeMessage === "string") {
+			const normalized = normalizeErrorMessage(maybeMessage);
+			if (normalized) return normalized;
 		}
 	}
 	return "Unexpected chat error";
+}
+
+function normalizeErrorMessage(message: string): string | null {
+	const trimmed = message.trim();
+	if (!trimmed) return null;
+	if (trimmed === "[object Object]") return null;
+	return trimmed.replace(/^AI_APICallError\d*\s*:\s*/i, "");
+}
+
+function extractProviderMessage(error: unknown): string | null {
+	return extractProviderMessageAtDepth(error, 0);
+}
+
+function extractProviderMessageAtDepth(
+	error: unknown,
+	depth: number,
+): string | null {
+	if (depth > 6 || !isObjectRecord(error)) return null;
+
+	const dataMessage = readNestedString(error, ["data", "error", "message"]);
+	if (dataMessage) return dataMessage;
+
+	const nestedErrorMessage = readNestedString(error, ["error", "message"]);
+	if (nestedErrorMessage) return nestedErrorMessage;
+
+	const parsedResponseBodyMessage = extractMessageFromResponseBody(
+		error.responseBody,
+	);
+	if (parsedResponseBodyMessage) return parsedResponseBodyMessage;
+
+	const causeMessage = extractProviderMessageAtDepth(error.cause, depth + 1);
+	if (causeMessage) return causeMessage;
+
+	const nestedError = extractProviderMessageAtDepth(error.error, depth + 1);
+	if (nestedError) return nestedError;
+
+	return null;
+}
+
+function readNestedString(
+	value: unknown,
+	path: readonly string[],
+): string | null {
+	let current: unknown = value;
+	for (const key of path) {
+		if (!isObjectRecord(current) || !(key in current)) return null;
+		current = current[key];
+	}
+	if (typeof current !== "string") return null;
+	return normalizeErrorMessage(current);
+}
+
+function extractMessageFromResponseBody(responseBody: unknown): string | null {
+	if (typeof responseBody !== "string" || !responseBody.trim()) return null;
+	try {
+		const parsed = JSON.parse(responseBody);
+		return readNestedString(parsed, ["error", "message"]);
+	} catch {
+		return null;
+	}
 }
 
 async function generateAndSetTitle(
