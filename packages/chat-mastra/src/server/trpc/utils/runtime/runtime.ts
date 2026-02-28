@@ -24,6 +24,7 @@ export interface RuntimeSession {
 	mcpManager: RuntimeMcpManager;
 	hookManager: RuntimeHookManager;
 	mcpManualStatuses: Map<string, RuntimeMcpServerStatus>;
+	lastErrorMessage: string | null;
 	cwd: string;
 }
 
@@ -96,18 +97,69 @@ export function subscribeToSessionEvents(
 	runtime: RuntimeSession,
 	apiClient: ApiClient,
 ): void {
-	runtime.harness.subscribe((event: { type: string; reason?: string }) => {
-		if (event.type === "agent_end") {
-			const raw = event.reason;
-			const reason = raw === "aborted" || raw === "error" ? raw : "complete";
-			if (runtime.hookManager) {
-				void runtime.hookManager.runStop(undefined, reason).catch(() => {});
-			}
-			if (reason === "complete") {
-				void generateAndSetTitle(runtime, apiClient);
-			}
+	runtime.harness.subscribe((event: unknown) => {
+		if (isHarnessErrorEvent(event)) {
+			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
+			return;
+		}
+		if (isHarnessAgentStartEvent(event)) {
+			runtime.lastErrorMessage = null;
+			return;
+		}
+		if (!isHarnessAgentEndEvent(event)) {
+			return;
+		}
+
+		const raw = event.reason;
+		const reason = raw === "aborted" || raw === "error" ? raw : "complete";
+		if (reason === "complete") {
+			runtime.lastErrorMessage = null;
+		}
+		if (runtime.hookManager) {
+			void runtime.hookManager.runStop(undefined, reason).catch(() => {});
+		}
+		if (reason === "complete") {
+			void generateAndSetTitle(runtime, apiClient);
 		}
 	});
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isHarnessErrorEvent(
+	event: unknown,
+): event is { type: "error"; error: unknown } {
+	return isObjectRecord(event) && event.type === "error" && "error" in event;
+}
+
+function isHarnessAgentStartEvent(
+	event: unknown,
+): event is { type: "agent_start" } {
+	return isObjectRecord(event) && event.type === "agent_start";
+}
+
+function isHarnessAgentEndEvent(
+	event: unknown,
+): event is { type: "agent_end"; reason?: string } {
+	return isObjectRecord(event) && event.type === "agent_end";
+}
+
+function toRuntimeErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message.trim()) {
+		return error.message;
+	}
+	if (typeof error === "string" && error.trim()) {
+		return error;
+	}
+	if (isObjectRecord(error)) {
+		const maybeMessage = error.message;
+		if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+			return maybeMessage;
+		}
+	}
+	return "Unexpected chat error";
 }
 
 async function generateAndSetTitle(

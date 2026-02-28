@@ -89,6 +89,11 @@ export function useMastraChatDisplay(options: UseMastraChatDisplayOptions) {
 	);
 
 	const displayState = displayQuery.data ?? null;
+	const runtimeErrorMessage =
+		typeof displayState?.errorMessage === "string" &&
+		displayState.errorMessage.trim()
+			? displayState.errorMessage
+			: null;
 	const currentMessage = displayState?.currentMessage ?? null;
 	const isRunning = displayState?.isRunning ?? false;
 	const historicalMessages = messagesQuery.data ?? [];
@@ -235,7 +240,12 @@ export function useMastraChatDisplay(options: UseMastraChatDisplayOptions) {
 	return {
 		...displayState,
 		messages,
-		error: displayQuery.error ?? messagesQuery.error ?? commandError ?? null,
+		error:
+			runtimeErrorMessage ??
+			displayQuery.error ??
+			messagesQuery.error ??
+			commandError ??
+			null,
 		commands,
 	};
 }

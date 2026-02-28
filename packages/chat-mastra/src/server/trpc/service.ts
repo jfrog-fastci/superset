@@ -99,6 +99,7 @@ export class ChatMastraService {
 					mcpManager: runtimeMastra.mcpManager,
 					hookManager: runtimeMastra.hookManager,
 					mcpManualStatuses: new Map(),
+					lastErrorMessage: null,
 					cwd: runtimeCwd,
 				};
 				await runSessionStartHook(runtime).catch(() => {});
@@ -158,7 +159,10 @@ export class ChatMastraService {
 							input.sessionId,
 							input.cwd,
 						);
-						return runtime.harness.getDisplayState();
+						return {
+							...runtime.harness.getDisplayState(),
+							errorMessage: runtime.lastErrorMessage,
+						};
 					}),
 
 				listMessages: t.procedure
