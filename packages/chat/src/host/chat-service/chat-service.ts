@@ -1,7 +1,7 @@
 import { createAuthStorage } from "mastracode";
 
-type OpenAIAuthMethod = "api_key" | "env_api_key" | "oauth" | null;
-type AnthropicAuthMethod = "api_key" | "env_api_key" | "oauth" | null;
+type OpenAIAuthMethod = "api_key" | "oauth" | null;
+type AnthropicAuthMethod = "api_key" | "oauth" | null;
 type AuthStorageCredential =
 	| { type: "api_key"; key: string }
 	| { type: "oauth"; access: string; expires: number; refresh?: string };
@@ -58,8 +58,6 @@ export class ChatService {
 			type: "api_key",
 			key: trimmedApiKey,
 		} satisfies AuthStorageCredential);
-
-		process.env.OPENAI_API_KEY = trimmedApiKey;
 		return { success: true };
 	}
 
@@ -72,9 +70,6 @@ export class ChatService {
 		}
 
 		authStorage.remove(OPENAI_AUTH_PROVIDER_ID);
-		if (process.env.OPENAI_API_KEY?.trim() === credential.key.trim()) {
-			delete process.env.OPENAI_API_KEY;
-		}
 
 		return { success: true };
 	}
@@ -215,6 +210,13 @@ export class ChatService {
 		if (error) {
 			throw error;
 		}
+
+		const authStorage = this.getAuthStorage();
+		authStorage.reload();
+		const credential = authStorage.get(OPENAI_AUTH_PROVIDER_ID);
+		if (credential?.type !== "oauth") {
+			throw new Error("OpenAI OAuth did not return credentials");
+		}
 		return { success: true };
 	}
 
@@ -232,8 +234,6 @@ export class ChatService {
 			type: "api_key",
 			key: trimmedApiKey,
 		} satisfies AuthStorageCredential);
-
-		process.env.ANTHROPIC_API_KEY = trimmedApiKey;
 		return { success: true };
 	}
 
@@ -246,9 +246,6 @@ export class ChatService {
 		}
 
 		authStorage.remove(ANTHROPIC_AUTH_PROVIDER_ID);
-		if (process.env.ANTHROPIC_API_KEY?.trim() === credential.key.trim()) {
-			delete process.env.ANTHROPIC_API_KEY;
-		}
 
 		return { success: true };
 	}
@@ -392,8 +389,6 @@ export class ChatService {
 		if (credential?.type !== "oauth") {
 			throw new Error("Anthropic OAuth did not return credentials");
 		}
-
-		delete process.env.ANTHROPIC_API_KEY;
 		return { success: true, expiresAt: credential.expires };
 	}
 
@@ -405,11 +400,7 @@ export class ChatService {
 			return "oauth";
 		}
 		if (credential?.type === "api_key" && credential.key.trim().length > 0) {
-			process.env.OPENAI_API_KEY = credential.key.trim();
 			return "api_key";
-		}
-		if (process.env.OPENAI_API_KEY?.trim()) {
-			return "env_api_key";
 		}
 		return null;
 	}
@@ -422,11 +413,7 @@ export class ChatService {
 			return "oauth";
 		}
 		if (credential?.type === "api_key" && credential.key.trim().length > 0) {
-			process.env.ANTHROPIC_API_KEY = credential.key.trim();
 			return "api_key";
-		}
-		if (process.env.ANTHROPIC_API_KEY?.trim()) {
-			return "env_api_key";
 		}
 		return null;
 	}

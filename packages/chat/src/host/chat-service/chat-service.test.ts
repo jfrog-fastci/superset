@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 type Credential =
 	| { type: "api_key"; key: string }
@@ -54,14 +54,7 @@ mock.module("mastracode", () => ({
 const { ChatService } = await import("./chat-service");
 
 describe("ChatService OpenAI auth storage", () => {
-	let originalOpenAiEnv: string | undefined;
-	let originalAnthropicEnv: string | undefined;
-
 	beforeEach(() => {
-		originalOpenAiEnv = process.env.OPENAI_API_KEY;
-		originalAnthropicEnv = process.env.ANTHROPIC_API_KEY;
-		delete process.env.OPENAI_API_KEY;
-		delete process.env.ANTHROPIC_API_KEY;
 		createAuthStorageMock.mockClear();
 		fakeAuthStorage.clear();
 		fakeAuthStorage.reload.mockClear();
@@ -69,20 +62,6 @@ describe("ChatService OpenAI auth storage", () => {
 		fakeAuthStorage.set.mockClear();
 		fakeAuthStorage.remove.mockClear();
 		fakeAuthStorage.login.mockClear();
-	});
-
-	afterEach(() => {
-		if (originalOpenAiEnv === undefined) {
-			delete process.env.OPENAI_API_KEY;
-		} else {
-			process.env.OPENAI_API_KEY = originalOpenAiEnv;
-		}
-
-		if (originalAnthropicEnv === undefined) {
-			delete process.env.ANTHROPIC_API_KEY;
-			return;
-		}
-		process.env.ANTHROPIC_API_KEY = originalAnthropicEnv;
 	});
 
 	it("uses standalone createAuthStorage and reuses it across calls", async () => {
@@ -136,7 +115,6 @@ describe("ChatService OpenAI auth storage", () => {
 		);
 
 		await chatService.setAnthropicApiKey({ apiKey: " old-key " });
-		process.env.ANTHROPIC_API_KEY = "old-key";
 
 		const start = await chatService.startAnthropicOAuth();
 		expect(start.url).toContain("claude.ai/oauth/authorize");
@@ -157,7 +135,6 @@ describe("ChatService OpenAI auth storage", () => {
 				refresh: "oauth-refresh-token",
 			}),
 		);
-		expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
 		expect(result.expiresAt).toBe(oauthExpiresAt);
 		expect(chatService.getAnthropicAuthStatus().method).toBe("oauth");
 	});
@@ -190,7 +167,7 @@ describe("ChatService OpenAI auth storage", () => {
 		const chatService = new ChatService();
 
 		fakeAuthStorage.login.mockImplementation(
-			async (_providerId: string, callbacks: OAuthCallbacks) => {
+			async (providerId: string, callbacks: OAuthCallbacks) => {
 				callbacks.onAuth({
 					url: "https://auth.openai.com/oauth/authorize?foo=bar",
 					instructions: "Open browser and finish login",
@@ -199,6 +176,11 @@ describe("ChatService OpenAI auth storage", () => {
 					? await callbacks.onManualCodeInput()
 					: await callbacks.onPrompt({ message: "Paste code" });
 				expect(code).toBe("code#state");
+				fakeAuthStorage.set(providerId, {
+					type: "oauth",
+					access: "openai-oauth-access",
+					expires: Date.now() + 60 * 60 * 1000,
+				});
 			},
 		);
 
@@ -213,13 +195,55 @@ describe("ChatService OpenAI auth storage", () => {
 		);
 	});
 
+	it("replaces OpenAI API key auth with OAuth when OAuth completes", async () => {
+		const chatService = new ChatService();
+
+		fakeAuthStorage.login.mockImplementation(
+			async (providerId: string, callbacks: OAuthCallbacks) => {
+				callbacks.onAuth({
+					url: "https://auth.openai.com/oauth/authorize?foo=bar",
+				});
+				const code = callbacks.onManualCodeInput
+					? await callbacks.onManualCodeInput()
+					: await callbacks.onPrompt({ message: "Paste code" });
+				expect(code).toBe("code#state");
+				fakeAuthStorage.set(providerId, {
+					type: "oauth",
+					access: "openai-oauth-access",
+					expires: Date.now() + 60 * 60 * 1000,
+				});
+			},
+		);
+
+		await chatService.setOpenAIApiKey({ apiKey: " managed-key " });
+
+		await chatService.startOpenAIOAuth();
+		await chatService.completeOpenAIOAuth({ code: "code#state" });
+		const status = await chatService.getOpenAIAuthStatus();
+		expect(status.method).toBe("oauth");
+	});
+
+	it("ignores OPENAI_API_KEY env value without auth storage credentials", async () => {
+		const chatService = new ChatService();
+
+		process.env.OPENAI_API_KEY = "externally-provided-key";
+		const status = await chatService.getOpenAIAuthStatus();
+		expect(status.method).toBeNull();
+		delete process.env.OPENAI_API_KEY;
+	});
+
 	it("completes OpenAI OAuth when provider flow does not require manual code", async () => {
 		const chatService = new ChatService();
 
 		fakeAuthStorage.login.mockImplementation(
-			async (_providerId: string, callbacks: OAuthCallbacks) => {
+			async (providerId: string, callbacks: OAuthCallbacks) => {
 				callbacks.onAuth({
 					url: "https://auth.openai.com/oauth/authorize?foo=bar",
+				});
+				fakeAuthStorage.set(providerId, {
+					type: "oauth",
+					access: "openai-oauth-access",
+					expires: Date.now() + 60 * 60 * 1000,
 				});
 			},
 		);
