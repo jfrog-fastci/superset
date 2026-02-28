@@ -26,7 +26,6 @@ interface OpenAIOAuthDialogProps {
 	onCodeChange: (value: string) => void;
 	onOpenAuthUrl: () => void;
 	onCopyAuthUrl: () => void;
-	onPasteCode: () => void;
 	onSubmit: () => void;
 }
 
@@ -40,7 +39,6 @@ export function OpenAIOAuthDialog({
 	onCodeChange,
 	onOpenAuthUrl,
 	onCopyAuthUrl,
-	onPasteCode,
 	onSubmit,
 }: OpenAIOAuthDialogProps) {
 	return (
@@ -98,16 +96,6 @@ export function OpenAIOAuthDialog({
 								disabled={isPending}
 								className="h-11 font-mono"
 							/>
-							<InputGroupAddon align="inline-end" className="pr-1">
-								<InputGroupButton
-									size="xs"
-									variant="outline"
-									onClick={onPasteCode}
-									disabled={isPending}
-								>
-									Paste
-								</InputGroupButton>
-							</InputGroupAddon>
 						</InputGroup>
 						<p className="text-muted-foreground text-xs">
 							You can leave this empty if browser callback succeeds.

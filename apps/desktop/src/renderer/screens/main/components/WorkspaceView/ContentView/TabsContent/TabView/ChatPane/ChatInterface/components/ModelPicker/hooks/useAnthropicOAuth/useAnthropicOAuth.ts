@@ -24,7 +24,6 @@ interface AnthropicOAuthDialogState {
 	onCodeChange: (value: string) => void;
 	onOpenAuthUrl: () => void;
 	onCopyAuthUrl: () => void;
-	onPasteCode: () => void;
 	onSubmit: () => void;
 }
 
@@ -113,16 +112,6 @@ export function useAnthropicOAuth({
 		}
 	}, [oauthUrl]);
 
-	const pasteOAuthCode = useCallback(async () => {
-		try {
-			const pasted = await navigator.clipboard.readText();
-			setOauthCode(pasted);
-			setOauthError(null);
-		} catch (error) {
-			setOauthError(getErrorMessage(error, "Failed to read clipboard"));
-		}
-	}, []);
-
 	const completeAnthropicOAuth = useCallback(async () => {
 		const code = oauthCode.trim();
 		if (!code) return;
@@ -192,9 +181,6 @@ export function useAnthropicOAuth({
 			onCopyAuthUrl: () => {
 				void copyOAuthUrl();
 			},
-			onPasteCode: () => {
-				void pasteOAuthCode();
-			},
 			onSubmit: () => {
 				void completeAnthropicOAuth();
 			},
@@ -209,7 +195,6 @@ export function useAnthropicOAuth({
 			oauthDialogOpen,
 			oauthError,
 			oauthUrl,
-			pasteOAuthCode,
 		],
 	);
 

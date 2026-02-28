@@ -24,7 +24,6 @@ interface OpenAIOAuthDialogState {
 	onCodeChange: (value: string) => void;
 	onOpenAuthUrl: () => void;
 	onCopyAuthUrl: () => void;
-	onPasteCode: () => void;
 	onSubmit: () => void;
 }
 
@@ -112,16 +111,6 @@ export function useOpenAIOAuth({
 		}
 	}, [oauthUrl]);
 
-	const pasteOAuthCode = useCallback(async () => {
-		try {
-			const pasted = await navigator.clipboard.readText();
-			setOauthCode(pasted);
-			setOauthError(null);
-		} catch (error) {
-			setOauthError(getErrorMessage(error, "Failed to read clipboard"));
-		}
-	}, []);
-
 	const completeOpenAIOAuth = useCallback(async () => {
 		setOauthError(null);
 		try {
@@ -186,9 +175,6 @@ export function useOpenAIOAuth({
 			onCopyAuthUrl: () => {
 				void copyOAuthUrl();
 			},
-			onPasteCode: () => {
-				void pasteOAuthCode();
-			},
 			onSubmit: () => {
 				void completeOpenAIOAuth();
 			},
@@ -203,7 +189,6 @@ export function useOpenAIOAuth({
 			oauthDialogOpen,
 			oauthError,
 			oauthUrl,
-			pasteOAuthCode,
 		],
 	);
 
