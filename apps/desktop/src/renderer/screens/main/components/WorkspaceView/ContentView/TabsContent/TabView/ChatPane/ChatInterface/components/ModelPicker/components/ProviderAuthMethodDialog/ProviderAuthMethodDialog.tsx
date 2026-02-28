@@ -63,8 +63,9 @@ export function ProviderAuthMethodDialog({
 					</Button>
 					{provider === "anthropic" ? (
 						<p className="text-muted-foreground text-xs leading-relaxed">
-							Anthropic's terms around OAuth use in third-party apps may be
-							ambiguous and can change. Use at your own risk. Review Anthropic's{" "}
+							<strong>Important:</strong> Anthropic OAuth in third-party apps
+							may be restricted under Anthropic terms; proceed at your own risk.
+							See Anthropic's{" "}
 							<a
 								className="underline"
 								href="https://www.anthropic.com/legal/consumer-terms"
