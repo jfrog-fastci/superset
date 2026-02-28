@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 type Credential =
 	| { type: "api_key"; key: string }
-	| { type: "oauth"; access: string; expires: number };
+	| { type: "oauth"; access: string; expires: number; refresh?: string };
 type OAuthCallbacks = {
 	onAuth: (info: { url: string; instructions?: string }) => void;
 	onPrompt: (prompt: { message: string }) => Promise<string>;
@@ -112,6 +112,78 @@ describe("ChatService OpenAI auth storage", () => {
 			key: "test-anthropic-key",
 		});
 		expect(fakeAuthStorage.remove).toHaveBeenCalledWith("anthropic");
+	});
+
+	it("persists Anthropic OAuth credentials to auth storage on completion", async () => {
+		const chatService = new ChatService();
+		const oauthExpiresAt = Date.now() + 60 * 60 * 1000;
+
+		fakeAuthStorage.login.mockImplementation(
+			async (providerId: string, callbacks: OAuthCallbacks) => {
+				callbacks.onAuth({
+					url: "https://claude.ai/oauth/authorize?foo=bar",
+					instructions: "Open browser and finish login",
+				});
+				const code = await callbacks.onPrompt({ message: "Paste code" });
+				expect(code).toBe("auth-code#state");
+				fakeAuthStorage.set(providerId, {
+					type: "oauth",
+					access: "oauth-access-token",
+					refresh: "oauth-refresh-token",
+					expires: oauthExpiresAt,
+				});
+			},
+		);
+
+		await chatService.setAnthropicApiKey({ apiKey: " old-key " });
+		process.env.ANTHROPIC_API_KEY = "old-key";
+
+		const start = await chatService.startAnthropicOAuth();
+		expect(start.url).toContain("claude.ai/oauth/authorize");
+
+		const result = await chatService.completeAnthropicOAuth({
+			code: "auth-code#state",
+		});
+
+		expect(fakeAuthStorage.login).toHaveBeenCalledWith(
+			"anthropic",
+			expect.any(Object),
+		);
+		expect(fakeAuthStorage.set).toHaveBeenCalledWith(
+			"anthropic",
+			expect.objectContaining({
+				type: "oauth",
+				access: "oauth-access-token",
+				refresh: "oauth-refresh-token",
+			}),
+		);
+		expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+		expect(result.expiresAt).toBe(oauthExpiresAt);
+		expect(chatService.getAnthropicAuthStatus().method).toBe("oauth");
+	});
+
+	it("switches Anthropic status from oauth to api key when api key is saved", async () => {
+		const chatService = new ChatService();
+
+		fakeAuthStorage.login.mockImplementation(
+			async (providerId: string, callbacks: OAuthCallbacks) => {
+				callbacks.onAuth({ url: "https://claude.ai/oauth/authorize?foo=bar" });
+				const code = await callbacks.onPrompt({ message: "Paste code" });
+				expect(code).toBe("auth-code#state");
+				fakeAuthStorage.set(providerId, {
+					type: "oauth",
+					access: "oauth-access-token",
+					expires: Date.now() + 60 * 60 * 1000,
+				});
+			},
+		);
+
+		await chatService.startAnthropicOAuth();
+		await chatService.completeAnthropicOAuth({ code: "auth-code#state" });
+		expect(chatService.getAnthropicAuthStatus().method).toBe("oauth");
+
+		await chatService.setAnthropicApiKey({ apiKey: " api-key " });
+		expect(chatService.getAnthropicAuthStatus().method).toBe("api_key");
 	});
 
 	it("starts and completes OpenAI OAuth via auth storage login", async () => {
