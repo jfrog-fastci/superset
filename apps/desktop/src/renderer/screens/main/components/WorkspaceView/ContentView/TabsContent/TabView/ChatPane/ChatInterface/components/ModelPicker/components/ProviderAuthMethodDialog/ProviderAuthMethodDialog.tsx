@@ -61,6 +61,30 @@ export function ProviderAuthMethodDialog({
 					>
 						Use OAuth
 					</Button>
+					{provider === "anthropic" ? (
+						<p className="text-muted-foreground text-xs leading-relaxed">
+							Anthropic's terms around OAuth use in third-party apps may be
+							ambiguous and can change. Use at your own risk. Review Anthropic's{" "}
+							<a
+								className="underline"
+								href="https://www.anthropic.com/legal/consumer-terms"
+								target="_blank"
+								rel="noreferrer"
+							>
+								Terms of Service
+							</a>{" "}
+							and{" "}
+							<a
+								className="underline"
+								href="https://code.claude.com/docs/en/legal-and-compliance"
+								target="_blank"
+								rel="noreferrer"
+							>
+								Claude Code legal guidance
+							</a>{" "}
+							before continuing.
+						</p>
+					) : null}
 				</div>
 
 				<DialogFooter>
