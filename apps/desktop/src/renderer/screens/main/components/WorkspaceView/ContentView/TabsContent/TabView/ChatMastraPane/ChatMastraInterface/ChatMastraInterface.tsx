@@ -315,6 +315,17 @@ export function ChatMastraInterface({
 	const errorMessage = runtimeError ?? toErrorMessage(error);
 	const mergedMessages = useMemo(() => messages, [messages]);
 
+	useEffect(() => {
+		if (!errorMessage) return;
+		console.error("[chat-mastra/ui] Chat error selected for footer", {
+			sessionId,
+			cwd,
+			errorMessage,
+			runtimeError,
+			error,
+		});
+	}, [cwd, error, errorMessage, runtimeError, sessionId]);
+
 	return (
 		<PromptInputProvider>
 			<div className="flex h-full flex-col bg-background">

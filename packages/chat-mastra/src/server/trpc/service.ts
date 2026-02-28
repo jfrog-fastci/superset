@@ -100,6 +100,7 @@ export class ChatMastraService {
 					hookManager: runtimeMastra.hookManager,
 					mcpManualStatuses: new Map(),
 					lastErrorMessage: null,
+					lastPublishedErrorMessage: null,
 					cwd: runtimeCwd,
 				};
 				await runSessionStartHook(runtime).catch(() => {});
@@ -159,8 +160,42 @@ export class ChatMastraService {
 							input.sessionId,
 							input.cwd,
 						);
+						const displayState = runtime.harness.getDisplayState();
+						const currentMessage = displayState.currentMessage as {
+							stopReason?: string;
+							errorMessage?: string;
+						} | null;
+						if (
+							!runtime.lastErrorMessage &&
+							currentMessage?.stopReason === "error" &&
+							typeof currentMessage.errorMessage === "string" &&
+							currentMessage.errorMessage.trim()
+						) {
+							runtime.lastErrorMessage = currentMessage.errorMessage.trim();
+							console.error(
+								"[chat-mastra] Backfilled runtime error from displayState.currentMessage",
+								{
+									sessionId: runtime.sessionId,
+									cwd: runtime.cwd,
+									lastErrorMessage: runtime.lastErrorMessage,
+								},
+							);
+						}
+						if (
+							runtime.lastErrorMessage !== runtime.lastPublishedErrorMessage
+						) {
+							console.warn(
+								"[chat-mastra] getDisplayState errorMessage changed",
+								{
+									sessionId: runtime.sessionId,
+									cwd: runtime.cwd,
+									errorMessage: runtime.lastErrorMessage,
+								},
+							);
+							runtime.lastPublishedErrorMessage = runtime.lastErrorMessage;
+						}
 						return {
-							...runtime.harness.getDisplayState(),
+							...displayState,
 							errorMessage: runtime.lastErrorMessage,
 						};
 					}),

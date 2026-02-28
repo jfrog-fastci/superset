@@ -25,6 +25,7 @@ export interface RuntimeSession {
 	hookManager: RuntimeHookManager;
 	mcpManualStatuses: Map<string, RuntimeMcpServerStatus>;
 	lastErrorMessage: string | null;
+	lastPublishedErrorMessage: string | null;
 	cwd: string;
 }
 
@@ -37,6 +38,8 @@ interface TextContentPart {
 interface MessageLike {
 	role: string;
 	content: Array<{ type: string; text?: string }>;
+	stopReason?: string;
+	errorMessage?: string;
 }
 
 /**
@@ -99,11 +102,25 @@ export function subscribeToSessionEvents(
 ): void {
 	runtime.harness.subscribe((event: unknown) => {
 		if (isHarnessErrorEvent(event)) {
-			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
+			const message = toRuntimeErrorMessage(event.error);
+			runtime.lastErrorMessage = message;
+			console.error("[chat-mastra] Harness error event", {
+				sessionId: runtime.sessionId,
+				cwd: runtime.cwd,
+				message,
+				error: event.error,
+			});
 			return;
 		}
 		if (isHarnessWorkspaceErrorEvent(event)) {
-			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
+			const message = toRuntimeErrorMessage(event.error);
+			runtime.lastErrorMessage = message;
+			console.error("[chat-mastra] Harness workspace_error event", {
+				sessionId: runtime.sessionId,
+				cwd: runtime.cwd,
+				message,
+				error: event.error,
+			});
 			return;
 		}
 		if (isHarnessAgentStartEvent(event)) {
@@ -116,6 +133,22 @@ export function subscribeToSessionEvents(
 
 		const raw = event.reason;
 		const reason = raw === "aborted" || raw === "error" ? raw : "complete";
+		console.warn("[chat-mastra] Harness agent_end", {
+			sessionId: runtime.sessionId,
+			cwd: runtime.cwd,
+			reason,
+			lastErrorMessage: runtime.lastErrorMessage,
+		});
+		if (reason === "error") {
+			console.error("[chat-mastra] Harness agent_end with error reason", {
+				sessionId: runtime.sessionId,
+				cwd: runtime.cwd,
+				lastErrorMessage: runtime.lastErrorMessage,
+			});
+			if (!runtime.lastErrorMessage) {
+				void backfillRuntimeErrorFromLatestAssistantMessage(runtime);
+			}
+		}
 		if (reason === "complete") {
 			runtime.lastErrorMessage = null;
 		}
@@ -292,5 +325,40 @@ async function generateAndSetTitle(
 		});
 	} catch (error) {
 		console.warn("[chat-mastra] Title generation failed:", error);
+	}
+}
+
+async function backfillRuntimeErrorFromLatestAssistantMessage(
+	runtime: RuntimeSession,
+): Promise<void> {
+	try {
+		const messages: MessageLike[] = await runtime.harness.listMessages({
+			limit: 20,
+		});
+		const assistantErrorMessage = [...messages]
+			.reverse()
+			.find(
+				(message) =>
+					message.role === "assistant" &&
+					message.stopReason === "error" &&
+					typeof message.errorMessage === "string" &&
+					message.errorMessage.trim(),
+			)?.errorMessage;
+		if (!assistantErrorMessage?.trim()) return;
+		runtime.lastErrorMessage = assistantErrorMessage.trim();
+		console.error(
+			"[chat-mastra] Backfilled runtime error from message history",
+			{
+				sessionId: runtime.sessionId,
+				cwd: runtime.cwd,
+				lastErrorMessage: runtime.lastErrorMessage,
+			},
+		);
+	} catch (error) {
+		console.warn("[chat-mastra] Failed to backfill runtime error message", {
+			sessionId: runtime.sessionId,
+			cwd: runtime.cwd,
+			error,
+		});
 	}
 }
