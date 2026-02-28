@@ -19,14 +19,12 @@ interface ModelProviderGroupProps {
 	models: ModelOption[];
 	isAnthropicAuthenticated: boolean;
 	isAnthropicOAuthPending: boolean;
-	onStartAnthropicOAuth: () => void;
 	isAnthropicApiKeyPending: boolean;
-	onOpenAnthropicApiKeyDialog: () => void;
+	onOpenAnthropicAuthModal: () => void;
 	isOpenAIAuthenticated: boolean;
 	isOpenAIOAuthPending: boolean;
 	isOpenAIApiKeyPending: boolean;
-	onStartOpenAIOAuth: () => void;
-	onOpenOpenAIApiKeyDialog: () => void;
+	onOpenOpenAIAuthModal: () => void;
 	onSelectModel: (model: ModelOption) => void;
 	onCloseModelSelector: () => void;
 }
@@ -36,14 +34,12 @@ export function ModelProviderGroup({
 	models,
 	isAnthropicAuthenticated,
 	isAnthropicOAuthPending,
-	onStartAnthropicOAuth,
 	isAnthropicApiKeyPending,
-	onOpenAnthropicApiKeyDialog,
+	onOpenAnthropicAuthModal,
 	isOpenAIAuthenticated,
 	isOpenAIOAuthPending,
 	isOpenAIApiKeyPending,
-	onStartOpenAIOAuth,
-	onOpenOpenAIApiKeyDialog,
+	onOpenOpenAIAuthModal,
 	onSelectModel,
 	onCloseModelSelector,
 }: ModelProviderGroupProps) {
@@ -69,19 +65,15 @@ export function ModelProviderGroup({
 				<AnthropicProviderHeading
 					heading={heading}
 					isConnected={isConnected}
-					isOAuthPending={isAnthropicOAuthPending}
-					isApiKeyPending={isAnthropicApiKeyPending}
-					onStartOAuth={onStartAnthropicOAuth}
-					onConfigureApiKey={onOpenAnthropicApiKeyDialog}
+					isPending={isAnthropicOAuthPending || isAnthropicApiKeyPending}
+					onOpenAuthModal={onOpenAnthropicAuthModal}
 				/>
 			) : isOpenAIProvider ? (
 				<OpenAIProviderHeading
 					heading={heading}
 					isConnected={isConnected}
-					isApiKeyPending={isOpenAIApiKeyPending}
-					isOAuthPending={isOpenAIOAuthPending}
-					onConfigureApiKey={onOpenOpenAIApiKeyDialog}
-					onStartOAuth={onStartOpenAIOAuth}
+					isPending={isOpenAIApiKeyPending || isOpenAIOAuthPending}
+					onOpenAuthModal={onOpenOpenAIAuthModal}
 				/>
 			) : null}
 
