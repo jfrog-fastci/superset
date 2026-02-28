@@ -16,7 +16,7 @@ import {
 import { Label } from "@superset/ui/label";
 import { LuCopy, LuExternalLink } from "react-icons/lu";
 
-interface AnthropicOAuthDialogProps {
+interface OpenAIOAuthDialogProps {
 	open: boolean;
 	authUrl: string | null;
 	code: string;
@@ -29,7 +29,7 @@ interface AnthropicOAuthDialogProps {
 	onSubmit: () => void;
 }
 
-export function AnthropicOAuthDialog({
+export function OpenAIOAuthDialog({
 	open,
 	authUrl,
 	code,
@@ -40,15 +40,15 @@ export function AnthropicOAuthDialog({
 	onOpenAuthUrl,
 	onCopyAuthUrl,
 	onSubmit,
-}: AnthropicOAuthDialogProps) {
+}: OpenAIOAuthDialogProps) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-w-[calc(100vw-2rem)] overflow-hidden sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Connect Anthropic</DialogTitle>
+					<DialogTitle>Connect OpenAI</DialogTitle>
 					<DialogDescription>
-						Open Anthropic OAuth in your browser, approve access, then paste the
-						code here.
+						Open the OAuth URL and sign in. If Connect does not finish, paste
+						the redirected localhost callback URL below.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -84,11 +84,11 @@ export function AnthropicOAuthDialog({
 					</InputGroup>
 
 					<div className="min-w-0 space-y-2">
-						<Label htmlFor="anthropic-oauth-code">Authorization code</Label>
+						<Label htmlFor="openai-oauth-code">Callback URL (optional)</Label>
 						<InputGroup>
 							<InputGroupInput
-								id="anthropic-oauth-code"
-								placeholder="Paste code#state or callback URL"
+								id="openai-oauth-code"
+								placeholder="Paste full http://localhost:1455/auth/callback?... URL (preferred)"
 								value={code}
 								onChange={(event) => onCodeChange(event.target.value)}
 								disabled={isPending}
@@ -96,7 +96,8 @@ export function AnthropicOAuthDialog({
 							/>
 						</InputGroup>
 						<p className="text-muted-foreground text-xs">
-							Paste `code#state` from Anthropic (or full callback URL).
+							If browser redirects to `localhost`, copy the full URL from the
+							address bar and paste it here.
 						</p>
 					</div>
 
@@ -114,11 +115,7 @@ export function AnthropicOAuthDialog({
 					>
 						Back
 					</Button>
-					<Button
-						type="button"
-						onClick={onSubmit}
-						disabled={isPending || !code}
-					>
+					<Button type="button" onClick={onSubmit} disabled={isPending}>
 						{isPending ? "Connecting..." : "Connect"}
 					</Button>
 				</DialogFooter>

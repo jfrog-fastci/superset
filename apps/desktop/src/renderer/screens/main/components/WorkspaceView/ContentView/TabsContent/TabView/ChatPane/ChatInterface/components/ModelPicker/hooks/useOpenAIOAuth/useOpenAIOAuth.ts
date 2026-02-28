@@ -9,12 +9,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 	return fallback;
 }
 
-interface UseAnthropicOAuthParams {
+interface UseOpenAIOAuthParams {
 	isModelSelectorOpen: boolean;
 	onModelSelectorOpenChange: (open: boolean) => void;
 }
 
-interface AnthropicOAuthDialogState {
+interface OpenAIOAuthDialogState {
 	open: boolean;
 	authUrl: string | null;
 	code: string;
@@ -27,36 +27,36 @@ interface AnthropicOAuthDialogState {
 	onSubmit: () => void;
 }
 
-interface UseAnthropicOAuthResult {
-	isAnthropicAuthenticated: boolean;
+interface UseOpenAIOAuthResult {
+	isOpenAIAuthenticated: boolean;
 	isStartingOAuth: boolean;
-	startAnthropicOAuth: () => Promise<void>;
-	oauthDialog: AnthropicOAuthDialogState;
+	startOpenAIOAuth: () => Promise<void>;
+	oauthDialog: OpenAIOAuthDialogState;
 }
 
-export function useAnthropicOAuth({
+export function useOpenAIOAuth({
 	isModelSelectorOpen,
 	onModelSelectorOpenChange,
-}: UseAnthropicOAuthParams): UseAnthropicOAuthResult {
+}: UseOpenAIOAuthParams): UseOpenAIOAuthResult {
 	const [oauthDialogOpen, setOauthDialogOpen] = useState(false);
 	const [oauthUrl, setOauthUrl] = useState<string | null>(null);
 	const [oauthCode, setOauthCode] = useState("");
 	const [oauthError, setOauthError] = useState<string | null>(null);
 	const [hasPendingOAuthSession, setHasPendingOAuthSession] = useState(false);
 
-	const { data: anthropicStatus, refetch: refetchAnthropicStatus } =
-		chatServiceTrpc.auth.getAnthropicStatus.useQuery();
-	const startAnthropicOAuthMutation =
-		chatServiceTrpc.auth.startAnthropicOAuth.useMutation();
-	const completeAnthropicOAuthMutation =
-		chatServiceTrpc.auth.completeAnthropicOAuth.useMutation();
-	const cancelAnthropicOAuthMutation =
-		chatServiceTrpc.auth.cancelAnthropicOAuth.useMutation();
+	const { data: openAIStatus, refetch: refetchOpenAIStatus } =
+		chatServiceTrpc.auth.getOpenAIStatus.useQuery();
+	const startOpenAIOAuthMutation =
+		chatServiceTrpc.auth.startOpenAIOAuth.useMutation();
+	const completeOpenAIOAuthMutation =
+		chatServiceTrpc.auth.completeOpenAIOAuth.useMutation();
+	const cancelOpenAIOAuthMutation =
+		chatServiceTrpc.auth.cancelOpenAIOAuth.useMutation();
 
 	useEffect(() => {
 		if (!isModelSelectorOpen) return;
-		void refetchAnthropicStatus();
-	}, [isModelSelectorOpen, refetchAnthropicStatus]);
+		void refetchOpenAIStatus();
+	}, [isModelSelectorOpen, refetchOpenAIStatus]);
 
 	const openExternalUrl = useCallback(async (url: string) => {
 		try {
@@ -77,11 +77,10 @@ export function useAnthropicOAuth({
 		}
 	}, [oauthUrl, openExternalUrl]);
 
-	const startAnthropicOAuth = useCallback(async () => {
+	const startOpenAIOAuth = useCallback(async () => {
 		setOauthError(null);
-
 		try {
-			const result = await startAnthropicOAuthMutation.mutateAsync();
+			const result = await startOpenAIOAuthMutation.mutateAsync();
 			setOauthUrl(result.url);
 			setOauthCode("");
 			setHasPendingOAuthSession(true);
@@ -89,10 +88,10 @@ export function useAnthropicOAuth({
 		} catch (error) {
 			setOauthDialogOpen(true);
 			setOauthError(
-				getErrorMessage(error, "Failed to start Anthropic OAuth flow"),
+				getErrorMessage(error, "Failed to start OpenAI OAuth flow"),
 			);
 		}
-	}, [startAnthropicOAuthMutation]);
+	}, [startOpenAIOAuthMutation]);
 
 	const copyOAuthUrl = useCallback(async () => {
 		if (!oauthUrl) return;
@@ -104,29 +103,27 @@ export function useAnthropicOAuth({
 		}
 	}, [oauthUrl]);
 
-	const completeAnthropicOAuth = useCallback(async () => {
-		const code = oauthCode.trim();
-		if (!code) return;
-
+	const completeOpenAIOAuth = useCallback(async () => {
 		setOauthError(null);
 		try {
-			await completeAnthropicOAuthMutation.mutateAsync({ code });
+			const code = oauthCode.trim();
+			await completeOpenAIOAuthMutation.mutateAsync({
+				code: code.length > 0 ? code : undefined,
+			});
 			setHasPendingOAuthSession(false);
 			setOauthDialogOpen(false);
 			setOauthUrl(null);
 			setOauthCode("");
 			onModelSelectorOpenChange(true);
-			await refetchAnthropicStatus();
+			await refetchOpenAIStatus();
 		} catch (error) {
-			setOauthError(
-				getErrorMessage(error, "Failed to complete Anthropic OAuth"),
-			);
+			setOauthError(getErrorMessage(error, "Failed to complete OpenAI OAuth"));
 		}
 	}, [
-		completeAnthropicOAuthMutation,
+		completeOpenAIOAuthMutation,
 		oauthCode,
 		onModelSelectorOpenChange,
-		refetchAnthropicStatus,
+		refetchOpenAIStatus,
 	]);
 
 	const onOAuthDialogOpenChange = useCallback(
@@ -140,27 +137,24 @@ export function useAnthropicOAuth({
 			setOauthUrl(null);
 
 			if (hasPendingOAuthSession) {
-				void cancelAnthropicOAuthMutation
+				void cancelOpenAIOAuthMutation
 					.mutateAsync()
 					.then(() => {
 						setHasPendingOAuthSession(false);
 					})
 					.catch((error) => {
 						console.error(
-							"[model-picker] Failed to cancel Anthropic OAuth:",
+							"[model-picker] Failed to cancel OpenAI OAuth:",
 							error,
 						);
 						setOauthError(
-							getErrorMessage(
-								error,
-								"Failed to cancel Anthropic OAuth session",
-							),
+							getErrorMessage(error, "Failed to cancel OpenAI OAuth session"),
 						);
 					});
 			}
 		},
 		[
-			cancelAnthropicOAuthMutation,
+			cancelOpenAIOAuthMutation,
 			hasPendingOAuthSession,
 			onModelSelectorOpenChange,
 		],
@@ -172,7 +166,7 @@ export function useAnthropicOAuth({
 			authUrl: oauthUrl,
 			code: oauthCode,
 			errorMessage: oauthError,
-			isPending: completeAnthropicOAuthMutation.isPending,
+			isPending: completeOpenAIOAuthMutation.isPending,
 			onOpenChange: onOAuthDialogOpenChange,
 			onCodeChange: (value: string) => {
 				setOauthCode(value);
@@ -184,12 +178,12 @@ export function useAnthropicOAuth({
 				void copyOAuthUrl();
 			},
 			onSubmit: () => {
-				void completeAnthropicOAuth();
+				void completeOpenAIOAuth();
 			},
 		}),
 		[
-			completeAnthropicOAuth,
-			completeAnthropicOAuthMutation.isPending,
+			completeOpenAIOAuth,
+			completeOpenAIOAuthMutation.isPending,
 			copyOAuthUrl,
 			onOAuthDialogOpenChange,
 			openOAuthUrl,
@@ -201,9 +195,9 @@ export function useAnthropicOAuth({
 	);
 
 	return {
-		isAnthropicAuthenticated: anthropicStatus?.authenticated ?? false,
-		isStartingOAuth: startAnthropicOAuthMutation.isPending,
-		startAnthropicOAuth,
+		isOpenAIAuthenticated: openAIStatus?.authenticated ?? false,
+		isStartingOAuth: startOpenAIOAuthMutation.isPending,
+		startOpenAIOAuth,
 		oauthDialog,
 	};
 }
