@@ -113,6 +113,7 @@ export function subscribeToSessionEvents(
 				void runtime.hookManager.runStop(undefined, reason).catch(() => {});
 			}
 			if (reason === "complete") {
+				runtime.lastErrorMessage = null;
 				void generateAndSetTitle(runtime, apiClient);
 			}
 		}

@@ -165,16 +165,15 @@ export class ChatMastraService {
 							stopReason?: string;
 							errorMessage?: string;
 						} | null;
-						if (
+						const currentMessageError =
 							currentMessage?.role === "assistant" &&
 							typeof currentMessage.errorMessage === "string" &&
 							currentMessage.errorMessage.trim()
-						) {
-							runtime.lastErrorMessage = currentMessage.errorMessage.trim();
-						}
+								? currentMessage.errorMessage.trim()
+								: null;
 						return {
 							...displayState,
-							errorMessage: runtime.lastErrorMessage,
+							errorMessage: currentMessageError ?? runtime.lastErrorMessage,
 						};
 					}),
 
