@@ -47,7 +47,9 @@ function findLatestAssistantErrorMessage(
 			errorMessage?: string;
 		};
 		if (message.role !== "assistant") continue;
-		if (message.stopReason !== "error") continue;
+		if (message.stopReason !== undefined && message.stopReason !== "error") {
+			continue;
+		}
 		if (
 			typeof message.errorMessage === "string" &&
 			message.errorMessage.trim().length > 0
@@ -118,8 +120,9 @@ export function useMastraChatDisplay(options: UseMastraChatDisplayOptions) {
 	const currentMessage = displayState?.currentMessage ?? null;
 	const isRunning = displayState?.isRunning ?? false;
 	const historicalMessages = messagesQuery.data ?? [];
-	const latestAssistantErrorMessage =
-		findLatestAssistantErrorMessage(historicalMessages);
+	const latestAssistantErrorMessage = isRunning
+		? null
+		: findLatestAssistantErrorMessage(historicalMessages);
 	const [optimisticUserMessage, setOptimisticUserMessage] = useState<
 		ListMessagesOutput[number] | null
 	>(null);

@@ -161,12 +161,12 @@ export class ChatMastraService {
 						);
 						const displayState = runtime.harness.getDisplayState();
 						const currentMessage = displayState.currentMessage as {
+							role?: string;
 							stopReason?: string;
 							errorMessage?: string;
 						} | null;
 						if (
-							!runtime.lastErrorMessage &&
-							currentMessage?.stopReason === "error" &&
+							currentMessage?.role === "assistant" &&
 							typeof currentMessage.errorMessage === "string" &&
 							currentMessage.errorMessage.trim()
 						) {
@@ -195,6 +195,7 @@ export class ChatMastraService {
 							input.sessionId,
 							input.cwd,
 						);
+						runtime.lastErrorMessage = null;
 						const userMessage =
 							input.payload.content.trim() || "[non-text message]";
 						await onUserPromptSubmit(runtime, userMessage);

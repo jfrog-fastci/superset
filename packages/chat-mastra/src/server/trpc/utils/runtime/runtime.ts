@@ -37,8 +37,6 @@ interface TextContentPart {
 interface MessageLike {
 	role: string;
 	content: Array<{ type: string; text?: string }>;
-	stopReason?: string;
-	errorMessage?: string;
 }
 
 /**
@@ -100,39 +98,23 @@ export function subscribeToSessionEvents(
 	apiClient: ApiClient,
 ): void {
 	runtime.harness.subscribe((event: unknown) => {
-		if (isHarnessErrorEvent(event)) {
-			const message = toRuntimeErrorMessage(event.error);
-			runtime.lastErrorMessage = message;
-			return;
-		}
-		if (isHarnessWorkspaceErrorEvent(event)) {
-			const message = toRuntimeErrorMessage(event.error);
-			runtime.lastErrorMessage = message;
+		if (isHarnessErrorEvent(event) || isHarnessWorkspaceErrorEvent(event)) {
+			runtime.lastErrorMessage = toRuntimeErrorMessage(event.error);
 			return;
 		}
 		if (isHarnessAgentStartEvent(event)) {
 			runtime.lastErrorMessage = null;
 			return;
 		}
-		if (!isHarnessAgentEndEvent(event)) {
-			return;
-		}
-
-		const raw = event.reason;
-		const normalizedReason =
-			raw === "aborted" || raw === "error" ? raw : "complete";
-		const reason =
-			normalizedReason === "complete" && runtime.lastErrorMessage
-				? "error"
-				: normalizedReason;
-		if (reason === "error" && !runtime.lastErrorMessage) {
-			void backfillRuntimeErrorFromLatestAssistantMessage(runtime);
-		}
-		if (runtime.hookManager) {
-			void runtime.hookManager.runStop(undefined, reason).catch(() => {});
-		}
-		if (reason === "complete") {
-			void generateAndSetTitle(runtime, apiClient);
+		if (isHarnessAgentEndEvent(event)) {
+			const raw = event.reason;
+			const reason = raw === "aborted" || raw === "error" ? raw : "complete";
+			if (runtime.hookManager) {
+				void runtime.hookManager.runStop(undefined, reason).catch(() => {});
+			}
+			if (reason === "complete") {
+				void generateAndSetTitle(runtime, apiClient);
+			}
 		}
 	});
 }
@@ -147,6 +129,16 @@ function isHarnessErrorEvent(
 	return isObjectRecord(event) && event.type === "error" && "error" in event;
 }
 
+function isHarnessWorkspaceErrorEvent(
+	event: unknown,
+): event is { type: "workspace_error"; error: unknown } {
+	return (
+		isObjectRecord(event) &&
+		event.type === "workspace_error" &&
+		"error" in event
+	);
+}
+
 function isHarnessAgentStartEvent(
 	event: unknown,
 ): event is { type: "agent_start" } {
@@ -159,97 +151,60 @@ function isHarnessAgentEndEvent(
 	return isObjectRecord(event) && event.type === "agent_end";
 }
 
-function isHarnessWorkspaceErrorEvent(
-	event: unknown,
-): event is { type: "workspace_error"; error: unknown } {
-	return (
-		isObjectRecord(event) &&
-		event.type === "workspace_error" &&
-		"error" in event
-	);
-}
-
 function toRuntimeErrorMessage(error: unknown): string {
 	const providerMessage = extractProviderMessage(error);
-	if (providerMessage) {
-		return providerMessage;
+	if (providerMessage) return providerMessage;
+	if (error instanceof Error && error.message.trim()) {
+		return normalizeErrorMessage(error.message);
 	}
-	if (error instanceof Error) {
-		const normalized = normalizeErrorMessage(error.message);
-		if (normalized) return normalized;
+	if (typeof error === "string" && error.trim()) {
+		return normalizeErrorMessage(error);
 	}
-	if (typeof error === "string") {
-		const normalized = normalizeErrorMessage(error);
-		if (normalized) return normalized;
-	}
-	if (isObjectRecord(error)) {
-		const maybeMessage = error.message;
-		if (typeof maybeMessage === "string") {
-			const normalized = normalizeErrorMessage(maybeMessage);
-			if (normalized) return normalized;
-		}
+	if (isObjectRecord(error) && typeof error.message === "string") {
+		return normalizeErrorMessage(error.message);
 	}
 	return "Unexpected chat error";
 }
 
-function normalizeErrorMessage(message: string): string | null {
-	const trimmed = message.trim();
-	if (!trimmed) return null;
-	if (trimmed === "[object Object]") return null;
-	return trimmed.replace(/^AI_APICallError\d*\s*:\s*/i, "");
+function normalizeErrorMessage(message: string): string {
+	return message.trim().replace(/^AI_APICallError\d*\s*:\s*/i, "");
 }
 
 function extractProviderMessage(error: unknown): string | null {
-	return extractProviderMessageAtDepth(error, 0);
-}
+	if (!isObjectRecord(error)) return null;
 
-function extractProviderMessageAtDepth(
-	error: unknown,
-	depth: number,
-): string | null {
-	if (depth > 6 || !isObjectRecord(error)) return null;
+	const data = error.data;
+	if (isObjectRecord(data)) {
+		const nestedError = data.error;
+		if (
+			isObjectRecord(nestedError) &&
+			typeof nestedError.message === "string"
+		) {
+			return normalizeErrorMessage(nestedError.message);
+		}
+	}
 
-	const dataMessage = readNestedString(error, ["data", "error", "message"]);
-	if (dataMessage) return dataMessage;
+	const nestedError = error.error;
+	if (isObjectRecord(nestedError) && typeof nestedError.message === "string") {
+		return normalizeErrorMessage(nestedError.message);
+	}
 
-	const nestedErrorMessage = readNestedString(error, ["error", "message"]);
-	if (nestedErrorMessage) return nestedErrorMessage;
-
-	const parsedResponseBodyMessage = extractMessageFromResponseBody(
-		error.responseBody,
-	);
-	if (parsedResponseBodyMessage) return parsedResponseBodyMessage;
-
-	const causeMessage = extractProviderMessageAtDepth(error.cause, depth + 1);
-	if (causeMessage) return causeMessage;
-
-	const nestedError = extractProviderMessageAtDepth(error.error, depth + 1);
-	if (nestedError) return nestedError;
+	if (typeof error.responseBody === "string" && error.responseBody.trim()) {
+		try {
+			const parsed = JSON.parse(error.responseBody);
+			if (
+				isObjectRecord(parsed) &&
+				isObjectRecord(parsed.error) &&
+				typeof parsed.error.message === "string"
+			) {
+				return normalizeErrorMessage(parsed.error.message);
+			}
+		} catch {
+			// ignore parse errors
+		}
+	}
 
 	return null;
-}
-
-function readNestedString(
-	value: unknown,
-	path: readonly string[],
-): string | null {
-	let current: unknown = value;
-	for (const key of path) {
-		if (!isObjectRecord(current) || !(key in current)) return null;
-		current = current[key];
-	}
-	if (typeof current !== "string") return null;
-	return normalizeErrorMessage(current);
-}
-
-function extractMessageFromResponseBody(responseBody: unknown): string | null {
-	if (typeof responseBody !== "string" || !responseBody.trim()) return null;
-	try {
-		const parsed = JSON.parse(responseBody);
-		return readNestedString(parsed, ["error", "message"]);
-	} catch {
-		return null;
-	}
 }
 
 async function generateAndSetTitle(
@@ -301,31 +256,5 @@ async function generateAndSetTitle(
 		});
 	} catch (error) {
 		console.warn("[chat-mastra] Title generation failed:", error);
-	}
-}
-
-async function backfillRuntimeErrorFromLatestAssistantMessage(
-	runtime: RuntimeSession,
-): Promise<void> {
-	try {
-		const messages: MessageLike[] = await runtime.harness.listMessages({
-			limit: 20,
-		});
-		const assistantErrorMessage = [...messages]
-			.reverse()
-			.find(
-				(message) =>
-					message.role === "assistant" &&
-					message.stopReason === "error" &&
-					typeof message.errorMessage === "string" &&
-					message.errorMessage.trim(),
-			)?.errorMessage;
-		if (!assistantErrorMessage?.trim()) return;
-		runtime.lastErrorMessage = assistantErrorMessage.trim();
-	} catch (error) {
-		console.warn(
-			"[chat-mastra] Failed to backfill runtime error message",
-			error,
-		);
 	}
 }
