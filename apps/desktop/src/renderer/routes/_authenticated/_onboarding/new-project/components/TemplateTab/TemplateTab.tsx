@@ -3,12 +3,20 @@ import {
 	LuBraces,
 	LuGlobe,
 	LuLayoutDashboard,
+	LuMessageSquare,
 	LuServer,
 	LuSmartphone,
 	LuTerminal,
 } from "react-icons/lu";
 
 const TEMPLATES = [
+	{
+		name: "Next.js Chatbot",
+		description: "AI chatbot built with Next.js and the AI SDK",
+		icon: LuMessageSquare,
+		color: "text-white bg-black",
+		repo: "https://github.com/vercel/chatbot",
+	},
 	{
 		name: "Next.js",
 		description: "Full-stack React framework with SSR and API routes",
